@@ -1,0 +1,223 @@
+/* =================================
+   1. General Styles & Variables
+   ================================= */
+:root {
+    --bg-main: #DBD5B5;
+    --bg-content: #FFFFFF;
+    --header-bg: #eb4628;
+    --button-bg: #349d4b;
+    --button-hover: #2a8a40;
+    --text-dark: #333;
+    --text-light: #FFFFFF;
+    --border-color: #E0E0E0;
+}
+
+body {
+    font-family: 'Helvetica Neue', 'Arial', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Meiryo', sans-serif;
+    background-color: var(--bg-main );
+    color: var(--text-dark);
+    margin: 0;
+    padding: 1rem 0; /* Add padding to top and bottom of the page */
+}
+
+/* =================================
+   2. Main Containers
+   ================================= */
+#login-view, #app-view {
+    width: 90%;
+    max-width: 1400px; /* Increased max-width for a more spacious feel on large screens */
+    margin: 0 auto;
+    padding: 3rem;
+    background: var(--bg-content);
+    border-radius: 20px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+}
+
+/* =================================
+   3. Header
+   ================================= */
+header {
+    background-color: var(--header-bg);
+    color: var(--text-light);
+    padding: 1rem 2rem;
+    margin: -3rem -3rem 3rem -3rem; /* Pull header to edges and add more bottom margin */
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+}
+
+.header-logo-container { height: 45px; flex-shrink: 0; }
+.header-logo-container img { height: 100%; width: auto; }
+
+.header-center { text-align: center; }
+.header-center p { margin: 0.2rem 0; font-size: 1.1rem; }
+.timer-wrapper { font-size: 0.9rem; opacity: 0.9; }
+#timer-display { font-weight: bold; background-color: rgba(0,0,0,0.2); padding: 0.3rem 0.8rem; border-radius: 20px; }
+
+#logout-button {
+    background-color: transparent;
+    border: 2px solid rgba(255,255,255,0.7);
+    color: var(--text-light);
+    font-size: 1rem;
+    font-weight: bold;
+    padding: 0.6rem 1.2rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+#logout-button:hover { background-color: var(--text-light); color: var(--header-bg); }
+
+/* Header tab switcher styles */
+.header-tab-switcher {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-left: 2rem;
+}
+
+.header-tab-switcher .tab-btn {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-light);
+    font-size: 1rem;
+    padding: 0.5rem 1.2rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-bottom 0.2s;
+}
+
+.header-tab-switcher .tab-btn.active {
+    color: #fff;
+    border-bottom: 2px solid #fff;
+    font-weight: bold;
+}
+
+/* =================================
+   4. Login Form
+   ================================= */
+#login-view { max-width: 500px; } /* Login form can be narrower */
+.logo-container { text-align: center; margin-bottom: 2rem; }
+.logo-container img { max-width: 100%; height: 60px; }
+
+#login-form { display: flex; flex-direction: column; gap: 1.5rem; }
+
+input[type="email"], input[type="password"] {
+    padding: 1.2rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 1rem;
+}
+input[type="email"]:focus, input[type="password"]:focus {
+    outline: none;
+    border-color: var(--button-bg);
+    box-shadow: 0 0 0 4px rgba(52, 157, 75, 0.2);
+}
+
+button[type="submit"] {
+    padding: 1.2rem;
+    background-color: var(--button-bg);
+    color: var(--text-light);
+    border: none;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+button[type="submit"]:hover { background-color: var(--button-hover); }
+.error-message { color: #d9534f; text-align: center; margin-top: 1.5rem; font-weight: bold; }
+
+/* =================================
+   5. Main Content Layout (The "Un-packed" part)
+   ================================= */
+.main-content-grid {
+    display: grid;
+    grid-template-columns: 600px 1fr; /* A fixed-width column for instructions, the rest for the app */
+    gap: 3rem; /* Generous gap between the two columns */
+    align-items: start;
+}
+
+.instructions-panel h2 {
+    font-size: 1.5rem;
+    color: var(--header-bg);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.instructions-panel h2:first-child { margin-top: 0; }
+
+.instructions-list {
+    padding-left: 1.5rem;
+    margin: 0 0 2rem 0;
+}
+.instructions-list li {
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.hint-text {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    color: #555;
+}
+
+#app-content {
+    display: flex;
+    border: 1px solid var(--border-color);
+    border-radius: 15px;
+    overflow: hidden; /* Ensures iframe corners are rounded */
+}
+#app-iframe { width: 100%; height: 100%; border: none; }
+
+/* =================================
+   6. Overlays & Fixed Elements
+   ================================= */
+#time-up-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.85);
+    display: flex; justify-content: center; align-items: center;
+    color: white; text-align: center; z-index: 1000;
+}
+.overlay-content { padding: 3rem; background: #333; border-radius: 12px; max-width: 500px; }
+
+#fixed-corner-logo {
+    position: fixed; bottom: 25px; right: 25px;
+    z-index: 1001; opacity: 0.8; transition: opacity 0.3s;
+}
+#fixed-corner-logo:hover { opacity: 1; }
+#fixed-corner-logo img { height: 45px; width: auto; display: block; }
+
+/* =================================
+   7. Responsive Design
+   ================================= */
+@media (max-width: 1024px) {
+    .main-content-grid {
+        grid-template-columns: 1fr; /* Stack the columns on top of each other */
+    }
+    #app-content {
+        min-height: 60vh; /* Ensure app has enough height */
+    }
+}
+
+@media (max-width: 768px) {
+    body { padding: 0; }
+    #login-view, #app-view {
+        width: 100%;
+        border-radius: 0;
+        padding: 1.5rem;
+        min-height: 100vh;
+    }
+    header {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1.5rem;
+        margin: -1.5rem -1.5rem 1.5rem -1.5rem;
+        border-radius: 0;
+    }
+    .main-content-grid { gap: 2rem; }
+}
