@@ -54,6 +54,8 @@ header {
 
 .header-center { text-align: center; }
 .header-center p { margin: 0.2rem 0; font-size: 1.1rem; }
+.page-level { font-size: 1rem; opacity: 0.95; }
+.page-level strong { color: #fff; }
 .timer-wrapper { font-size: 0.9rem; opacity: 0.9; }
 #timer-display { font-weight: bold; background-color: rgba(0,0,0,0.2); padding: 0.3rem 0.8rem; border-radius: 20px; }
 

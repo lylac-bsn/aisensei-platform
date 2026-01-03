@@ -2,7 +2,7 @@
 // 1. Firebaseの初期設定
 // =================================================
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 
 const firebaseConfig = {
@@ -15,7 +15,7 @@ const firebaseConfig = {
   measurementId: "G-1SSEQQ620T"
 };
 
-const app = initializeApp(firebaseConfig );
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -25,54 +25,77 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. HTML要素の取得
     // =================================================
     const loginView = document.getElementById('login-view');
-    const appView = document.getElementById('app-view');
     const loginForm = document.getElementById('login-form');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const loginError = document.getElementById('login-error');
-    const logoutButton = document.getElementById('logout-button');
-    const userEmailDisplay = document.getElementById('user-email');
-    const timerDisplay = document.getElementById('timer-display');
-    const appContent = document.getElementById('app-content');
-    const timeUpOverlay = document.getElementById('time-up-overlay');
-
-    let mainTimerInterval = null;
-    let saveTimerInterval = null;
-    let currentUser = null;
-    let currentRemainingTime = 0; // ★★★ NEW: A global variable to track the current time
 
     // =================================================
     // 3. ログイン状態の監視
     // =================================================
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            currentUser = user;
-            loginView.style.display = 'none';
-            appView.style.display = 'block';
-            timeUpOverlay.style.display = 'none';
-            if (appContent) appContent.style.pointerEvents = 'auto';
-            userEmailDisplay.textContent = user.email ?? "";
-
-            // 🔎 Read timer data (adjust the path to where you store timers)
-            // Option A: timer fields live on the user doc:
+            // User is logged in - check access level and redirect
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);
-            const timerData = snap.exists() ? snap.data()?.timer : null;
+            
+            if (!snap.exists()) {
+                loginError.textContent = 'エラー: ユーザーデータが見つかりません。';
+                await signOut(auth);
+                return;
+            }
 
-            // Option B: timer doc under a private subcollection:
-            // const timerRef = doc(db, "users", user.uid, "private", "timer");
-            // const snap = await getDoc(timerRef);
-            // const timerData = snap.exists() ? snap.data() : null;
+            const userData = snap.data();
+            const userAccessLevel = userData?.accessLevel;
+            
+            // Validate access level exists
+            if (userAccessLevel === undefined || userAccessLevel === null) {
+                console.error("Access level not set for user:", user.uid);
+                await signOut(auth);
+                loginError.textContent = 'エラー: アクセスレベルが設定されていません。管理者に連絡してください。';
+                return;
+            }
+            
+            // Parse and validate accessLevel (should be 1, 2, or 3)
+            const accessLevel = parseInt(userAccessLevel, 10);
+            
+            if (isNaN(accessLevel) || accessLevel < 1 || accessLevel > 3) {
+                console.error("Invalid access level for user:", user.uid, "Level:", accessLevel);
+                await signOut(auth);
+                loginError.textContent = 'エラー: 無効なアクセスレベルです。管理者に連絡してください。';
+                return;
+            }
+            
+            console.log("✓ User access level verified:", accessLevel);
+            loginError.textContent = ''; // Clear any previous error messages
 
-            startTimerForUser(user.uid, timerData); // pass your timer data in
+            // Redirect user to appropriate page based on access level
+            let redirectPage = '';
+            switch(accessLevel) {
+                case 1:
+                    redirectPage = 'page1.html';
+                    break;
+                case 2:
+                    redirectPage = 'page2.html';
+                    break;
+                case 3:
+                    redirectPage = 'page3.html';
+                    break;
+                default:
+                    console.error("Unexpected access level:", accessLevel);
+                    await signOut(auth);
+                    loginError.textContent = 'エラー: 無効なアクセスレベルです。管理者に連絡してください。';
+                    return;
+            }
+            
+            // Redirect to the appropriate page
+            console.log(`Redirecting user to ${redirectPage}`);
+            window.location.href = redirectPage;
         } else {
-            try { await saveTime(true); } catch {}
-            currentUser = null;
+            // User is not logged in - show login screen
             loginView.style.display = 'block';
-            appView.style.display = 'none';
-            clearAllIntervals();
         }
-        });
+    });
 
     // =================================================
     // 4. ログイン処理
@@ -88,105 +111,4 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Login Error:", error);
             });
     });
-
-    // =================================================
-    // 5. ログアウト処理
-    // =================================================
-    logoutButton.addEventListener('click', () => {
-        // The onAuthStateChanged handler will catch the final save.
-        signOut(auth);
-    });
-
-    // ★★★ THE KEY FIX: Save time when the page is hidden or closed ★★★
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            saveTime(true);
-        }
-    });
-
-    // =================================================
-    // 6. HELPER FUNCTIONS
-    // =================================================
-    function clearAllIntervals() {
-        if (mainTimerInterval) clearInterval(mainTimerInterval);
-        if (saveTimerInterval) clearInterval(saveTimerInterval);
-        mainTimerInterval = null;
-        saveTimerInterval = null;
-    }
-
-    // A new, dedicated function for saving time
-    function saveTime(isFinalSave = false) {
-        if (!currentUser || isNaN(currentRemainingTime)) return;
-
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        updateDoc(userDocRef, { remainingTime: currentRemainingTime, updatedAt: serverTimestamp(),   // <- required by your rules
-    });
-        
-        if (isFinalSave) {
-            console.log(`Final time saved on page exit: ${currentRemainingTime}`);
-        } else {
-            console.log(`Periodic time save: ${currentRemainingTime}`);
-        }
-    }
-
-    // =================================================
-    // 7. タイマー機能
-    // =================================================
-    async function startTimerForUser(userId) {
-        clearAllIntervals();
-        const userDocRef = doc(db, 'users', userId);
-
-        try {
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists() || docSnap.data().remainingTime === undefined) {
-                lockApp("エラー: ユーザーデータが見つかりません。");
-                return;
-            }
-
-            // Set the global time variable
-            currentRemainingTime = parseInt(docSnap.data().remainingTime, 10) || 0;
-            updateTimerDisplay(currentRemainingTime);
-
-            if (currentRemainingTime <= 0) {
-                lockApp("利用時間が終了しました。");
-                return;
-            }
-
-            mainTimerInterval = setInterval(() => {
-                currentRemainingTime--; // Decrement the global variable
-                updateTimerDisplay(currentRemainingTime);
-                if (currentRemainingTime <= 0) {
-                    lockApp("利用時間が終了しました。");
-                }
-            }, 1000);
-
-            // The periodic save is now a backup, not the primary method
-            saveTimerInterval = setInterval(() => saveTime(false), 30000);
-
-        } catch (error) {
-            console.error("Error in startTimerForUser:", error);
-            lockApp("エラーが発生しました。");
-        }
-    }
-
-    function updateTimerDisplay(seconds) {
-        if (isNaN(seconds) || seconds < 0) seconds = 0;
-        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const s = (seconds % 60).toString().padStart(2, '0');
-        timerDisplay.textContent = `${h}:${m}:${s}`;
-    }
-
-    function lockApp(message) {
-        // On lock, do one final save to ensure the time is exactly 0.
-        currentRemainingTime = 0;
-        saveTime(true);
-        clearAllIntervals();
-        updateTimerDisplay(0);
-        timerDisplay.textContent = message;
-        timeUpOverlay.style.display = 'flex';
-        if (appContent) {
-            appContent.style.pointerEvents = 'none';
-        }
-    }
 });

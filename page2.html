@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI English Tutor - Intermediate</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="images/header-logo.png" type="image/png">
+</head>
+<body>
+
+    <!-- メインアプリ画面 -->
+    <div id="app-view">
+        <header>
+            <div class="header-logo-container">
+                <img src="images/header-logo.png" alt="AI English Tutor Logo">
+            </div>
+            <div class="header-center">
+                <p>ようこそ、<span id="user-email"></span>さん！</p>
+                <p class="page-level">レベル: <strong>Intermediate</strong></p>
+                <p class="timer-wrapper">残り時間: <span id="timer-display">--:--:--</span></p>
+            </div>
+            <!-- Tab Switcher for 3 servers -->
+            <div class="header-tab-switcher">
+                <button id="tab-server1" class="tab-btn active">Server 2-1</button>
+                <button id="tab-server2" class="tab-btn">Server 2-2</button>
+                <button id="tab-server3" class="tab-btn">Server 2-3</button>
+            </div>
+            <button id="logout-button">ログアウト</button>
+        </header>
+        
+        <!-- Main content area -->
+        <div class="main-content-grid">
+            <div class="instructions-panel">
+                <h2>📚 使い方 📚</h2>
+                <ol class="instructions-list">
+                    <li>赤いボタンを押して、マイクラの画面を共有しよう！</li>
+                    <li>AI先生に「Hello!」と声をかけてみよう。</li>
+                    <li>もし返事がないときは、ページをリロード（🔁更新）してみよう。</li>
+                </ol>
+                
+                <h2>💡 ヒント 💡</h2>
+                <p class="hint-text">
+                    AI先生は日本語もわかるけど、まだ完璧じゃないよ💦 英語で話してくれるとバッチリ！
+                </p>
+                <p>例：「英語で〇〇ってなんて言うの？」「ここから何をしたらいいかな？」など、<br>ゲームのこともどんどん聞いてみよう！</p>
+
+                <h2>🔚 おわりかた 🔚</h2>
+                <p class="hint-text">
+                    タブを閉じるかログアウトしてね。タイマーがなくなると、AI先生の体験は終了だよ。
+                </p>
+            </div>
+
+            <main id="app-content">
+                <!-- Iframes for each server -->
+                <iframe 
+                    src="https://aisensei-openai-brain.web.app" 
+                    id="server-iframe-1"
+                    frameborder="0"
+                    allow="microphone; display-capture"
+                    style="width:100%; height:600px;">
+                </iframe>
+                <iframe 
+                    src="https://aisensei-openai-server2.web.app" 
+                    id="server-iframe-2"
+                    frameborder="0"
+                    allow="microphone; display-capture"
+                    style="width:100%; height:600px; display:none;">
+                </iframe>
+                <iframe 
+                    src="https://aisensei-openai-server2.web.app" 
+                    id="server-iframe-3"
+                    frameborder="0"
+                    allow="microphone; display-capture"
+                    style="width:100%; height:600px; display:none;">
+                </iframe>
+            </main>
+        </div>
+
+        <!-- 時間切れの時に表示するオーバーレイ -->
+        <div id="time-up-overlay">
+            <div class="overlay-content">
+                <h2>利用時間が終了しました</h2>
+                <p>本日のご利用ありがとうございました。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <!-- Page-specific script -->
+    <script type="module" src="./page2.js"></script>
+
+    <!-- Growbuddy Logo -->
+    <div id="fixed-corner-logo">
+        <a href="https://www.growbuddy-play.com/corporate" target="_blank" rel="noopener noreferrer">
+            <img src="images/Growbuddy.png" alt="Growbuddy Logo">
+        </a>
+    </div>
+
+    <!-- Tab switching logic -->
+    <script>
+        const tabServer1 = document.getElementById('tab-server1');
+        const tabServer2 = document.getElementById('tab-server2');
+        const tabServer3 = document.getElementById('tab-server3');
+        const iframe1 = document.getElementById('server-iframe-1');
+        const iframe2 = document.getElementById('server-iframe-2');
+        const iframe3 = document.getElementById('server-iframe-3');
+
+        function switchTab(activeTab, activeIframe) {
+            // Reset all tabs
+            [tabServer1, tabServer2, tabServer3].forEach(tab => tab.classList.remove('active'));
+            [iframe1, iframe2, iframe3].forEach(iframe => iframe.style.display = 'none');
+            
+            // Activate selected tab and iframe
+            activeTab.classList.add('active');
+            activeIframe.style.display = 'block';
+        }
+
+        tabServer1.addEventListener('click', () => switchTab(tabServer1, iframe1));
+        tabServer2.addEventListener('click', () => switchTab(tabServer2, iframe2));
+        tabServer3.addEventListener('click', () => switchTab(tabServer3, iframe3));
+    </script>
+
+</body>
+</html>
+
