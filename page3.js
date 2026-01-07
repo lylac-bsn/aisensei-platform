@@ -19,9 +19,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Required access level for this page
-const REQUIRED_ACCESS_LEVEL = 3;
-
 document.addEventListener('DOMContentLoaded', () => {
 
     // =================================================
@@ -29,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================
     const appView = document.getElementById('app-view');
     const logoutButton = document.getElementById('logout-button');
+    const levelSwitcherBtn = document.getElementById('level-switcher-btn');
     const userEmailDisplay = document.getElementById('user-email');
     const timerDisplay = document.getElementById('timer-display');
     const appContent = document.getElementById('app-content');
@@ -44,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // Check access level before allowing access
+            // Check if user data exists
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);
             
@@ -55,28 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const userData = snap.data();
-            const userAccessLevel = userData?.accessLevel;
-            
-            // Validate access level exists
-            if (userAccessLevel === undefined || userAccessLevel === null) {
-                console.error("Access level not set for user:", user.uid);
-                await signOut(auth);
-                window.location.href = 'index.html';
-                return;
-            }
-            
-            const accessLevel = parseInt(userAccessLevel, 10);
-            
-            // Check if user has correct access level for this page
-            if (accessLevel !== REQUIRED_ACCESS_LEVEL) {
-                console.warn(`User access level ${accessLevel} does not match required level ${REQUIRED_ACCESS_LEVEL}`);
-                await signOut(auth);
-                alert(`このページにアクセスする権限がありません。\nあなたのアクセスレベル: ${accessLevel}\n必要なアクセスレベル: ${REQUIRED_ACCESS_LEVEL}`);
-                window.location.href = 'index.html';
-                return;
-            }
 
-            // User has correct access level, proceed
+            // User is logged in, proceed
             currentUser = user;
             appView.style.display = 'block';
             timeUpOverlay.style.display = 'none';
@@ -91,6 +69,52 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUser = null;
             window.location.href = 'index.html';
         }
+    });
+
+    // =================================================
+    // 4. レベル切替処理
+    // =================================================
+    levelSwitcherBtn.addEventListener('click', () => {
+        // Show level selection overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'level-switcher-overlay';
+        overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000;';
+        
+        const content = document.createElement('div');
+        content.className = 'level-selection-content';
+        content.innerHTML = `
+            <h2>レベルを選択してください</h2>
+            <div class="level-buttons">
+                <button class="level-btn" data-level="1">Beginner</button>
+                <button class="level-btn" data-level="2">Intermediate</button>
+                <button class="level-btn" data-level="3">Advanced</button>
+            </div>
+        `;
+        
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+        
+        // Handle level selection
+        content.querySelectorAll('.level-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const level = e.target.getAttribute('data-level');
+                document.body.removeChild(overlay);
+                if (level === '1') {
+                    window.location.href = 'page1.html';
+                } else if (level === '2') {
+                    window.location.href = 'page2.html';
+                } else if (level === '3') {
+                    // Already on page3, do nothing
+                }
+            });
+        });
+        
+        // Close on overlay click (outside content)
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                document.body.removeChild(overlay);
+            }
+        });
     });
 
     // =================================================

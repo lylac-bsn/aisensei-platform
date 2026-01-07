@@ -3,23 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI English Tutor</title>
+    <title>Gamecollege - Login</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="images/header-logo.png" type="image/png">
 </head>
-<body>
+<body class="login-page">
 
-    <!-- ログイン画面 -->
+    <!-- ログイン画面 - Option 1: Modern Split-Screen Design -->
     <div id="login-view">
-        <div class="logo-container">
-            <h1>AI Sensei</h1>
+        <div class="login-left-panel">
+            <div class="floating-elements">
+                <span class="float-letter" style="top: 10%; left: 20%;">A</span>
+                <span class="float-letter" style="top: 25%; left: 70%;">B</span>
+                <span class="float-letter" style="top: 45%; left: 15%;">C</span>
+                <span class="float-star" style="top: 15%; left: 60%;">★</span>
+                <span class="float-star" style="top: 60%; left: 75%;">★</span>
+                <span class="float-cloud" style="top: 35%; left: 50%;">☁</span>
+                <span class="float-book" style="top: 70%; left: 25%;">📚</span>
+            </div>
+            <div class="mascot-container">
+                <img src="images/mascot_owl_character.png" alt="Wise Owl Mascot" class="mascot-wave">
+            </div>
         </div>
-        <form id="login-form">
-            <input type="email" id="email" placeholder="メールアドレス" required>
-            <input type="password" id="password" placeholder="パスワード" required>
-            <button type="submit">ログイン</button>
-        </form>
-        <p id="login-error" class="error-message"></p>
+        
+        <div class="login-right-panel">
+            <div class="login-header">
+                <h1>Gamecollege</h1>
+                <p class="login-subtitle">英語学習を楽しく、効果的に</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">メールアドレス</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">✉️</span>
+                        <input type="email" id="email" placeholder="example@email.com" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">パスワード</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input type="password" id="password" placeholder="••••••••" required>
+                    </div>
+                </div>
+                
+                <button type="submit" class="login-submit-btn">
+                    <span>ログイン</span>
+                </button>
+            </form>
+            
+            <p id="login-error" class="error-message"></p>
+        </div>
+    </div>
+
+    <!-- レベル選択ポップアップ -->
+    <div id="level-selection-overlay">
+        <div class="level-selection-content">
+            <h2>レベルを選択してください</h2>
+            <div class="level-buttons">
+                <button id="level-beginner" class="level-btn">Beginner</button>
+                <button id="level-intermediate" class="level-btn">Intermediate</button>
+                <button id="level-advanced" class="level-btn">Advanced</button>
+            </div>
+        </div>
     </div>
 
     <!-- Firebase SDK -->
