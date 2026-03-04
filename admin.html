@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamecollege - Admin Panel</title>
+    <link rel="icon" href="images/header-logo.png" type="image/png">
+    <style>
+        :root {
+            --bg-main: #FFF8F0;
+            --bg-content: #FFFDF9;
+            --header-bg: #E53935;
+            --text-dark: #3E2723;
+            --text-light: #FFFFFF;
+            --border-color: #E8DDD0;
+            --primary-red: #D84315;
+            --primary-red-dark: #BF360C;
+            --primary-red-light: #FFCDD2;
+            --accent-green: #43A047;
+            --accent-green-hover: #388E3C;
+            --beige: #FFF8F0;
+            --beige-dark: #F5EDE3;
+            --bg-white: #FFFDF9;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'Arial', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Meiryo', sans-serif;
+            background: linear-gradient(135deg, #FFF3E0 0%, #F5EDE3 50%, #FFE0B2 100%);
+            color: var(--text-dark);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* ========== Login View ========== */
+        #login-view {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .login-card {
+            background: var(--bg-white);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+            padding: 3rem;
+            width: 100%;
+            max-width: 420px;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        .login-card h1 {
+            text-align: center;
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-red-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-card .subtitle {
+            text-align: center;
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+
+        .login-card .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .login-card label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: var(--text-dark);
+        }
+
+        .login-card input {
+            width: 100%;
+            padding: 0.85rem 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: #FFFDF9;
+        }
+
+        .login-card input:focus {
+            outline: none;
+            border-color: var(--primary-red);
+            box-shadow: 0 0 0 4px rgba(229, 57, 53, 0.1);
+            background: #fff;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 0.95rem;
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-red-dark) 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 0.5rem;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(216, 67, 21, 0.35);
+        }
+
+        .login-error {
+            color: #d32f2f;
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            padding: 0.6rem;
+            background: #ffebee;
+            border-radius: 8px;
+            border: 1px solid #ffcdd2;
+        }
+
+        .login-error:empty { display: none; }
+
+        /* ========== Admin View ========== */
+        #admin-view {
+            display: none;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 2rem;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Header */
+        .admin-header {
+            background: linear-gradient(135deg, #D84315 0%, #E64A19 100%);
+            color: #fff;
+            padding: 1.5rem 2rem;
+            border-radius: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            margin-bottom: 2rem;
+        }
+
+        .admin-header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .admin-header .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-header {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.4);
+            color: #fff;
+            padding: 0.6rem 1.2rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-header:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.6);
+            transform: translateY(-1px);
+        }
+
+        /* Bulk Update Panel */
+        .bulk-panel {
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        .bulk-panel h2 {
+            font-size: 1.15rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .bulk-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .bulk-controls .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .bulk-controls label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .bulk-controls input[type="number"] {
+            width: 100px;
+            padding: 0.7rem 0.8rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 1rem;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .bulk-controls input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-red);
+            box-shadow: 0 0 0 3px rgba(216, 67, 21, 0.1);
+        }
+
+        .bulk-controls .separator {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #999;
+            padding-bottom: 0.7rem;
+        }
+
+        .btn-bulk {
+            padding: 0.7rem 1.5rem;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-hover));
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(76,175,80,0.3);
+        }
+
+        .btn-bulk:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(76,175,80,0.4);
+        }
+
+        .btn-bulk:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .bulk-mode-toggle {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .toggle-btn {
+            padding: 0.5rem 1rem;
+            border: 2px solid var(--border-color);
+            background: transparent;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .toggle-btn.active {
+            border-color: var(--primary-red);
+            background: var(--primary-red-light);
+            color: var(--primary-red);
+        }
+
+        /* User Table */
+        .users-panel {
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color);
+        }
+
+        .users-panel h2 {
+            font-size: 1.15rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .search-bar {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .search-bar input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.6rem;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .search-bar input:focus {
+            outline: none;
+            border-color: var(--primary-red);
+            box-shadow: 0 0 0 3px rgba(216, 67, 21, 0.1);
+        }
+
+        .search-bar .search-icon {
+            position: absolute;
+            left: 0.9rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1rem;
+            color: #999;
+            pointer-events: none;
+        }
+
+        .search-bar .search-clear {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            color: #999;
+            cursor: pointer;
+            padding: 0.2rem;
+            line-height: 1;
+            display: none;
+        }
+
+        .search-bar .search-clear:hover {
+            color: var(--primary-red);
+        }
+
+        .no-results td {
+            text-align: center;
+            padding: 2rem;
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            background: var(--beige-dark);
+            padding: 0.85rem 1rem;
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #666;
+            border-bottom: 2px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #f0ebe5;
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #fdf8f2;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        td {
+            padding: 0.85rem 1rem;
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .user-email {
+            color: #888;
+            font-size: 0.8rem;
+        }
+
+        .time-display {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            font-size: 0.95rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .time-ok {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .time-low {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .time-zero {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .edit-time-group {
+            display: flex;
+            gap: 0.35rem;
+            align-items: center;
+        }
+
+        .edit-time-group input {
+            width: 60px;
+            padding: 0.4rem 0.3rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .edit-time-group input:focus {
+            outline: none;
+            border-color: var(--primary-red);
+        }
+
+        .edit-time-group .sep {
+            color: #999;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .btn-save-user {
+            padding: 0.4rem 0.9rem;
+            background: var(--accent-green);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .btn-save-user:hover {
+            background: var(--accent-green-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-save-user:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .save-ok {
+            color: var(--accent-green);
+            font-size: 0.8rem;
+            font-weight: 600;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid #ddd;
+            border-top-color: var(--primary-red);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-row td {
+            text-align: center;
+            padding: 3rem;
+            color: #999;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #333;
+            color: #fff;
+            padding: 0.85rem 1.5rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            z-index: 9999;
+            opacity: 0;
+            transition: all 0.4s ease;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success { background: var(--accent-green); }
+        .toast.error { background: #d32f2f; }
+
+        /* ========== Account Management ========== */
+        .account-panel {
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        .account-panel h2 {
+            font-size: 1.15rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .create-account-form {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .create-account-form .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .create-account-form label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .create-account-form input[type="text"],
+        .create-account-form input[type="email"],
+        .create-account-form input[type="password"] {
+            padding: 0.7rem 0.8rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s;
+            min-width: 160px;
+        }
+
+        .create-account-form input[type="number"] {
+            width: 80px;
+            padding: 0.7rem 0.8rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 0.95rem;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .create-account-form input:focus {
+            outline: none;
+            border-color: var(--primary-red);
+            box-shadow: 0 0 0 3px rgba(216, 67, 21, 0.1);
+        }
+
+        .create-account-form .separator {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #999;
+            padding-bottom: 0.7rem;
+        }
+
+        .btn-create-account {
+            padding: 0.7rem 1.5rem;
+            background: linear-gradient(135deg, #1565c0, #0d47a1);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(21, 101, 192, 0.3);
+            white-space: nowrap;
+        }
+
+        .btn-create-account:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(21, 101, 192, 0.4);
+        }
+
+        .btn-create-account:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* User count badge */
+        .user-count {
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: var(--beige-dark);
+            color: #888;
+            padding: 0.15rem 0.6rem;
+            border-radius: 10px;
+            margin-left: 0.25rem;
+        }
+
+        /* Delete button in table */
+        .btn-delete-user {
+            padding: 0.35rem 0.7rem;
+            background: transparent;
+            color: #999;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .btn-delete-user:hover {
+            background: #ffebee;
+            color: #d32f2f;
+            border-color: #ffcdd2;
+        }
+
+        .btn-delete-user:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ========== Monthly Auto-Set ========== */
+        .auto-set-section {
+            margin-top: 1.75rem;
+            padding-top: 1.5rem;
+            border-top: 2px dashed var(--border-color);
+        }
+
+        .auto-set-section h3 {
+            font-size: 1rem;
+            margin-bottom: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .auto-set-section .section-desc {
+            font-size: 0.82rem;
+            color: #888;
+            margin-bottom: 1rem;
+        }
+
+        .auto-set-row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .auto-set-row .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .auto-set-row label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .auto-set-row input[type="number"] {
+            width: 80px;
+            padding: 0.65rem 0.8rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 0.95rem;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .auto-set-row input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-red);
+            box-shadow: 0 0 0 3px rgba(216, 67, 21, 0.1);
+        }
+
+        .auto-set-row .separator {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #999;
+            padding-bottom: 0.65rem;
+        }
+
+        .btn-save-auto {
+            padding: 0.65rem 1.3rem;
+            background: linear-gradient(135deg, #1565c0, #0d47a1);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(21, 101, 192, 0.3);
+            white-space: nowrap;
+        }
+
+        .btn-save-auto:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(21, 101, 192, 0.4);
+        }
+
+        .btn-save-auto:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-disable-auto {
+            padding: 0.65rem 1.3rem;
+            background: linear-gradient(135deg, #757575, #616161);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            white-space: nowrap;
+        }
+
+        .btn-disable-auto:hover {
+            background: linear-gradient(135deg, #d32f2f, #b71c1c);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(211, 47, 47, 0.3);
+        }
+
+        .btn-disable-auto:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .auto-set-info {
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            color: #666;
+            padding: 0.75rem 1rem;
+            background: #e3f2fd;
+            border-radius: 10px;
+            border: 1px solid #bbdefb;
+            line-height: 1.7;
+        }
+
+        .auto-set-info strong {
+            color: #1565c0;
+        }
+
+        .pending-bar {
+            margin-top: 0.75rem;
+            padding: 0.85rem 1rem;
+            background: linear-gradient(135deg, #fff8e1, #fff3e0);
+            border: 2px solid #ffb74d;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .pending-bar span {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #e65100;
+        }
+
+        .btn-apply-now {
+            padding: 0.6rem 1.3rem;
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(255, 152, 0, 0.3);
+            white-space: nowrap;
+        }
+
+        .btn-apply-now:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 152, 0, 0.4);
+        }
+
+        .btn-apply-now:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            #admin-view { padding: 1rem; }
+            .admin-header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+                border-radius: 16px;
+                padding: 1.25rem;
+            }
+            .bulk-panel, .users-panel, .account-panel {
+                padding: 1.25rem;
+                border-radius: 16px;
+            }
+            .create-account-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .create-account-form input[type="text"],
+            .create-account-form input[type="email"],
+            .create-account-form input[type="password"] {
+                min-width: unset;
+            }
+            .create-account-form .separator { display: none; }
+            .auto-set-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .auto-set-row .separator { display: none; }
+            .bulk-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .bulk-controls .field { flex-direction: row; align-items: center; gap: 0.5rem; }
+            .bulk-controls .field label { min-width: 50px; }
+            .bulk-controls .separator { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ========== LOGIN ========== -->
+    <div id="login-view">
+        <div class="login-card">
+            <h1>Admin Panel</h1>
+            <p class="subtitle">管理者ログイン</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>メールアドレス</label>
+                    <input type="email" id="email" required placeholder="admin@example.com" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label>パスワード</label>
+                    <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
+                </div>
+                <button type="submit" class="login-btn">ログイン</button>
+            </form>
+            <div id="login-error" class="login-error"></div>
+        </div>
+    </div>
+
+    <!-- ========== ADMIN PANEL ========== -->
+    <div id="admin-view">
+        <!-- Header -->
+        <div class="admin-header">
+            <h1>&#9881; Admin Panel</h1>
+            <div class="header-actions">
+                <button id="btn-refresh" class="btn-header" onclick="loadUsers()">&#x21bb; 更新</button>
+                <button class="btn-header" onclick="logoutAdmin()">ログアウト</button>
+            </div>
+        </div>
+
+        <!-- Bulk Update -->
+        <div class="bulk-panel">
+            <h2>&#9200; 全ユーザーの時間を一括変更</h2>
+
+            <div class="bulk-mode-toggle">
+                <button class="toggle-btn active" data-mode="set" onclick="setBulkMode('set')">上書き（セット）</button>
+                <button class="toggle-btn" data-mode="add" onclick="setBulkMode('add')">追加（プラス）</button>
+            </div>
+
+            <div class="bulk-controls">
+                <div class="field">
+                    <label>時間 (h)</label>
+                    <input type="number" id="bulk-hours" min="0" value="1" step="1">
+                </div>
+                <span class="separator">:</span>
+                <div class="field">
+                    <label>分 (m)</label>
+                    <input type="number" id="bulk-minutes" min="0" max="59" value="0" step="1">
+                </div>
+                <span class="separator">:</span>
+                <div class="field">
+                    <label>秒 (s)</label>
+                    <input type="number" id="bulk-seconds" min="0" max="59" value="0" step="1">
+                </div>
+                <button class="btn-bulk" id="btn-bulk-update" onclick="bulkUpdate()">全ユーザーに適用</button>
+            </div>
+
+            <!-- Monthly Auto-Set -->
+            <div class="auto-set-section">
+                <h3>&#128197; 毎月1日 0:00 (JST) 自動セット</h3>
+                <p class="section-desc">毎月1日の深夜0時（日本時間）に、全ユーザーの残り時間を自動でセットします。管理者またはユーザーが次にページを開いた時に適用されます。</p>
+
+                <div class="auto-set-row">
+                    <div class="field">
+                        <label>時間 (h)</label>
+                        <input type="number" id="auto-hours" min="0" value="1" step="1">
+                    </div>
+                    <span class="separator">:</span>
+                    <div class="field">
+                        <label>分 (m)</label>
+                        <input type="number" id="auto-minutes" min="0" max="59" value="0" step="1">
+                    </div>
+                    <span class="separator">:</span>
+                    <div class="field">
+                        <label>秒 (s)</label>
+                        <input type="number" id="auto-seconds" min="0" max="59" value="0" step="1">
+                    </div>
+                    <button class="btn-save-auto" id="btn-save-auto" onclick="saveAutoSet()">自動セット保存</button>
+                    <button class="btn-disable-auto" id="btn-disable-auto" onclick="disableAutoSet()">無効にする</button>
+                </div>
+
+                <div id="auto-set-info" class="auto-set-info" style="display:none;"></div>
+                <div id="pending-bar" class="pending-bar" style="display:none;">
+                    <span id="pending-msg"></span>
+                    <button class="btn-apply-now" id="btn-apply-now" onclick="applyAutoSetNow()">今すぐ適用</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Account Management -->
+        <div class="account-panel">
+            <h2>&#128101; アカウント管理</h2>
+            <div class="create-account-form">
+                <div class="field">
+                    <label>表示名</label>
+                    <input type="text" id="new-displayname" placeholder="山田太郎" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>メールアドレス</label>
+                    <input type="email" id="new-email" placeholder="user@example.com" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label>パスワード</label>
+                    <input type="password" id="new-password" placeholder="6文字以上" autocomplete="new-password">
+                </div>
+                <div class="field">
+                    <label>初期時間 (h)</label>
+                    <input type="number" id="new-hours" min="0" value="1" step="1">
+                </div>
+                <span class="separator">:</span>
+                <div class="field">
+                    <label>分 (m)</label>
+                    <input type="number" id="new-minutes" min="0" max="59" value="0" step="1">
+                </div>
+                <span class="separator">:</span>
+                <div class="field">
+                    <label>秒 (s)</label>
+                    <input type="number" id="new-seconds" min="0" max="59" value="0" step="1">
+                </div>
+                <button class="btn-create-account" id="btn-create-account" onclick="createAccount()">アカウント作成</button>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="users-panel">
+            <h2>&#128100; ユーザー一覧 <span class="user-count" id="user-count"></span></h2>
+            <div class="search-bar">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" id="user-search" placeholder="名前で検索..." autocomplete="off">
+                <button class="search-clear" id="search-clear" onclick="clearSearch()">&times;</button>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ユーザー</th>
+                            <th>現在の残り時間</th>
+                            <th>時間を編集</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <tr class="loading-row">
+                            <td colspan="5"><span class="spinner"></span> 読み込み中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-functions.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
+            authDomain: "ai-sensei-8849b.firebaseapp.com",
+            projectId: "ai-sensei-8849b",
+            storageBucket: "ai-sensei-8849b.firebasestorage.app",
+            messagingSenderId: "483139385570",
+            appId: "1:483139385570:web:cc62d4391366a27db406bb",
+            measurementId: "G-1SSEQQ620T"
+        };
+
+        const app = initializeApp(firebaseConfig, 'admin');
+        const auth = getAuth(app);
+        setPersistence(auth, browserSessionPersistence);
+        const db = getFirestore(app);
+        const functions = getFunctions(app, 'asia-northeast1');
+
+        // ============================================
+        // State
+        // ============================================
+        let usersData = []; // { id, displayName, email, remainingTime }
+        let bulkMode = 'set'; // 'set' or 'add'
+
+        // ============================================
+        // Auth
+        // ============================================
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Check if this user has admin role in Firestore
+                const userRef = doc(db, "users", user.uid);
+                const snap = await getDoc(userRef);
+
+                if (!snap.exists() || snap.data().role !== 'admin') {
+                    showToast('管理者権限がありません。', 'error');
+                    await signOut(auth);
+                    return;
+                }
+
+                document.getElementById('login-view').style.display = 'none';
+                document.getElementById('admin-view').style.display = 'block';
+                loadUsers();
+            } else {
+                document.getElementById('login-view').style.display = 'flex';
+                document.getElementById('admin-view').style.display = 'none';
+            }
+        });
+
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('login-error');
+            errorEl.textContent = '';
+
+            signInWithEmailAndPassword(auth, email, password)
+                .catch(err => {
+                    errorEl.textContent = 'メールアドレスまたはパスワードが間違っています。';
+                });
+        });
+
+        // ============================================
+        // Load Users
+        // ============================================
+        window.loadUsers = async function() {
+            const tbody = document.getElementById('users-tbody');
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><span class="spinner"></span> 読み込み中...</td></tr>';
+
+            try {
+                const snapshot = await getDocs(collection(db, 'users'));
+                usersData = [];
+
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    usersData.push({
+                        id: docSnap.id,
+                        displayName: data.displayName || '',
+                        email: data.email || '',
+                        remainingTime: parseInt(data.remainingTime, 10) || 0,
+                        role: data.role || ''
+                    });
+                });
+
+                // Sort: admin last, then alphabetically
+                usersData.sort((a, b) => {
+                    if (a.role === 'admin' && b.role !== 'admin') return 1;
+                    if (a.role !== 'admin' && b.role === 'admin') return -1;
+                    return (a.displayName || a.email).localeCompare(b.displayName || b.email);
+                });
+
+                renderUsers();
+            } catch (err) {
+                tbody.innerHTML = '<tr class="loading-row"><td colspan="5">エラーが発生しました。</td></tr>';
+                showToast('ユーザーの読み込みに失敗しました。', 'error');
+            }
+        };
+
+        // ============================================
+        // Search
+        // ============================================
+        document.getElementById('user-search').addEventListener('input', function() {
+            const clearBtn = document.getElementById('search-clear');
+            clearBtn.style.display = this.value ? 'block' : 'none';
+            renderUsers();
+        });
+
+        window.clearSearch = function() {
+            const input = document.getElementById('user-search');
+            input.value = '';
+            document.getElementById('search-clear').style.display = 'none';
+            renderUsers();
+            input.focus();
+        };
+
+        // ============================================
+        // Render Users
+        // ============================================
+        function renderUsers() {
+            const tbody = document.getElementById('users-tbody');
+            const searchQuery = (document.getElementById('user-search')?.value || '').trim().toLowerCase();
+
+            // Update user count
+            const countEl = document.getElementById('user-count');
+            if (countEl) countEl.textContent = `${usersData.length}人`;
+
+            if (usersData.length === 0) {
+                tbody.innerHTML = '<tr class="loading-row"><td colspan="5">ユーザーが見つかりません。</td></tr>';
+                return;
+            }
+
+            // Filter by search query
+            const filtered = usersData.map((u, idx) => ({ ...u, _idx: idx }))
+                .filter(u => {
+                    if (!searchQuery) return true;
+                    const name = (u.displayName || '').toLowerCase();
+                    const email = (u.email || '').toLowerCase();
+                    const id = (u.id || '').toLowerCase();
+                    return name.includes(searchQuery) || email.includes(searchQuery) || id.includes(searchQuery);
+                });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr class="no-results"><td colspan="5">「${escapeHtml(searchQuery)}」に一致するユーザーが見つかりません。</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(u => {
+                const idx = u._idx;
+                const h = Math.floor(u.remainingTime / 3600);
+                const m = Math.floor((u.remainingTime % 3600) / 60);
+                const s = u.remainingTime % 60;
+                const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+                let timeClass = 'time-ok';
+                if (u.remainingTime <= 0) timeClass = 'time-zero';
+                else if (u.remainingTime < 600) timeClass = 'time-low';
+
+                const roleTag = u.role === 'admin' ? ' <span style="font-size:0.7rem; background:#e3f2fd; color:#1565c0; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">ADMIN</span>' : '';
+
+                const deleteBtn = u.role !== 'admin'
+                    ? `<button class="btn-delete-user" onclick="deleteUser(${idx})">削除</button>`
+                    : '';
+
+                return `<tr>
+                    <td>
+                        <div class="user-name">${escapeHtml(u.email || u.id)}${roleTag}</div>
+                        <div class="user-email">${escapeHtml(u.displayName || '(名前なし)')}</div>
+                    </td>
+                    <td>
+                        <span class="time-display ${timeClass}">${timeStr}</span>
+                    </td>
+                    <td>
+                        <div class="edit-time-group">
+                            <input type="number" id="edit-h-${idx}" min="0" value="${h}" step="1">
+                            <span class="sep">:</span>
+                            <input type="number" id="edit-m-${idx}" min="0" max="59" value="${m}" step="1">
+                            <span class="sep">:</span>
+                            <input type="number" id="edit-s-${idx}" min="0" max="59" value="${s}" step="1">
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn-save-user" id="btn-save-${idx}" onclick="saveUser(${idx})">保存</button>
+                        <span id="status-${idx}"></span>
+                    </td>
+                    <td>${deleteBtn}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ============================================
+        // Save Individual User
+        // ============================================
+        window.saveUser = async function(idx) {
+            const u = usersData[idx];
+            const h = parseInt(document.getElementById(`edit-h-${idx}`).value, 10) || 0;
+            const m = parseInt(document.getElementById(`edit-m-${idx}`).value, 10) || 0;
+            const s = parseInt(document.getElementById(`edit-s-${idx}`).value, 10) || 0;
+            const newTime = h * 3600 + m * 60 + s;
+
+            const btn = document.getElementById(`btn-save-${idx}`);
+            const statusEl = document.getElementById(`status-${idx}`);
+            btn.disabled = true;
+            btn.textContent = '...';
+
+            try {
+                const userRef = doc(db, 'users', u.id);
+                await updateDoc(userRef, {
+                    remainingTime: newTime,
+                    updatedAt: serverTimestamp()
+                });
+
+                u.remainingTime = newTime;
+                statusEl.innerHTML = '<span class="save-ok">&#10003;</span>';
+                setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
+
+                renderUsers();
+                showToast(`${u.displayName || u.email} の時間を更新しました。`, 'success');
+            } catch (err) {
+                showToast('保存に失敗しました。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '保存';
+            }
+        };
+
+        // ============================================
+        // Bulk Update
+        // ============================================
+        window.setBulkMode = function(mode) {
+            bulkMode = mode;
+            document.querySelectorAll('.toggle-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === mode);
+            });
+        };
+
+        window.bulkUpdate = async function() {
+            const h = parseInt(document.getElementById('bulk-hours').value, 10) || 0;
+            const m = parseInt(document.getElementById('bulk-minutes').value, 10) || 0;
+            const s = parseInt(document.getElementById('bulk-seconds').value, 10) || 0;
+            const inputSeconds = h * 3600 + m * 60 + s;
+
+            if (inputSeconds <= 0 && bulkMode === 'set') {
+                if (!confirm('全ユーザーの残り時間を 0 に設定しますか？')) return;
+            }
+
+            const modeLabel = bulkMode === 'set'
+                ? `全ユーザーの残り時間を ${h}時間${m}分${s}秒 にセットします。`
+                : `全ユーザーの残り時間に ${h}時間${m}分${s}秒 を追加します。`;
+            if (!confirm(modeLabel + '\nよろしいですか？')) return;
+
+            const btn = document.getElementById('btn-bulk-update');
+            btn.disabled = true;
+            btn.textContent = '更新中...';
+
+            try {
+                // Firestore batches allow max 500 writes
+                const batchSize = 450;
+                for (let i = 0; i < usersData.length; i += batchSize) {
+                    const batch = writeBatch(db);
+                    const slice = usersData.slice(i, i + batchSize);
+
+                    slice.forEach(u => {
+                        const ref = doc(db, 'users', u.id);
+                        let newTime;
+                        if (bulkMode === 'set') {
+                            newTime = inputSeconds;
+                        } else {
+                            newTime = Math.max(0, u.remainingTime + inputSeconds);
+                        }
+                        batch.update(ref, {
+                            remainingTime: newTime,
+                            updatedAt: serverTimestamp()
+                        });
+                        u.remainingTime = newTime;
+                    });
+
+                    await batch.commit();
+                }
+
+                renderUsers();
+                showToast(`${usersData.length} 人のユーザーを更新しました。`, 'success');
+            } catch (err) {
+                showToast('一括更新に失敗しました。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '全ユーザーに適用';
+            }
+        };
+
+        // ============================================
+        // Create Account
+        // ============================================
+        window.createAccount = async function() {
+            const displayName = document.getElementById('new-displayname').value.trim();
+            const email = document.getElementById('new-email').value.trim();
+            const password = document.getElementById('new-password').value;
+            const h = parseInt(document.getElementById('new-hours').value, 10) || 0;
+            const m = parseInt(document.getElementById('new-minutes').value, 10) || 0;
+            const s = parseInt(document.getElementById('new-seconds').value, 10) || 0;
+            const initialTime = h * 3600 + m * 60 + s;
+
+            if (displayName.length > 50) {
+                showToast('表示名は50文字以内で入力してください。', 'error');
+                return;
+            }
+            if (!email) {
+                showToast('メールアドレスを入力してください。', 'error');
+                return;
+            }
+            if (!password || password.length < 6) {
+                showToast('パスワードは6文字以上で入力してください。', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-create-account');
+            btn.disabled = true;
+            btn.textContent = '作成中...';
+
+            try {
+                // Use a secondary app so the admin stays logged in
+                const secondaryApp = initializeApp(firebaseConfig, 'secondary-' + Date.now());
+                const secondaryAuth = getAuth(secondaryApp);
+
+                const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                const newUid = userCredential.user.uid;
+
+                // Sign out the secondary app immediately
+                await signOut(secondaryAuth);
+
+                // Create Firestore document for the new user
+                // Set lastAutoSet to now so monthly auto-set doesn't immediately overwrite the initial time
+                await setDoc(doc(db, 'users', newUid), {
+                    displayName: displayName || '',
+                    email: email,
+                    remainingTime: initialTime,
+                    role: 'user',
+                    lastAutoSet: new Date(),
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+
+                // Clean up secondary app
+                try { await deleteApp(secondaryApp); } catch {}
+
+                // Clear form
+                document.getElementById('new-displayname').value = '';
+                document.getElementById('new-email').value = '';
+                document.getElementById('new-password').value = '';
+                document.getElementById('new-hours').value = 1;
+                document.getElementById('new-minutes').value = 0;
+                document.getElementById('new-seconds').value = 0;
+
+                showToast(`${displayName || email} のアカウントを作成しました。`, 'success');
+                await loadUsers();
+            } catch (err) {
+                let msg = 'アカウントの作成に失敗しました。';
+                if (err.code === 'auth/email-already-in-use') {
+                    msg = 'このメールアドレスは既に使用されています。';
+                } else if (err.code === 'auth/invalid-email') {
+                    msg = 'メールアドレスの形式が正しくありません。';
+                } else if (err.code === 'auth/weak-password') {
+                    msg = 'パスワードが弱すぎます（6文字以上）。';
+                }
+                showToast(msg, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'アカウント作成';
+            }
+        };
+
+        // ============================================
+        // Delete Account (Auth + Firestore via Cloud Function)
+        // ============================================
+        window.deleteUser = async function(idx) {
+            const u = usersData[idx];
+            if (!u) return;
+
+            if (!confirm(`「${u.displayName || u.email}」のアカウントを完全に削除しますか？\n（認証アカウント＋データ両方が削除されます）\nこの操作は取り消せません。`)) return;
+
+            try {
+                const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+                await deleteUserAccount({ uid: u.id });
+                usersData.splice(idx, 1);
+                renderUsers();
+                showToast(`${u.displayName || u.email} を完全に削除しました。`, 'success');
+            } catch (err) {
+                const msg = err?.details || err?.message || '削除に失敗しました。';
+                showToast(msg, 'error');
+            }
+        };
+
+        // ============================================
+        // Helpers
+        // ============================================
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+
+        window.logoutAdmin = async function() {
+            await signOut(auth);
+        };
+
+        // ============================================
+        // Monthly Auto-Set (1st of every month, 00:00 JST)
+        // ============================================
+
+        // Get current date/time in JST
+        function getNowInJST() {
+            const now = new Date();
+            const jstStr = now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' });
+            return new Date(jstStr);
+        }
+
+        // Load auto-set config from Firestore
+        async function loadAutoSet() {
+            try {
+                const snap = await getDoc(doc(db, 'settings', 'monthlyAutoSet'));
+                const infoEl = document.getElementById('auto-set-info');
+                const disableBtn = document.getElementById('btn-disable-auto');
+
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const sec = data.resetSeconds || 3600;
+                    document.getElementById('auto-hours').value = Math.floor(sec / 3600);
+                    document.getElementById('auto-minutes').value = Math.floor((sec % 3600) / 60);
+                    document.getElementById('auto-seconds').value = sec % 60;
+
+                    const h = Math.floor(sec / 3600);
+                    const m = Math.floor((sec % 3600) / 60);
+                    const s = sec % 60;
+                    const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+                    infoEl.innerHTML = `<strong>&#9989; 有効:</strong> 毎月1日 <strong>0:00 (JST)</strong> に全ユーザーの残り時間を <strong>${timeStr}</strong> にセット`;
+                    infoEl.style.display = 'block';
+                    infoEl.style.background = '#e3f2fd';
+                    infoEl.style.borderColor = '#bbdefb';
+                    disableBtn.style.display = '';
+
+                    return data;
+                } else {
+                    infoEl.innerHTML = '<strong>&#10060; 無効:</strong> 毎月の自動セットは設定されていません。';
+                    infoEl.style.display = 'block';
+                    infoEl.style.background = '#f5f5f5';
+                    infoEl.style.borderColor = '#e0e0e0';
+                    disableBtn.style.display = 'none';
+                    return null;
+                }
+            } catch (err) {
+                return null;
+            }
+        }
+
+        // Save auto-set config
+        window.saveAutoSet = async function() {
+            const btn = document.getElementById('btn-save-auto');
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+
+            try {
+                const h = parseInt(document.getElementById('auto-hours').value, 10) || 0;
+                const m = parseInt(document.getElementById('auto-minutes').value, 10) || 0;
+                const s = parseInt(document.getElementById('auto-seconds').value, 10) || 0;
+                const resetSeconds = h * 3600 + m * 60 + s;
+
+                await setDoc(doc(db, 'settings', 'monthlyAutoSet'), {
+                    resetSeconds,
+                    updatedAt: serverTimestamp()
+                });
+
+                showToast('毎月の自動セットを保存しました。', 'success');
+                await loadAutoSet();
+                await checkPendingAutoSet();
+            } catch (err) {
+                showToast('保存に失敗しました。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '自動セット保存';
+            }
+        };
+
+        // Disable (delete) auto-set
+        window.disableAutoSet = async function() {
+            if (!confirm('毎月の自動セットを無効にしますか？')) return;
+
+            const btn = document.getElementById('btn-disable-auto');
+            btn.disabled = true;
+            btn.textContent = '削除中...';
+
+            try {
+                await deleteDoc(doc(db, 'settings', 'monthlyAutoSet'));
+                showToast('毎月の自動セットを無効にしました。', 'success');
+                document.getElementById('pending-bar').style.display = 'none';
+                await loadAutoSet();
+            } catch (err) {
+                showToast('削除に失敗しました。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '無効にする';
+            }
+        };
+
+        // Calculate the most recent 1st-of-month 00:00 JST
+        function getLastResetDate() {
+            const nowJST = getNowInJST();
+            // The most recent 1st of month at 00:00
+            const resetDate = new Date(nowJST.getFullYear(), nowJST.getMonth(), 1, 0, 0, 0);
+            if (resetDate > nowJST) {
+                // We're before the 1st this month? Shouldn't happen, but go back a month
+                resetDate.setMonth(resetDate.getMonth() - 1);
+            }
+            return resetDate;
+        }
+
+        // Check if there are pending auto-set resets
+        async function checkPendingAutoSet() {
+            const pendingBar = document.getElementById('pending-bar');
+            pendingBar.style.display = 'none';
+
+            try {
+                const snap = await getDoc(doc(db, 'settings', 'monthlyAutoSet'));
+                if (!snap.exists()) return;
+
+                const resetDate = getLastResetDate();
+                let pendingCount = 0;
+
+                // Check all users
+                const snapshot = await getDocs(collection(db, 'users'));
+                snapshot.forEach(docSnap => {
+                    const userData = docSnap.data();
+                    const lastAutoSet = userData.lastAutoSet ? userData.lastAutoSet.toDate() : new Date(0);
+                    const lastSetJST = new Date(lastAutoSet.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+
+                    if (resetDate > lastSetJST) {
+                        pendingCount++;
+                    }
+                });
+
+                if (pendingCount > 0) {
+                    document.getElementById('pending-msg').textContent =
+                        `⚠️ ${pendingCount}人のユーザーの自動セットが保留中です`;
+                    pendingBar.style.display = 'flex';
+                }
+            } catch (err) {
+            }
+        }
+
+        // Apply auto-set to all pending users now
+        window.applyAutoSetNow = async function() {
+            const btn = document.getElementById('btn-apply-now');
+            btn.disabled = true;
+            btn.textContent = '適用中...';
+
+            try {
+                const snap = await getDoc(doc(db, 'settings', 'monthlyAutoSet'));
+                if (!snap.exists()) {
+                    showToast('自動セットが設定されていません。', 'error');
+                    return;
+                }
+                const config = snap.data();
+                const resetDate = getLastResetDate();
+
+                const batch = writeBatch(db);
+                let resetCount = 0;
+
+                const snapshot = await getDocs(collection(db, 'users'));
+                snapshot.forEach(docSnap => {
+                    const userData = docSnap.data();
+                    const lastAutoSet = userData.lastAutoSet ? userData.lastAutoSet.toDate() : new Date(0);
+                    const lastSetJST = new Date(lastAutoSet.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+
+                    if (resetDate > lastSetJST) {
+                        batch.update(doc(db, 'users', docSnap.id), {
+                            remainingTime: config.resetSeconds,
+                            lastAutoSet: resetDate,
+                            updatedAt: serverTimestamp()
+                        });
+                        resetCount++;
+                    }
+                });
+
+                if (resetCount > 0) {
+                    await batch.commit();
+                    showToast(`${resetCount}人のユーザーの時間をセットしました。`, 'success');
+                    await loadUsersCore();
+                    renderUsers();
+                } else {
+                    showToast('セットが必要なユーザーはいません。', 'success');
+                }
+
+                document.getElementById('pending-bar').style.display = 'none';
+            } catch (err) {
+                showToast('適用に失敗しました。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '今すぐ適用';
+            }
+        };
+
+        // ============================================
+        // Core user loading (without auto-set check)
+        // ============================================
+        async function loadUsersCore() {
+            const tbody = document.getElementById('users-tbody');
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><span class="spinner"></span> 読み込み中...</td></tr>';
+
+            const snapshot = await getDocs(collection(db, 'users'));
+            usersData = [];
+
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                usersData.push({
+                    id: docSnap.id,
+                    displayName: data.displayName || '',
+                    email: data.email || '',
+                    remainingTime: parseInt(data.remainingTime, 10) || 0,
+                    role: data.role || ''
+                });
+            });
+
+            usersData.sort((a, b) => {
+                if (a.role === 'admin' && b.role !== 'admin') return 1;
+                if (a.role !== 'admin' && b.role === 'admin') return -1;
+                return (a.displayName || a.email).localeCompare(b.displayName || b.email);
+            });
+        }
+
+        // Override loadUsers to also check auto-set
+        const _originalLoadUsers = window.loadUsers;
+        window.loadUsers = async function() {
+            await _originalLoadUsers();
+            await loadAutoSet();
+            await checkPendingAutoSet();
+        };
+
+    </script>
+</body>
+</html>

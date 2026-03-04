@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamecollege - Beginner</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="images/header-logo.png" type="image/png">
 </head>
 <body>
@@ -16,15 +16,15 @@
                 <img src="images/header-logo.png" alt="Gamecollege Logo">
             </div>
             <div class="header-center">
-                <p>ようこそ、<span id="user-email"></span>さん！</p>
+                <p>おかえりなさい、<span id="user-email"></span>さん！</p>
                 <p class="page-level">レベル: <strong>Beginner</strong></p>
                 <p class="timer-wrapper">残り時間: <span id="timer-display">--:--:--</span></p>
             </div>
-            <!-- Tab Switcher for 3 servers -->
+            <!-- Tab Switcher for 4 servers -->
             <div class="header-tab-switcher">
                 <button id="tab-server1" class="tab-btn active">1-1 音声</button>
-                <button id="tab-server2" class="tab-btn">1-2 音声＆画面共有</button>
-                <button id="tab-server3" class="tab-btn">1-3 音声＆画面共有＆声かけ</button>
+                <button id="tab-server2" class="tab-btn" disabled>1-2 音声＆画面共有</button>
+                <button id="tab-server3" class="tab-btn" disabled>1-3 音声＆画面共有＆声かけ</button>
             </div>
             <div class="header-actions">
                 <button id="level-switcher-btn">レベル切替</button>
@@ -34,30 +34,53 @@
         
         <!-- Main content area -->
         <div class="main-content-grid">
-            <div class="instructions-panel">
+            <!-- Instructions for tab-server1 (音声＆文字起こし) -->
+            <div class="instructions-panel" id="instructions-server1">
                 <h2>📚 使い方 📚</h2>
                 <ol class="instructions-list">
-                    <li>赤いボタンを押して、マイクラの画面を共有しよう！</li>
-                    <li>AI先生に「Hello!」と声をかけてみよう。</li>
+                    <li>マイクボタンを押して、ラーニー先生と話してみよう！</li>
+                    <li>ラーニー先生に「Hello!」と声をかけてみよう。</li>
+                    <li>会話はリアルタイムで文字起こしされるよ📝</li>
                     <li>もし返事がないときは、ページをリロード（🔁更新）してみよう。</li>
                 </ol>
                 
                 <h2>💡 ヒント 💡</h2>
                 <p class="hint-text">
-                    AI先生は日本語もわかるけど、まだ完璧じゃないよ💦 英語で話してくれるとバッチリ！
+                    ラーニー先生は日本語もわかるけど、まだ完璧じゃないよ💦 英語で話してくれるとバッチリ！
+                </p>
+                <p>例：「英語で〇〇ってなんて言うの？」「〇〇について教えて！」など、<br>なんでも気軽に聞いてみよう！</p>
+
+                <h2>🔚 おわりかた 🔚</h2>
+                <p class="hint-text">
+                    タブを閉じるかログアウトしてね。タイマーがなくなると、ラーニー先生の体験は終了だよ。
+                </p>
+            </div>
+
+            <!-- Instructions for tab-server2 & tab-server3 (画面共有系) -->
+            <div class="instructions-panel" id="instructions-default" style="display:none;">
+                <h2>📚 使い方 📚</h2>
+                <ol class="instructions-list">
+                    <li>マイクボタンを押して、マイクラの画面を共有しよう！</li>
+                    <li>ラーニー先生に「Hello!」と声をかけてみよう。</li>
+                    <li>もし返事がないときは、ページをリロード（🔁更新）してみよう。</li>
+                </ol>
+                
+                <h2>💡 ヒント 💡</h2>
+                <p class="hint-text">
+                    ラーニー先生は日本語もわかるけど、まだ完璧じゃないよ💦 英語で話してくれるとバッチリ！
                 </p>
                 <p>例：「英語で〇〇ってなんて言うの？」「ここから何をしたらいいかな？」など、<br>ゲームのこともどんどん聞いてみよう！</p>
 
                 <h2>🔚 おわりかた 🔚</h2>
                 <p class="hint-text">
-                    タブを閉じるかログアウトしてね。タイマーがなくなると、AI先生の体験は終了だよ。
+                    タブを閉じるかログアウトしてね。タイマーがなくなると、ラーニー先生の体験は終了だよ。
                 </p>
             </div>
 
             <main id="app-content">
                 <!-- Iframes for each server -->
                 <iframe 
-                    src="https://learnysensei-s1-1.web.app/" 
+                    src="voice-tab.html" 
                     id="server-iframe-1"
                     frameborder="0"
                     allow="microphone; display-capture"
@@ -89,19 +112,12 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
-    <!-- Page-specific script -->
-    <script type="module" src="./page1.js"></script>
+    <!-- Page-specific script (Firebase v11 modular SDK loaded via page1.js) -->
+    <script type="module" src="js/page1.js"></script>
 
     <!-- Growbuddy Logo -->
     <div id="fixed-corner-logo">
-        <a href="https://www.growbuddy-play.com/corporate" target="_blank" rel="noopener noreferrer">
-            <img src="images/Growbuddy.png" alt="Growbuddy Logo">
-        </a>
+        <img src="images/Growbuddy.png" alt="Growbuddy Logo">
     </div>
 
     <!-- Tab switching logic -->
@@ -112,6 +128,8 @@
         const iframe1 = document.getElementById('server-iframe-1');
         const iframe2 = document.getElementById('server-iframe-2');
         const iframe3 = document.getElementById('server-iframe-3');
+        const instructionsServer1 = document.getElementById('instructions-server1');
+        const instructionsDefault = document.getElementById('instructions-default');
 
         function switchTab(activeTab, activeIframe) {
             // Reset all tabs
@@ -121,11 +139,14 @@
             // Activate selected tab and iframe
             activeTab.classList.add('active');
             activeIframe.style.display = 'block';
+
+            // Show the correct instructions panel
+            const isTab1 = (activeTab === tabServer1);
+            instructionsServer1.style.display = isTab1 ? '' : 'none';
+            instructionsDefault.style.display = isTab1 ? 'none' : '';
         }
 
         tabServer1.addEventListener('click', () => switchTab(tabServer1, iframe1));
-        tabServer2.addEventListener('click', () => switchTab(tabServer2, iframe2));
-        tabServer3.addEventListener('click', () => switchTab(tabServer3, iframe3));
     </script>
 
 </body>

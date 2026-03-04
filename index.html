@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamecollege - Login</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="images/header-logo.png" type="image/png">
 </head>
 <body class="login-page">
@@ -19,10 +19,9 @@
                 <span class="float-star" style="top: 15%; left: 60%;">★</span>
                 <span class="float-star" style="top: 60%; left: 75%;">★</span>
                 <span class="float-cloud" style="top: 35%; left: 50%;">☁</span>
-                <span class="float-book" style="top: 70%; left: 25%;">📚</span>
             </div>
             <div class="mascot-container">
-                <img src="images/mascot_owl_character.png" alt="Wise Owl Mascot" class="mascot-wave">
+                <img src="images/fukurou.svg" alt="Wise Owl Mascot" class="mascot-wave">
             </div>
         </div>
         
@@ -34,10 +33,18 @@
             
             <form id="login-form">
                 <div class="form-group">
+                    <label for="display-name">なまえ</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">😊</span>
+                        <input type="text" id="display-name" placeholder="たろう" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label for="email">メールアドレス</label>
                     <div class="input-wrapper">
                         <span class="input-icon">✉️</span>
-                        <input type="email" id="email" placeholder="example@email.com" required>
+                        <input type="email" id="email" placeholder="example@email.com" required autocomplete="email">
                     </div>
                 </div>
                 
@@ -45,7 +52,7 @@
                     <label for="password">パスワード</label>
                     <div class="input-wrapper">
                         <span class="input-icon">🔒</span>
-                        <input type="password" id="password" placeholder="••••••••" required>
+                        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
                     </div>
                 </div>
                 
@@ -70,19 +77,12 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
-    <!-- 自分のスクリプト -->
-    <script type="module" src="./app.js"></script>
+    <!-- 自分のスクリプト (Firebase v11 modular SDK loaded via app.js) -->
+    <script type="module" src="js/app.js"></script>
 
     <!-- Growbuddy Logo -->
     <div id="fixed-corner-logo">
-        <a href="https://www.growbuddy-play.com/corporate" target="_blank" rel="noopener noreferrer">
-            <img src="images/Growbuddy.png" alt="Growbuddy Logo">
-        </a>
+        <img src="images/Growbuddy.png" alt="Growbuddy Logo">
     </div>
 
 </body>
