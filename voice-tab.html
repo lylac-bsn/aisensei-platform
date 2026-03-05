@@ -951,7 +951,9 @@
                 };
                 client.onClose = () => {
                     connected = false;
-                    actionState = 'idle';
+                    if (!isAutoReconnecting) {
+                        actionState = 'idle';
+                    }
                     updateActionUI();
                     if (!isAutoReconnecting) disconnectAPI();
                 };
