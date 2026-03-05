@@ -653,10 +653,12 @@
                 btnMute.classList.add('muted');
                 btnMute.textContent = '🔇';
                 btnMute.title = 'ミュート解除';
+                resetSilenceTimer();
             } else {
                 btnMute.classList.remove('muted');
                 btnMute.textContent = '🎙️';
                 btnMute.title = 'マイクミュート';
+                startSilenceTimer();
             }
         }
 
@@ -773,6 +775,7 @@
         // ============================================
         function startSilenceTimer() {
             resetSilenceTimer();
+            if (isMuted) return; // Don't start silence timer while muted
             silenceTimer = setTimeout(() => {
                 if (client && client.connected) {
                     const recentAiMessages = chatMessages
