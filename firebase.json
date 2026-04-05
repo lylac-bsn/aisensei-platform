@@ -38,7 +38,7 @@
           },
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://www.gstatic.com wss://gemini-proxy-880810385529.us-central1.run.app; img-src 'self' data:; frame-src 'self' https://*.web.app https://*.firebaseapp.com; object-src 'none'; base-uri 'self'"
+            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://www.gstatic.com wss://gemini-proxy-483139385570.us-central1.run.app https://learnie.cc https://www.learnie.cc https://*.learnie.cc; img-src 'self' data:; frame-src 'self' https://*.web.app https://*.firebaseapp.com https://learnie.cc https://www.learnie.cc https://*.learnie.cc; object-src 'none'; base-uri 'self'"
           }
         ]
       },

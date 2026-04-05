@@ -25,7 +25,7 @@ By combining real-time screen analysis with live AI conversations, AI Sensei cre
 ## 🌐 Access
 
 **Live Platform:**  
-👉 [https://ai-sensei-8849b.web.app/](https://ai-sensei-8849b.web.app/)
+👉 [https://learnie.cc/](https://learnie.cc/)
 
 For platform access inquiries, please contact:  
 📩 **lylac.bsn@gmail.com**
@@ -113,7 +113,7 @@ Its real-time screen reading and live interaction capabilities make it highly ad
 ## 🌐 アクセス
 
 **ライブ版プラットフォーム:**  
-👉 [https://ai-sensei-8849b.web.app/](https://ai-sensei-8849b.web.app/)
+👉 [https://learnie.cc/](https://learnie.cc/)
 
 プラットフォームのアクセスをご希望の方は、以下までご連絡ください：  
 📩 **lylac.bsn@gmail.com**

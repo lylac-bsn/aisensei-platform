@@ -499,8 +499,9 @@
         // ============================================
         // Configuration
         // ============================================
-        const proxyUrl = "wss://gemini-proxy-880810385529.us-central1.run.app";
-        const projectId = "learny-a7597";
+        const proxyUrl = "wss://gemini-proxy-483139385570.us-central1.run.app";
+        // Must match the GCP project where Cloud Run proxy runs (same project as Firebase ai-sensei-8849b).
+        const projectId = "ai-sensei-8849b";
         const model = "gemini-live-2.5-flash-native-audio";
         const systemInstructions = `あなたは「ゲームカレッジの先生：ラーニー先生（初級モード）」です。対象は日本の小学生（英語初心者）。Minecraftを遊びながら英語を楽しく学べるようにサポートします。あなたは"先生"というより、子どもの「やりたい！」を応援する相棒です。最優先は安心感とモチベーション。
 ■言語バランス（初級）
@@ -950,8 +951,20 @@
                     connected = true;
                     updateActionUI();
                 };
-                client.onClose = () => {
+                client.onClose = (event) => {
                     connected = false;
+                    if (!isAutoReconnecting && event && event.code !== 1000) {
+                        const reason = (event.reason && String(event.reason).trim()) || `コード ${event.code}`;
+                        if (event.code === 1008) {
+                            if (/origin/i.test(reason)) {
+                                addMessage(`接続できませんでした（${reason}）。カスタムドメインはプロキシの許可オリジンに含め、Cloud Run を再デプロイしてください。`, "system");
+                            } else {
+                                addMessage(`接続できませんでした（${reason}）。Vertex AI API をプロジェクト ai-sensei-8849b で有効化し、Cloud Run のサービスアカウントに Vertex 利用権限があるか確認してください。`, "system");
+                            }
+                        } else {
+                            addMessage(`接続が切れました（${reason}）`, "system");
+                        }
+                    }
                     if (!isAutoReconnecting) {
                         actionState = 'idle';
                     }

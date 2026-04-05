@@ -14,6 +14,7 @@ import json
 import ssl
 import certifi
 import os
+from urllib.parse import urlparse
 from websockets.exceptions import ConnectionClosed
 
 # Google auth imports
@@ -23,10 +24,22 @@ from google.auth.transport.requests import Request
 DEBUG = False  # Set to True for verbose logging
 WS_PORT = int(os.environ.get("PORT", 8080))    # Port for WebSocket server (Cloud Run uses PORT env var)
 
-# Allowed origins for WebSocket connections (security: reject unknown origins)
+# Allowed origins for WebSocket connections (security: reject unknown origins).
+# Browsers send the page origin (e.g. custom domain or *.web.app), not the parent frame URL.
+# Cloud Run: optional ALLOWED_ORIGINS is merged with this list (not a full replacement).
 ALLOWED_ORIGINS = [
+    # Main Gamecollege / AI Sensei site
     "https://ai-sensei-8849b.web.app",
     "https://ai-sensei-8849b.firebaseapp.com",
+    "https://learnie.cc",
+    "https://www.learnie.cc",
+    # Embedded voice/screen apps (same proxy URL in voice-tab variants)
+    "https://learnysensei-s1-2-voice.web.app",
+    "https://learnysensei-s1-3.web.app",
+    "https://learnysensei-s2-2.web.app",
+    "https://learnysensei-s2-3.web.app",
+    "https://learnysensei-s3-2.web.app",
+    # Local dev
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "http://localhost:5000",
@@ -69,12 +82,32 @@ def generate_access_token():
         return None
 
 
+def _allowed_origin_set():
+    """Code defaults plus optional ALLOWED_ORIGINS env entries (merged)."""
+    out = {x.strip() for x in ALLOWED_ORIGINS if x.strip()}
+    extra = os.environ.get("ALLOWED_ORIGINS", "").strip()
+    if extra:
+        out.update(x.strip() for x in extra.split(",") if x.strip())
+    return out
+
+
 def check_origin(origin: str) -> bool:
     """Check if the WebSocket connection origin is allowed."""
     if not origin:
         return False
-    allowed = os.environ.get("ALLOWED_ORIGINS", ",".join(ALLOWED_ORIGINS)).split(",")
-    return origin.strip() in [o.strip() for o in allowed]
+    o = origin.strip()
+
+    # Custom prod domain and any subdomain (https only): learnie.cc, www.learnie.cc, app.learnie.cc, …
+    if o.startswith("https://"):
+        try:
+            host = urlparse(o).hostname
+            if host:
+                if host == "learnie.cc" or host.endswith(".learnie.cc"):
+                    return True
+        except Exception:
+            pass
+
+    return o in _allowed_origin_set()
 
 
 def get_origin(websocket) -> str:
