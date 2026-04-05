@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let mainTimerInterval = null;
     let saveTimerInterval = null;
     let currentUser = null;
+    let currentUserRole = '';  // 'admin' | 'user' | '' — used to avoid overwriting admin's time with 0 on save
     let currentRemainingTime = 0;
 
     // =================================================
@@ -56,18 +57,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // User is logged in, proceed
             currentUser = user;
+            currentUserRole = userData.role || '';
             appView.style.display = 'block';
             timeUpOverlay.style.display = 'none';
             if (appContent) appContent.style.pointerEvents = 'auto';
             userEmailDisplay.textContent = userData.displayName || user.email || "";
 
-            // Check for monthly auto-set before starting timer
-            await checkMonthlyAutoSet(user.uid);
+            // Check for monthly auto-set before starting timer (skip for admin — do not overwrite their time)
+            if (userData.role !== 'admin') {
+                await checkMonthlyAutoSet(user.uid);
+            }
 
             const timerData = userData?.timer || null;
             startTimerForUser(user.uid, timerData);
         } else {
             // Not logged in - redirect to login page
+            currentUserRole = '';
             try { await saveTime(true); } catch {}
             currentUser = null;
             window.location.href = 'index.html';
@@ -199,6 +204,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveTime(isFinalSave = false) {
         if (!currentUser || isNaN(currentRemainingTime)) return;
+        // Do not overwrite Firestore with 0 for admin (e.g. after they set time in Firebase and reload)
+        if (currentUserRole === 'admin' && currentRemainingTime === 0) return;
 
         const userDocRef = doc(db, 'users', currentUser.uid);
         updateDoc(userDocRef, { 
