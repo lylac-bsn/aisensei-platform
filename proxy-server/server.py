@@ -107,6 +107,10 @@ def check_origin(origin: str) -> bool:
         except Exception:
             pass
 
+    # Local dev: any port on localhost / 127.0.0.1
+    if o.startswith("http://localhost:") or o.startswith("http://127.0.0.1:"):
+        return True
+
     return o in _allowed_origin_set()
 
 
@@ -154,7 +158,16 @@ async def proxy_task(source_websocket, destination_websocket, is_server: bool) -
 async def create_proxy(client_websocket, bearer_token: str, service_url: str) -> None:
     """
     Establishes a WebSocket connection to the Gemini server and creates bidirectional proxy.
+    Always refreshes the GCP access token for each upstream connection (tokens expire ~1 hour).
     """
+    fresh_token = generate_access_token()
+    if fresh_token:
+        bearer_token = fresh_token
+    elif not bearer_token:
+        print("❌ Failed to generate access token for upstream Gemini connection")
+        await client_websocket.close(code=1008, reason="Authentication failed")
+        return
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {bearer_token}",
@@ -172,7 +185,8 @@ async def create_proxy(client_websocket, bearer_token: str, service_url: str) ->
             additional_headers=headers,
             ssl=ssl_context
         ) as server_websocket:
-            print(f"✅ Connected to Gemini API")
+            print(f"✅ Connected to Gemini API (fresh token)")
+            connection_started = asyncio.get_event_loop().time()
 
             client_to_server_task = asyncio.create_task(
                 proxy_task(client_websocket, server_websocket, is_server=False)
@@ -185,6 +199,9 @@ async def create_proxy(client_websocket, bearer_token: str, service_url: str) ->
                 [client_to_server_task, server_to_client_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
+
+            elapsed = asyncio.get_event_loop().time() - connection_started
+            print(f"Proxy session ended ({elapsed:.0f}s)")
 
             for task in pending:
                 task.cancel()
