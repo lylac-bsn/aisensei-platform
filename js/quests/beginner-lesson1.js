@@ -1,0 +1,249 @@
+/** Beginner Lesson 1 — Minecraft survival quest chain (one quest per voice call). */
+export const LESSON_1_TITLE = "レッスン1：マイクラサバイバル";
+
+export const LESSON_1_QUESTS = [
+  {
+    id: 1,
+    title: "クエスト1",
+    titleEn: "Find a tree and chop it for wood",
+    goal: "木を見つけて、切って木材を集めよう",
+    hint: "例：「I found a tree!」→「I got wood!」",
+    openingPlay:
+      "まずは木を探そう！サバイバル、木が大事だよ。見つかったら「I found a tree!」って言ってみよう！",
+    steps: [
+      {
+        id: "found_tree",
+        label: "木を見つけた",
+        patterns: [
+          "found a tree",
+          "find a tree",
+          "found tree",
+          "find tree",
+          "see a tree",
+          "see tree",
+          "there's a tree",
+          "there is a tree",
+          "i see a tree",
+          "i found a tree",
+        ],
+        coachNote:
+          "「I found a tree」= 木を見つけたよ。found（ファウンド）= 見つけた、tree（ツリー）= 木",
+      },
+      {
+        id: "got_wood",
+        label: "木材を手に入れた",
+        patterns: [
+          "got wood",
+          "get wood",
+          "got some wood",
+          "have wood",
+          "chopped wood",
+          "chop wood",
+          "chop tree",
+          "chop the tree",
+          "chopped the tree",
+          "cut the tree",
+          "collected wood",
+          "i have wood",
+          "i got wood",
+        ],
+        coachNote:
+          "「I got wood」= 木材を手に入れた。got（ガット）= 手に入れた、wood（ウッド）= 木の材料・木材",
+      },
+    ],
+  },
+  {
+    id: 2,
+    title: "クエスト2",
+    titleEn: "Craft and place a crafting table",
+    goal: "作業台を作って、置こう",
+    hint: "例：「I made a crafting table!」→「I put it here!」",
+    openingPlay:
+      "木材があるね！作業台をクラフトして、好きな場所に置いてみよう！作れたら・置けたら教えてね。",
+    steps: [
+      {
+        id: "made_table",
+        label: "作業台を作った",
+        patterns: [
+          "made a crafting table",
+          "make a crafting table",
+          "made crafting table",
+          "make crafting table",
+          "made a craft table",
+          "make a craft table",
+          "crafted a crafting table",
+          "built a crafting table",
+          "created a crafting table",
+          "i made a crafting table",
+        ],
+        coachNote:
+          "「I made a crafting table」= 作業台を作った。made（メイド）= 作った、crafting table（クラフティング・テーブル）= 作業台",
+      },
+      {
+        id: "placed_table",
+        label: "作業台を置いた",
+        patterns: [
+          "put it here",
+          "put here",
+          "placed it here",
+          "place it here",
+          "put it down",
+          "put down",
+          "placed the table",
+          "place the table",
+          "put the table",
+          "placed the crafting table",
+        ],
+        coachNote:
+          "「I put it here」= ここに置いた。put（プット）= 置く、here（ヒア）= ここ",
+      },
+    ],
+  },
+  {
+    id: 3,
+    title: "クエスト3",
+    titleEn: "Make a wooden pickaxe",
+    goal: "木のツルハシを作ろう",
+    hint: "例：「I made a pickaxe!」→「I'm ready!」",
+    openingPlay:
+      "作業台の前で木のツルハシを作ってみよう！サバイバルに超大事なアイテムだよ。できたら教えてね。",
+    steps: [
+      {
+        id: "made_pickaxe",
+        label: "ツルハシを作った",
+        patterns: [
+          "made a pickaxe",
+          "make a pickaxe",
+          "made pickaxe",
+          "make pickaxe",
+          "made a wooden pickaxe",
+          "make a wooden pickaxe",
+          "crafted a pickaxe",
+          "built a pickaxe",
+          "i made a pickaxe",
+          "i have a pickaxe",
+        ],
+        coachNote:
+          "「I made a pickaxe」= ツルハシを作った。made（メイド）= 作った、pickaxe（ピカックス）= ツルハシ",
+      },
+      {
+        id: "ready",
+        label: "準備OK",
+        patterns: [
+          "i'm ready",
+          "im ready",
+          "i am ready",
+          "ready to go",
+          "ready now",
+          "ready",
+        ],
+        coachNote:
+          "「I'm ready」= 準備できた。ready（レディ）= 準備OK・用意できた",
+      },
+    ],
+  },
+  {
+    id: 4,
+    title: "クエスト4",
+    titleEn: "Mine 5 stones (cobblestone)",
+    goal: "石（丸石）を5個掘ろう",
+    hint: "例：「I found stones!」→「I got stones!」",
+    openingPlay:
+      "ツルハシを持って石を探そう！掘って集めてみて。見つけたら・集まったら教えてね。",
+    steps: [
+      {
+        id: "found_stones",
+        label: "石を見つけた",
+        patterns: [
+          "found stones",
+          "find stones",
+          "found stone",
+          "find stone",
+          "found the stones",
+          "found the stone",
+          "see stones",
+          "see stone",
+          "found cobblestone",
+          "find cobblestone",
+          "mine cobblestone",
+          "see cobblestone",
+          "i found stones",
+        ],
+        coachNote:
+          "「I found stones」= 石を見つけた。found（ファウンド）= 見つけた、stones（ストーンズ）= 石",
+      },
+      {
+        id: "got_stones",
+        label: "石を集めた",
+        patterns: [
+          "got stones",
+          "get stones",
+          "got stone",
+          "get stone",
+          "collected stones",
+          "collected stone",
+          "mined stone",
+          "mined stones",
+          "mine stone",
+          "have stones",
+          "have five stones",
+          "got five stones",
+          "got 5 stones",
+        ],
+        coachNote:
+          "「I got stones」= 石を集めた。got（ガット）= 手に入れた・集めた、stones（ストーンズ）= 石",
+      },
+    ],
+  },
+  {
+    id: 5,
+    title: "クエスト5",
+    titleEn: "Find food to survive",
+    goal: "食べ物を見つけてサバイバルしよう",
+    hint: "例：「I found food!」（お肉・フルーツなど）→「I need food!」",
+    openingPlay:
+      "お腹空いてきたね！ワールドで食べ物を探してみよう。羊や牛、木の実…見つけたら教えてね。",
+    steps: [
+      {
+        id: "found_food",
+        label: "食べ物を見つけた",
+        patterns: [
+          "found food",
+          "find food",
+          "found some food",
+          "got food",
+          "get food",
+          "found beef",
+          "found meat",
+          "found apple",
+          "found fruit",
+          "found bread",
+          "found lamb",
+          "found a sheep",
+          "found a cow",
+          "i found food",
+        ],
+        coachNote:
+          "「I found food」= 食べ物を見つけた。found（ファウンド）= 見つけた、food（フード）= 食べ物",
+      },
+      {
+        id: "need_food",
+        label: "お腹が空いた",
+        patterns: [
+          "need food",
+          "i need food",
+          "i'm hungry",
+          "im hungry",
+          "i am hungry",
+          "hungry",
+          "need to eat",
+          "want food",
+          "i want food",
+          "want to eat",
+        ],
+        coachNote:
+          "「I need food」= 食べ物が必要・お腹が空いた。need（ニード）= 必要、food（フード）= 食べ物",
+      },
+    ],
+  },
+];

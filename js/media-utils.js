@@ -45,6 +45,10 @@ export class AudioStreamer {
         sampleRate: this.sampleRate,
       });
 
+      if (this.audioContext.state === "suspended") {
+        await this.audioContext.resume();
+      }
+
       // Load the audio worklet module
       await this.audioContext.audioWorklet.addModule(
         "/audio-processors/capture.worklet.js"
@@ -90,6 +94,34 @@ export class AudioStreamer {
    */
   updateClient(newClient) {
     this.client = newClient;
+  }
+
+  /** Pause sending to API without tearing down mic hardware (quest handoff). */
+  pauseStreaming() {
+    this.isStreaming = false;
+  }
+
+  /** Resume sending after reconnecting the API client. */
+  resumeStreaming() {
+    if (this.mediaStream && this.audioContext && this.audioWorklet) {
+      this.isStreaming = true;
+    }
+  }
+
+  get isActive() {
+    return Boolean(this.isStreaming && this.mediaStream && this.audioContext);
+  }
+
+  /** Resume capture if the browser suspended the audio context. */
+  async ensureStreaming() {
+    if (!this.audioContext) return false;
+    if (this.audioContext.state === "suspended") {
+      await this.audioContext.resume();
+    }
+    if (this.mediaStream && this.audioWorklet && !this.isStreaming) {
+      this.isStreaming = true;
+    }
+    return this.isStreaming && this.audioContext.state === "running";
   }
 
   /**
@@ -418,6 +450,7 @@ export class AudioPlayer {
 
       // Send to worklet for playback
       this.workletNode.port.postMessage(float32Data);
+      this.pendingSamples = (this.pendingSamples || 0) + float32Data.length;
     } catch (error) {
       throw error;
     }
@@ -430,6 +463,7 @@ export class AudioPlayer {
     if (this.workletNode) {
       this.workletNode.port.postMessage("interrupt");
     }
+    this.pendingSamples = 0;
   }
 
   /**
@@ -440,6 +474,14 @@ export class AudioPlayer {
     if (this.gainNode) {
       this.gainNode.gain.value = this.volume;
     }
+  }
+
+  /** Estimated ms until enqueued PCM finishes playing (24 kHz). */
+  getEstimatedPlaybackMsRemaining() {
+    const samples = this.pendingSamples || 0;
+    if (samples <= 0) return 0;
+    this.pendingSamples = Math.max(0, samples - this.sampleRate * 0.12);
+    return Math.ceil((samples / this.sampleRate) * 1000);
   }
 
   /**

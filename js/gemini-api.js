@@ -163,6 +163,27 @@ export class GeminiLiveAPI {
     };
 
     this.onClose = () => {};
+    this._connectResolve = null;
+    this._connectReject = null;
+  }
+
+  _clearConnectPromise() {
+    this._connectResolve = null;
+    this._connectReject = null;
+  }
+
+  _resolveConnect() {
+    if (this._connectResolve) {
+      this._connectResolve();
+      this._clearConnectPromise();
+    }
+  }
+
+  _rejectConnect(error) {
+    if (this._connectReject) {
+      this._connectReject(error);
+      this._clearConnectPromise();
+    }
   }
 
   setProjectId(projectId) {
@@ -215,13 +236,36 @@ export class GeminiLiveAPI {
   }
 
   connect() {
-    this.setupWebSocketToService();
+    this.disconnect();
+    return new Promise((resolve, reject) => {
+      this._connectResolve = resolve;
+      this._connectReject = reject;
+      this.setupWebSocketToService();
+    });
   }
 
   disconnect() {
-    if (this.webSocket) {
-      this.webSocket.close();
-      this.connected = false;
+    this.connected = false;
+    this._rejectConnect(new Error("Connection closed"));
+
+    if (!this.webSocket) return;
+
+    const ws = this.webSocket;
+    this.webSocket = null;
+
+    try {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      if (
+        ws.readyState === WebSocket.CONNECTING ||
+        ws.readyState === WebSocket.OPEN
+      ) {
+        ws.close(1000, "Client disconnect");
+      }
+    } catch {
+      // ignore close errors
     }
   }
 
@@ -244,19 +288,28 @@ export class GeminiLiveAPI {
 
     this.webSocket.onclose = (event) => {
       this.connected = false;
+      const stillConnecting = Boolean(this._connectReject);
+      if (stillConnecting) {
+        const reason =
+          (event.reason && String(event.reason).trim()) ||
+          `code ${event.code}`;
+        this._rejectConnect(new Error(`WebSocket closed before open (${reason})`));
+      }
       this.onClose(event);
     };
 
-    this.webSocket.onerror = (event) => {
+    this.webSocket.onerror = () => {
       this.connected = false;
+      this._rejectConnect(new Error("WebSocket connection error"));
       this.onErrorMessage("Connection error");
     };
 
-    this.webSocket.onopen = (event) => {
+    this.webSocket.onopen = () => {
       this.connected = true;
       this.totalBytesSent = 0;
       this.sendInitialSetupMessages();
       this.onConnectionStarted();
+      this._resolveConnect();
     };
 
     this.webSocket.onmessage = this.onReceiveMessage.bind(this);
@@ -374,11 +427,20 @@ export class GeminiLiveAPI {
     this.sendMessage(textMessage);
   }
 
-  sendToolResponse(toolCallId, response) {
+  sendToolResponse(name, id, responseBody = {}) {
+    const response = {
+      ...responseBody,
+      scheduling: responseBody.scheduling || "INTERRUPT",
+    };
     const message = {
       tool_response: {
-        id: toolCallId,
-        response: response,
+        function_responses: [
+          {
+            id,
+            name,
+            response,
+          },
+        ],
       },
     };
     this.sendMessage(message);

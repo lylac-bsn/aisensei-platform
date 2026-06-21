@@ -110,3 +110,47 @@ export class AddCSSStyleTool extends FunctionCallDefinition {
     // CSS style injected
   }
 }
+
+/** CompleteQuestTool — Learny calls when the visible quest goal is met. */
+export class CompleteQuestTool {
+  constructor(onComplete) {
+    this.name = "complete_quest";
+    this.description =
+      "Call ONLY when ALL steps of the current Minecraft quest are complete AND each step's English phrase appears in the speech transcript. " +
+      "Never call based on Japanese meaning alone. user_quote must be the exact latest transcript, not invented English.";
+    this.parameters = {
+      type: "object",
+      properties: {
+        user_quote: {
+          type: "string",
+          description:
+            "Exact latest user speech transcript (must contain English for the final step — do not translate or invent)",
+        },
+        reason: {
+          type: "string",
+          description: "Brief note on why all quest steps succeeded",
+        },
+      },
+    };
+    this.requiredParameters = ["user_quote"];
+    this.onComplete = onComplete;
+  }
+
+  getDefinition() {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: { required: this.requiredParameters, ...this.parameters },
+    };
+  }
+
+  runFunction(parameters) {
+    if (this.onComplete) {
+      this.onComplete(parameters?.reason || "quest_complete");
+    }
+  }
+
+  functionToCall(parameters) {
+    this.runFunction(parameters);
+  }
+}

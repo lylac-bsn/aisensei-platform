@@ -11,24 +11,39 @@
 
     <!-- メインアプリ画面 -->
     <div id="app-view">
-        <header>
-            <div class="header-logo-container">
-                <img src="images/header-logo.png" alt="Gamecollege Logo">
-            </div>
-            <div class="header-center">
-                <p>おかえりなさい、<span id="user-email"></span>さん！</p>
-                <p class="page-level">レベル: <strong>Advanced</strong></p>
-                <p class="timer-wrapper">残り時間: <span id="timer-display">--:--:--</span></p>
-            </div>
-            <!-- Tab Switcher for 3 servers -->
-            <div class="header-tab-switcher">
-                <button id="tab-server1" class="tab-btn active">3-1 音声</button>
-                <button id="tab-server2" class="tab-btn" disabled>3-2 音声＆画面共有</button>
-                <button id="tab-server3" class="tab-btn" disabled>3-3 音声＆画面共有＆声かけ</button>
-            </div>
-            <div class="header-actions">
-                <button id="level-switcher-btn">レベル切替</button>
-                <button id="logout-button">ログアウト</button>
+        <header class="app-header">
+            <div class="app-header__main">
+                <div class="header-brand">
+                    <img src="images/header-logo.png" alt="ゲームカレッジ">
+                </div>
+                <div class="header-center">
+                    <p class="header-welcome">おかえりなさい、<span id="user-email"></span>さん！</p>
+                    <div class="header-status-row">
+                        <span class="header-status-pill header-status-pill--level">
+                            <svg class="header-pill-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#FFD54F" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg>
+                            レベル: <strong>Advanced</strong>
+                        </span>
+                        <span class="header-status-pill header-status-pill--timer">
+                            <svg class="header-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                            残り時間: <span id="timer-display">--:--:--</span>
+                        </span>
+                        <div class="header-tab-switcher">
+                            <button id="tab-server1" class="tab-btn active">3-1 音声</button>
+                            <button id="tab-server2" class="tab-btn" disabled>3-2 音声＆画面共有</button>
+                            <button id="tab-server3" class="tab-btn" disabled>3-3 音声＆画面共有＆声かけ</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button type="button" id="level-switcher-btn" class="header-btn header-btn--level">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>
+                        レベル切替
+                    </button>
+                    <button type="button" id="logout-button" class="header-btn header-btn--logout">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                        ログアウト
+                    </button>
+                </div>
             </div>
         </header>
         

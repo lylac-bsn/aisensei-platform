@@ -30,6 +30,17 @@
             --radius-md: 16px;
             --radius-lg: 24px;
             --radius-full: 9999px;
+            --font-size-root: clamp(13px, 0.3vw + 12px, 15px);
+            --text-xs: 0.8125rem;
+            --text-sm: 0.875rem;
+            --text-base: 1rem;
+            --text-md: clamp(0.9375rem, 0.9rem + 0.15vw, 1.0625rem);
+            --text-lg: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+            --text-xl: clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem);
+        }
+
+        html {
+            font-size: var(--font-size-root);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,6 +49,7 @@
             font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background-color: var(--bg);
             color: var(--text-primary);
+            font-size: var(--text-base);
             overflow: hidden;
             height: 100vh;
             width: 100vw;
@@ -54,7 +66,7 @@
         /* ===== Header ===== */
         .header {
             background: var(--primary);
-            padding: 12px 20px;
+            padding: 16px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -66,19 +78,20 @@
         .header-left {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
         }
 
         .header-avatar {
-            width: 36px;
-            height: 36px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             background: rgba(255,255,255,0.2);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.6rem;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .header-avatar img {
@@ -94,25 +107,28 @@
 
         .header-title {
             color: white;
-            font-size: 0.95rem;
-            font-weight: 600;
-            line-height: 1.2;
+            font-size: var(--text-xl);
+            font-weight: 700;
+            line-height: 1.25;
         }
 
         .header-status {
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.75rem;
-            color: rgba(255,255,255,0.8);
+            gap: 8px;
+            font-size: var(--text-sm);
+            font-weight: 500;
+            color: rgba(255,255,255,0.9);
+            margin-top: 2px;
         }
 
         .status-indicator {
-            width: 7px;
-            height: 7px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: rgba(255,255,255,0.4);
             transition: background 0.3s;
+            flex-shrink: 0;
         }
 
         .status-indicator.connected {
@@ -121,6 +137,38 @@
         }
 
         /* (header-btn removed – single button in input area) */
+
+        .header-call-btn.action-btn {
+            height: 44px;
+            padding: 0 18px;
+            border-radius: var(--radius-full);
+            background: rgba(255, 255, 255, 0.96);
+            color: var(--primary-dark);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+            border: 2px solid rgba(255, 255, 255, 0.85);
+            flex-shrink: 0;
+        }
+
+        .header-call-btn.action-btn.idle:hover {
+            background: #fff;
+            transform: scale(1.04);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+        }
+
+        .header-call-btn.action-btn.connecting {
+            background: rgba(255, 255, 255, 0.88);
+            color: var(--primary);
+        }
+
+        .header-call-btn.action-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        .header-call-btn.action-btn.active:hover {
+            background: #E05555;
+        }
 
         /* ===== Chat Area ===== */
         .chat-area {
@@ -152,33 +200,56 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 16px;
+            gap: 20px;
             color: var(--text-muted);
             text-align: center;
-            padding: 40px;
+            padding: 40px 24px;
         }
 
         .empty-state-icon {
-            width: 72px;
-            height: 72px;
+            width: 96px;
+            height: 96px;
             border-radius: 50%;
             background: var(--primary-light);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+
+        .empty-state-icon img {
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            object-fit: cover;
         }
 
         .empty-state-title {
-            font-size: 1rem;
-            font-weight: 600;
+            font-size: var(--text-xl);
+            font-weight: 700;
             color: var(--text-secondary);
+            line-height: 1.35;
         }
 
         .empty-state-desc {
-            font-size: 0.85rem;
-            max-width: 280px;
-            line-height: 1.5;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 8px;
+            max-width: 360px;
+            font-size: var(--text-base);
+            line-height: 1.6;
+            color: var(--text-secondary);
+            text-align: left;
+        }
+
+        .empty-state-desc-icon {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+            margin-top: 3px;
+            color: var(--primary);
         }
 
         /* Message rows */
@@ -244,7 +315,7 @@
         .msg-bubble {
             padding: 10px 14px;
             border-radius: var(--radius-md);
-            font-size: 0.88rem;
+            font-size: var(--text-base);
             line-height: 1.6;
             word-wrap: break-word;
             position: relative;
@@ -285,10 +356,10 @@
 
         /* ===== Input Area ===== */
         .input-area {
-            padding: 12px 16px 16px;
+            padding: 14px 18px 18px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             background: var(--surface);
             border-top: 1px solid var(--border);
             flex-shrink: 0;
@@ -296,10 +367,11 @@
 
         .input-field {
             flex: 1;
-            padding: 10px 16px;
+            min-height: 52px;
+            padding: 14px 18px;
             border: 1.5px solid var(--border);
             border-radius: var(--radius-full);
-            font-size: 0.88rem;
+            font-size: var(--text-base);
             font-family: inherit;
             outline: none;
             background: var(--bg);
@@ -318,8 +390,8 @@
         }
 
         .send-btn {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             border: none;
             border-radius: 50%;
             background: var(--primary);
@@ -338,28 +410,38 @@
         }
 
         .send-btn svg {
-            width: 18px;
-            height: 18px;
+            width: 22px;
+            height: 22px;
             fill: white;
+        }
+
+        .btn-icon {
+            flex-shrink: 0;
+            display: block;
         }
 
         /* Action Button (combined connect + mic) */
         .action-btn {
-            height: 48px;
+            height: 52px;
             border: none;
             border-radius: var(--radius-full);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
             transition: all 0.25s;
             flex-shrink: 0;
-            font-size: 0.88rem;
-            font-weight: 600;
+            font-size: var(--text-base);
+            font-weight: 700;
             font-family: inherit;
-            padding: 0 20px;
+            padding: 0 22px;
             white-space: nowrap;
+        }
+
+        .action-btn .btn-icon {
+            width: 22px;
+            height: 22px;
         }
 
         /* Idle / disconnected state */
@@ -380,12 +462,13 @@
         }
         .action-btn.connecting .action-spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             border: 2px solid var(--primary);
             border-top-color: transparent;
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
@@ -437,12 +520,338 @@
             background: #E05555;
         }
 
+        /* ===== Quest mission card ===== */
+        .quest-card-wrap {
+            padding: 14px 16px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .quest-banner {
+            display: flex;
+            align-items: stretch;
+            background: #fff;
+            border: 1px solid #DDE3E8;
+            border-radius: 14px;
+            overflow: hidden;
+            min-height: 120px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        }
+        .quest-banner.lesson-complete {
+            border-color: #FFD54F;
+            background: #FFFDE7;
+        }
+        .quest-badge {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 76px;
+            padding: 12px 12px 18px;
+            background: linear-gradient(180deg, #4CAF50 0%, #43A047 100%);
+            color: #fff;
+            border-right: 1px solid #DDE3E8;
+            clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+        }
+        .quest-badge-label {
+            font-size: var(--text-xs);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            line-height: 1.2;
+            opacity: 0.95;
+        }
+        .quest-badge-num {
+            font-size: clamp(1.75rem, 1.5rem + 0.8vw, 2rem);
+            font-weight: 800;
+            line-height: 1;
+            margin-top: 4px;
+        }
+        .quest-card-body {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 14px 10px 14px 18px;
+        }
+        .quest-banner-title-en {
+            font-size: var(--text-lg);
+            font-weight: 700;
+            color: #1B3A57;
+            line-height: 1.3;
+            white-space: normal;
+        }
+        .quest-banner-goal {
+            font-size: var(--text-md);
+            font-weight: 600;
+            color: #78909C;
+            margin-top: 5px;
+            line-height: 1.35;
+            white-space: normal;
+        }
+        .quest-steps {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 6px 10px;
+            margin-top: 8px;
+        }
+        .quest-steps-label {
+            font-size: var(--text-sm);
+            font-weight: 700;
+            color: #90A4AE;
+            flex-shrink: 0;
+            line-height: 1.5;
+        }
+        .quest-step {
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 4px;
+            font-size: var(--text-sm);
+            line-height: 1.4;
+            color: #546E7A;
+        }
+        .quest-step.done {
+            color: #2E7D32;
+        }
+        .quest-step-mark {
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .quest-step.done .quest-step-mark {
+            color: #43A047;
+        }
+        .quest-step-body {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .quest-step-label {
+            font-weight: 600;
+        }
+        .quest-step-phrase {
+            font-size: var(--text-xs);
+            color: #90A4AE;
+            font-weight: 500;
+        }
+        .quest-step.done .quest-step-phrase {
+            color: #66BB6A;
+        }
+        .quest-step-sep {
+            color: #CFD8DC;
+            font-size: 0.88rem;
+            line-height: 1.5;
+            user-select: none;
+        }
+        .quest-segments {
+            display: none;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .quest-segment {
+            flex: 1;
+            height: 9px;
+            border-radius: 999px;
+            background: #ECEFF1;
+            transition: background 0.25s ease;
+        }
+        .quest-segment.filled {
+            background: linear-gradient(90deg, #4CAF50, #66BB6A);
+        }
+        .quest-banner-hint {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        .quest-card-status {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: fit-content;
+            min-width: 148px;
+            padding: 14px 14px 14px 12px;
+            border-left: 1px solid #ECEFF1;
+            background: linear-gradient(180deg, #FAFBFC 0%, #F5F7F9 100%);
+        }
+        .quest-stars {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .quest-star {
+            width: clamp(36px, 3vw + 24px, 44px);
+            height: clamp(36px, 3vw + 24px, 44px);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transform-origin: center center;
+        }
+        .quest-star svg {
+            width: 100%;
+            height: 100%;
+            fill: #CFD8DC;
+            stroke: #B0BEC5;
+            stroke-width: 0.75;
+            transition: fill 0.2s ease, stroke 0.2s ease, filter 0.2s ease;
+        }
+        .quest-star.filled svg {
+            fill: #FFC107;
+            stroke: #FF8F00;
+            animation: star-glow 1.8s ease-in-out infinite;
+        }
+        @keyframes star-glow {
+            0%, 100% {
+                filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.5))
+                        drop-shadow(0 1px 4px rgba(255, 143, 0, 0.25));
+                transform: scale(1);
+            }
+            50% {
+                filter: drop-shadow(0 0 12px rgba(255, 235, 59, 0.95))
+                        drop-shadow(0 0 22px rgba(255, 193, 7, 0.75))
+                        drop-shadow(0 0 32px rgba(255, 152, 0, 0.45))
+                        drop-shadow(0 2px 6px rgba(255, 111, 0, 0.35));
+                transform: scale(1.06);
+            }
+        }
+        .quest-banner-progress {
+            font-size: var(--text-lg);
+            font-weight: 800;
+            color: #43A047;
+            line-height: 1;
+            white-space: nowrap;
+            letter-spacing: 0.02em;
+        }
+        .quest-banner.celebrating {
+            border-color: #66BB6A;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.25);
+            animation: quest-pulse 0.6s ease;
+        }
+        .quest-banner.transitioning {
+            border-color: #81C784;
+            background: linear-gradient(90deg, #fff, #F1F8E9, #fff);
+            background-size: 200% 100%;
+            animation: quest-shimmer 1.4s ease-in-out infinite;
+        }
+        @keyframes quest-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.008); }
+        }
+        @keyframes quest-shimmer {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+        @keyframes star-pop-in {
+            0% {
+                transform: scale(0) rotate(-18deg);
+                opacity: 0;
+            }
+            55% {
+                transform: scale(1.4) rotate(6deg);
+                opacity: 1;
+            }
+            75% {
+                transform: scale(0.92) rotate(-2deg);
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+        .quest-star.pop-in {
+            animation: star-pop-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* ===== Quest completion modal ===== */
+        .quest-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .quest-modal.active {
+            display: flex;
+        }
+        .quest-modal-inner {
+            background: var(--surface);
+            border-radius: var(--radius-md);
+            padding: 28px 24px;
+            max-width: 340px;
+            width: 100%;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+        }
+        .quest-modal-inner h2 {
+            font-size: var(--text-xl);
+            color: var(--primary-dark);
+            margin-bottom: 8px;
+        }
+        .quest-modal-inner p {
+            font-size: var(--text-base);
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .quest-modal-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .quest-modal-btn {
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .quest-modal-btn.primary {
+            background: var(--primary);
+            color: white;
+        }
+        .quest-modal-btn.secondary {
+            background: var(--bg);
+            color: var(--text-secondary);
+        }
+
         /* ===== Responsive ===== */
         @media (max-width: 480px) {
-            .header { padding: 10px 12px; }
+            .header { padding: 14px 14px; }
+            .header-avatar { width: 44px; height: 44px; }
+            .header-call-btn.action-btn {
+                height: 40px;
+                padding: 0 14px;
+                font-size: var(--text-sm);
+            }
+            .header-call-btn.action-btn .btn-icon { width: 18px; height: 18px; }
             .chat-area { padding: 14px 10px; }
-            .input-area { padding: 10px 10px 14px; }
+            .input-area { padding: 12px 12px 14px; gap: 10px; }
+            .input-field { min-height: 48px; padding: 12px 16px; }
+            .send-btn { width: 44px; height: 44px; }
+            .send-btn svg { width: 20px; height: 20px; }
+            .empty-state-icon { width: 84px; height: 84px; }
+            .empty-state-icon img { width: 76px; height: 76px; }
+            .empty-state-desc { max-width: 300px; }
             .msg-row { max-width: 92%; }
+            .quest-card-wrap { padding: 10px 12px; }
+            .quest-banner { min-height: 112px; }
+            .quest-badge { min-width: 64px; padding: 10px 10px 16px; }
+            .quest-card-status { min-width: 100px; padding: 10px 8px 10px 8px; }
         }
     </style>
 </head>
@@ -460,26 +869,65 @@
                     </div>
                 </div>
             </div>
-            <!-- connect button merged into input area -->
+            <button class="action-btn idle header-call-btn" id="btn-action" type="button" aria-label="ラーニー先生に電話する">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span>はじめる</span>
+            </button>
+        </div>
+
+        <!-- Quest mission card -->
+        <div class="quest-card-wrap">
+            <div class="quest-banner" id="quest-banner">
+                <div class="quest-badge">
+                    <span class="quest-badge-label">ミッション</span>
+                    <span class="quest-badge-num" id="quest-banner-num">1</span>
+                </div>
+                <div class="quest-card-body">
+                    <div class="quest-banner-title-en" id="quest-banner-title-en">Find a tree and chop it for wood</div>
+                    <div class="quest-banner-goal" id="quest-banner-goal">木を見つけて、切って木材を集めよう</div>
+                    <div class="quest-steps" id="quest-steps" aria-live="polite"></div>
+                    <div class="quest-segments" id="quest-segments" aria-hidden="true"></div>
+                    <div class="quest-banner-hint" id="quest-banner-hint"></div>
+                </div>
+                <div class="quest-card-status">
+                    <div class="quest-stars" id="quest-stars" role="img" aria-label="クエスト進捗"></div>
+                    <div class="quest-banner-progress" id="quest-banner-progress">0 / 5</div>
+                </div>
+            </div>
         </div>
 
         <!-- Chat Area -->
         <div class="chat-area" id="chat-area">
             <div class="empty-state" id="empty-state">
-                <div class="empty-state-icon"><img src="images/ラーニー先生.png" alt="ラーニー先生" style="width:64px;height:64px;border-radius:50%;object-fit:cover;"></div>
-                <div class="empty-state-title">ラーニー先生とおはなししよう！</div>
-                <div class="empty-state-desc">🎤 ボタンを押すだけでおしゃべり開始！声でラーニー先生と英語を楽しもう！</div>
+                <div class="empty-state-icon"><img src="images/ラーニー先生.png" alt="ラーニー先生"></div>
+                <div class="empty-state-title">ラーニー先生に電話しよう！</div>
+                <div class="empty-state-desc">
+                    <svg class="empty-state-desc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    <span>右上の「はじめる」を押して、ラーニー先生と電話で英語を楽しもう！</span>
+                </div>
             </div>
         </div>
 
         <!-- Input Area -->
         <div class="input-area">
-            <button class="action-btn idle" id="btn-action">🎤 はじめる</button>
             <button class="mute-btn" id="btn-mute" title="マイクミュート">🎙️</button>
             <input type="text" class="input-field" id="chat-input" placeholder="メッセージを入力..." />
             <button class="send-btn" id="btn-send" title="送信">
                 <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
+        </div>
+    </div>
+
+    <!-- Quest completion modal -->
+    <div class="quest-modal" id="quest-modal" aria-hidden="true">
+        <div class="quest-modal-inner">
+            <h2 id="quest-modal-title">おめでとう！</h2>
+            <p id="quest-modal-body">クエストクリア！</p>
+            <div class="quest-modal-actions">
+                <button type="button" class="quest-modal-btn primary" id="quest-modal-next">次のクエスト</button>
+                <button type="button" class="quest-modal-btn secondary" id="quest-modal-done">ここで終わる</button>
+                <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">最初から</button>
+            </div>
         </div>
     </div>
 
@@ -494,67 +942,43 @@
 
         import { GeminiLiveAPI, MultimodalLiveResponseType } from './js/gemini-api.js';
         import { AudioStreamer, VideoStreamer, AudioPlayer } from './js/media-utils.js';
-        import { ShowAlertTool, AddCSSStyleTool } from './js/tools.js';
+        import { ShowAlertTool, AddCSSStyleTool, CompleteQuestTool } from './js/tools.js';
+        import {
+            loadProgress,
+            saveProgress,
+            resetProgress,
+            getCurrentQuest,
+            getQuests,
+            isLessonComplete,
+            validateQuestCompletion,
+            syncQuestStepsFromSessionText,
+            isQuestStepsComplete,
+            getQuestStepSummary,
+            getRemainingSteps,
+            loadCompletedStepIds,
+            clearStepProgress,
+            buildQuestInstructions,
+            buildQuestOpeningNudge,
+            buildQuestFarewellNudge,
+            buildQuestRecordedToolMessage,
+            buildQuestRejectedToolMessage,
+            buildQuestStepGroundTruthNudge,
+            buildQuestCompleteTrackerNudge,
+            buildQuestAlreadyRecordedToolMessage,
+            BEGINNER_VOICE_BASE_PROMPT,
+        } from './js/quest-engine.js';
+        import { LESSON_1_TITLE } from './js/quests/beginner-lesson1.js';
+        import { resolveProxyUrl } from './js/proxy-config.js';
+        import { QuestSfx } from './js/quest-sfx.js';
 
         // ============================================
         // Configuration
         // ============================================
-        const proxyUrl = "wss://gemini-proxy-483139385570.us-central1.run.app";
+        const proxyUrl = resolveProxyUrl();
         // Must match the GCP project where Cloud Run proxy runs (same project as Firebase ai-sensei-8849b).
         const projectId = "ai-sensei-8849b";
         const model = "gemini-live-2.5-flash-native-audio";
-        const systemInstructions = `あなたは「ゲームカレッジの先生：ラーニー先生（初級モード）」です。対象は日本の小学生（英語初心者）。Minecraftを遊びながら英語を楽しく学べるようにサポートします。あなたは"先生"というより、子どもの「やりたい！」を応援する相棒です。最優先は安心感とモチベーション。
-■言語バランス（初級）
-・日本語多めを基本：目安 日本語50％／英語50％（状況により調整OK）
-・英語は短くする（単語〜短文）
-・英語を出したら、必ず直後に日本語で意味補足して「何を言ってるかわかる」状態にする
-・英語だけで話し続けない
-■英語を教える頻度
-・英語を"教える"のは会話の2回に1回程度
-・それ以外は、観察コメントや会話（雑談・共感・応援）を優先
-・テストっぽい聞き方をしない（Whyで詰めない）
-■教え方（発音・説明）
-・英語の発音は必ずネイティブ風に示す（モデルとして提示）
-・フレーズ練習のあと、必要なら短く分解して説明してよい
-・発音は大きく間違っていなければ過度に訂正しない
-・言えたらすぐ英語で短く称賛＋日本語でも褒める（例：Perfect!／Great! など）
-■間違いへの対応
-・間違えたら必ず最初に「Nice try!」と言ってから修正する
-・1回目はゆっくりモデル発音で言い直しを示す
-・同じミスが2回続いたら、単語ごとに区切って練習→最後につなげる
-・失敗は必ず成功体験に戻す（言えた部分を拾って褒める）
-■ユーザーが英単語だけ言ったとき
-・英語で短く褒める＋日本語でも褒める
-・会話をつなぐ短い質問を1つだけ
-・文脈が確実でない場合は、文脈不要の質問にする
-■沈黙時（ユーザー無言）の対応（重要：推察しない／豆知識固定）
-・実況はしない（状況を当てる実況も禁止）
-・推察しない（「集中してるのかな？」「何か見つかった？」など、ユーザーの状態や状況を推測する発言は禁止）
-・無言時は質問しない（質問0）
-・無言時は毎回「マイクラ豆知識」を1つだけ話す
-・豆知識は短く、明るく、安心感があるトーン（しつこくしない）
-・豆知識には短い英語を必ず1つだけ混ぜる（単語〜短文）→直後に日本語で意味補足する
-・無言時の英語比率：英語20〜40％／日本語60〜80％（日本語多めでOK）
-・同じ豆知識テーマの連続を避ける（例：同じモブ・同じブロック・同じクラフト等の連続NG）
-・同じ英語キーワードを2回連続で使わない（例：block / mine / build / craft / dig など連続禁止）
-・無言時は英語を"教える"モードにしすぎない（練習強制・言わせるの禁止）
-・豆知識テーマは内部でローテする（連続しないよう切り替え）A）ブロック B）モブ C）クラフト D）食べ物/回復 E）冒険/バイオーム F）レッドストーン（超ざっくり）G）安全/サバイバル小ワザ
-・最後に励ましを入れる場合は日本語で短く一言だけ ※無言時は定番の"がんばれ系英語フレーズ"（keep〜 / you can〜 等）を使わない
-■キャラ（ガードレール）
-・明るく元気、でもしつこくしない
-・否定しない／責めない／無理に英語を言わせない
-・子どもの「やりたい！」を最優先で応援する
-■最重要：連続フレーズ禁止
-・直前の自分の発話と、同じフレーズ／同じ意味の言い回しを2回連続で言わない（「頑張ってるね」系など同系統の連続もNG。表現を必ず変える）
-■安全・マナー（先生としての対応）
-・下ネタ、性的な内容、体のことをからかう話題には先生として乗らない／詳しく答えない
-・そういう話題が出たら、短く「その話はしないよ」と伝えて、別の安全な話題（Minecraftや英語学習）に戻す
-・暴言、いじめ、差別につながる言い方はしない／肯定しない（言い換えを提案して安全に戻す）
-・危険行為や自傷につながる話題には協力しない（安全を優先して大人に相談を促す）
-■音声入力の言語認識（最重要）
-・ユーザーの音声入力は必ず日本語または英語として解釈すること
-・日本語と英語以外の言語として認識しないこと
-・ユーザーが話している言語が不明な場合は日本語として扱うこと`;
+        const baseSystemInstructions = BEGINNER_VOICE_BASE_PROMPT;
         const voice = "Kore";
         const temperature = 1.0;
         const enableProactiveAudio = true;
@@ -562,6 +986,7 @@
         const enableAffectiveDialog = true;
         const enableAlertTool = false;
         const enableCssStyleTool = false;
+        const enableQuestTool = true;
         const enableInputTranscription = true;
         const enableOutputTranscription = true;
         const volumeLevel = 80;
@@ -619,15 +1044,858 @@
         const chatArea = document.getElementById('chat-area');
         const emptyState = document.getElementById('empty-state');
         const chatInput = document.getElementById('chat-input');
+        const questBanner = document.getElementById('quest-banner');
+        const questBannerNum = document.getElementById('quest-banner-num');
+        const questBannerTitleEn = document.getElementById('quest-banner-title-en');
+        const questBannerGoal = document.getElementById('quest-banner-goal');
+        const questSteps = document.getElementById('quest-steps');
+        const questBannerHint = document.getElementById('quest-banner-hint');
+        const questBannerProgress = document.getElementById('quest-banner-progress');
+        const questSegments = document.getElementById('quest-segments');
+        const questStars = document.getElementById('quest-stars');
+        const questModal = document.getElementById('quest-modal');
+        const questModalTitle = document.getElementById('quest-modal-title');
+        const questModalBody = document.getElementById('quest-modal-body');
+        const questModalNext = document.getElementById('quest-modal-next');
+        const questModalDone = document.getElementById('quest-modal-done');
+        const questModalReset = document.getElementById('quest-modal-reset');
         let isMuted = false;
 
         // Possible action-button states: 'idle' | 'connecting' | 'active'
         let actionState = 'idle';
 
+        // Quest session state
+        let activeQuest = null;
+        let questSessionActive = false;
+        let questCompleting = false;
+        let intentionalDisconnect = false;
+        let questAdvanceTimer = null;
+        let awaitingQuestFarewell = false;
+        let pendingQuestTeardown = null;
+        let questTeardownTimer = null;
+        let questTeardownFallbackTimer = null;
+        let nextConnectQuick = false;
+        let clearChatOnNextStart = false;
+        let farewellAssistantSeen = false;
+        let chatMessagesAtFarewell = 0;
+        let farewellNudgeTimer = null;
+        let questOpeningSent = false;
+        let questHandoffActive = false;
+        let pendingNextClient = null;
+        let pendingNextConnectPromise = null;
+        let pendingNextClientReadyAt = 0;
+        let farewellSessionClient = null;
+        let questOpeningRetryTimer = null;
+        let questSessionAssistantSeen = false;
+        let questCompleteFallbackTimer = null;
+        const questSfx = new QuestSfx();
+
+        // ============================================
+        // Quest UI
+        // ============================================
+        const STAR_SVG =
+            '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+            '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>' +
+            '</svg>';
+
+        function renderQuestSegments(earned, total) {
+            questSegments.innerHTML = '';
+            for (let i = 0; i < total; i++) {
+                const seg = document.createElement('span');
+                seg.className = 'quest-segment' + (i < earned ? ' filled' : '');
+                questSegments.appendChild(seg);
+            }
+        }
+
+        function renderQuestSteps(quest) {
+            questSteps.innerHTML = '';
+            if (!quest?.steps?.length) {
+                questSteps.hidden = true;
+                return;
+            }
+            questSteps.hidden = false;
+
+            const heading = document.createElement('span');
+            heading.className = 'quest-steps-label';
+            heading.textContent = 'ステップ：';
+            questSteps.appendChild(heading);
+
+            const done = new Set(loadCompletedStepIds());
+            quest.steps.forEach((step, index) => {
+                const isDone = done.has(step.id);
+                const item = document.createElement('span');
+                item.className = `quest-step${isDone ? ' done' : ''}`;
+
+                const mark = document.createElement('span');
+                mark.className = 'quest-step-mark';
+                mark.textContent = isDone ? '✓' : '○';
+
+                const body = document.createElement('span');
+                body.className = 'quest-step-body';
+
+                const label = document.createElement('span');
+                label.className = 'quest-step-label';
+                label.textContent = step.label;
+
+                const phrase = document.createElement('span');
+                phrase.className = 'quest-step-phrase';
+                phrase.textContent = step.patterns?.[0] ? `"${step.patterns[0]}"` : '';
+
+                body.appendChild(label);
+                if (phrase.textContent) body.appendChild(phrase);
+                item.appendChild(mark);
+                item.appendChild(body);
+                questSteps.appendChild(item);
+
+                if (index < quest.steps.length - 1) {
+                    const sep = document.createElement('span');
+                    sep.className = 'quest-step-sep';
+                    sep.setAttribute('aria-hidden', 'true');
+                    sep.textContent = '·';
+                    questSteps.appendChild(sep);
+                }
+            });
+        }
+
+        function renderQuestStars() {
+            const total = getQuests().length;
+            const earned = loadProgress();
+            questStars.innerHTML = '';
+
+            for (let i = 0; i < total; i++) {
+                const star = document.createElement('span');
+                star.className = 'quest-star';
+                star.dataset.index = String(i);
+                star.setAttribute('aria-label', `クエスト${i + 1}${i < earned ? '、クリア' : ''}`);
+                star.innerHTML = STAR_SVG;
+                if (i < earned) {
+                    star.classList.add('filled');
+                }
+                questStars.appendChild(star);
+            }
+
+            renderQuestSegments(earned, total);
+            questBannerProgress.textContent = `${earned} / ${total}`;
+        }
+
+        function awardQuestStar(starIndex, animate = true) {
+            const star = questStars.querySelector(`.quest-star[data-index="${starIndex}"]`);
+            if (!star || star.classList.contains('filled')) return;
+
+            star.classList.add('filled');
+            star.setAttribute('aria-label', `クエスト${starIndex + 1}、クリア`);
+
+            const earned = starIndex + 1;
+            const total = getQuests().length;
+            renderQuestSegments(earned, total);
+            questBannerProgress.textContent = `${earned} / ${total}`;
+
+            if (animate) {
+                star.classList.remove('pop-in');
+                void star.offsetWidth;
+                star.classList.add('pop-in');
+                star.addEventListener(
+                    'animationend',
+                    () => star.classList.remove('pop-in'),
+                    { once: true }
+                );
+            }
+        }
+
+        function updateQuestBanner() {
+            const quests = getQuests();
+            const total = quests.length;
+            const earned = loadProgress();
+
+            renderQuestSegments(earned, total);
+            questBannerProgress.textContent = `${earned} / ${total}`;
+
+            if (isLessonComplete()) {
+                questBanner.classList.add('lesson-complete');
+                questBannerNum.textContent = '✓';
+                questBannerTitleEn.textContent = LESSON_1_TITLE;
+                questBannerGoal.textContent = 'レッスンクリア！よくできました！';
+                questSteps.hidden = true;
+                questSteps.innerHTML = '';
+                questBannerHint.textContent = `${total} / ${total} クエスト完了`;
+                return;
+            }
+
+            questBanner.classList.remove('lesson-complete');
+            const quest = getCurrentQuest();
+            if (!quest) return;
+
+            questBannerNum.textContent = String(quest.id);
+            questBannerTitleEn.textContent = quest.titleEn || quest.title;
+            questBannerGoal.textContent = `${quest.goal}！！`;
+            renderQuestSteps(quest);
+            const stepSummary = getQuestStepSummary(quest);
+            const remaining = getRemainingSteps(quest);
+            if (stepSummary) {
+                questBannerHint.textContent = remaining.length
+                    ? `ステップ：${stepSummary}`
+                    : `すべてのステップ完了！ ${quest.hint || ""}`;
+            } else {
+                questBannerHint.textContent = quest.hint ? `ヒント：${quest.hint}` : "";
+            }
+        }
+
+        function getSessionUserText() {
+            return chatMessages
+                .filter((m) => m.type === "user-transcript")
+                .map((m) => m.text)
+                .join(" ");
+        }
+
+        function notifyParentProgress() {
+            try {
+                window.parent.postMessage({ type: "gc_quest_progress_update" }, "*");
+            } catch {
+                // ignore cross-origin
+            }
+        }
+
+        function syncQuestStepsAndBanner() {
+            if (!activeQuest || questCompleting) return [];
+            const newly = syncQuestStepsFromSessionText(
+                activeQuest,
+                getSessionUserText()
+            );
+            if (newly.length) {
+                updateQuestBanner();
+                notifyParentProgress();
+            }
+            return newly;
+        }
+
+        function showQuestModal(completedQuest, lessonDone) {
+            if (lessonDone) {
+                questModalTitle.textContent = 'レッスンクリア！';
+                questModalBody.textContent = `${LESSON_1_TITLE}のクエストを全部クリアしたよ！すごい！`;
+                questModalNext.style.display = 'none';
+                questModalDone.style.display = 'none';
+                questModalReset.style.display = 'block';
+                questSfx.playLessonComplete();
+            } else {
+                questModalTitle.textContent = `${completedQuest?.title || 'クエスト'}クリア！`;
+                questModalBody.textContent = `${completedQuest?.goal || ''}、できたね！次のクエストに進む？`;
+                questModalNext.style.display = 'block';
+                questModalDone.style.display = 'block';
+                questModalReset.style.display = 'none';
+            }
+            questModal.classList.add('active');
+            questModal.setAttribute('aria-hidden', 'false');
+        }
+
+        function hideQuestModal() {
+            questModal.classList.remove('active');
+            questModal.setAttribute('aria-hidden', 'true');
+        }
+
+        function clearQuestAdvanceTimer() {
+            if (questAdvanceTimer) {
+                clearTimeout(questAdvanceTimer);
+                questAdvanceTimer = null;
+            }
+        }
+
+        function showQuestToast(completedQuest) {
+            const nextQuest = getCurrentQuest();
+            const earned = loadProgress();
+            const total = getQuests().length;
+            questBanner.classList.add('celebrating');
+            questBannerNum.textContent = '✓';
+            questBannerTitleEn.textContent = `${completedQuest?.titleEn || completedQuest?.title || 'クエスト'} クリア！`;
+            questBannerGoal.textContent = nextQuest
+                ? `次は：${nextQuest.goal}！！`
+                : 'よくできました！';
+            questSteps.hidden = true;
+            questSteps.innerHTML = '';
+            questBannerHint.textContent = '次のクエストを準備中...';
+            renderQuestSegments(earned, total);
+            questBannerProgress.textContent = `${earned} / ${total}`;
+        }
+
+        function setQuestBannerTransitioning(active) {
+            questBanner.classList.toggle('transitioning', active);
+            if (active) {
+                questBannerHint.textContent = '次のクエストを準備中...';
+            }
+        }
+
+        function markQuestHandoffComplete() {
+            if (!questHandoffActive) return;
+            questHandoffActive = false;
+            setQuestBannerTransitioning(false);
+            questBanner.classList.remove('celebrating');
+            updateQuestBanner();
+        }
+
+        function scheduleAutoAdvance() {
+            clearQuestAdvanceTimer();
+            questAdvanceTimer = setTimeout(() => {
+                questAdvanceTimer = null;
+                updateQuestBanner();
+                if (!isLessonComplete() && actionState === 'idle') {
+                    handleActionButton();
+                }
+            }, 1200);
+        }
+
+        function clearQuestCompleteFallbackTimer() {
+            if (questCompleteFallbackTimer) {
+                clearTimeout(questCompleteFallbackTimer);
+                questCompleteFallbackTimer = null;
+            }
+        }
+
+        function scheduleQuestCompleteFallback(utterance) {
+            clearQuestCompleteFallbackTimer();
+            questCompleteFallbackTimer = setTimeout(() => {
+                questCompleteFallbackTimer = null;
+                if (
+                    questCompleting ||
+                    awaitingQuestFarewell ||
+                    !activeQuest ||
+                    !isQuestStepsComplete(activeQuest)
+                ) {
+                    return;
+                }
+                tryAcceptQuestComplete('keyword', utterance);
+            }, 8000);
+        }
+
+        function clearQuestTeardownTimers() {
+            if (questTeardownTimer) {
+                clearTimeout(questTeardownTimer);
+                questTeardownTimer = null;
+            }
+            if (questTeardownFallbackTimer) {
+                clearTimeout(questTeardownFallbackTimer);
+                questTeardownFallbackTimer = null;
+            }
+            if (farewellNudgeTimer) {
+                clearTimeout(farewellNudgeTimer);
+                farewellNudgeTimer = null;
+            }
+            clearQuestCompleteFallbackTimer();
+        }
+
+        function markFarewellAssistantActivity(sourceClient) {
+            if (!awaitingQuestFarewell || sourceClient !== farewellSessionClient) return;
+            farewellAssistantSeen = true;
+            if (farewellNudgeTimer) {
+                clearTimeout(farewellNudgeTimer);
+                farewellNudgeTimer = null;
+            }
+        }
+
+        function markQuestSessionActivity(sourceClient) {
+            if (!questSessionActive || awaitingQuestFarewell) return;
+            if (sourceClient && sourceClient !== client) return;
+            questSessionAssistantSeen = true;
+            clearQuestOpeningRetry();
+            if (questHandoffActive) markQuestHandoffComplete();
+        }
+
+        function clearQuestOpeningRetry() {
+            if (questOpeningRetryTimer) {
+                clearTimeout(questOpeningRetryTimer);
+                questOpeningRetryTimer = null;
+            }
+        }
+
+        function scheduleQuestOpeningRetry() {
+            clearQuestOpeningRetry();
+            questSessionAssistantSeen = false;
+            questOpeningRetryTimer = setTimeout(() => {
+                questOpeningRetryTimer = null;
+                if (
+                    questSessionAssistantSeen ||
+                    !questSessionActive ||
+                    !client?.connected ||
+                    !activeQuest
+                ) {
+                    return;
+                }
+                questOpeningSent = false;
+                announceQuestStart();
+            }, 3500);
+        }
+
+        function getAssistantTextSinceFarewell() {
+            const slice = chatMessages.slice(chatMessagesAtFarewell);
+            return slice
+                .filter((m) => m.type === 'assistant' && m.text?.trim())
+                .map((m) => m.text)
+                .join(' ')
+                .length;
+        }
+
+        function scheduleQuestTeardownAfterFarewell() {
+            if (!awaitingQuestFarewell || !farewellAssistantSeen) return;
+            clearQuestTeardownTimers();
+            const chars = getAssistantTextSinceFarewell();
+            const audioMs = audioPlayer?.getEstimatedPlaybackMsRemaining?.() || 0;
+            const delay = Math.min(
+                9000,
+                Math.max(3200, chars * 85 + 2000, audioMs + 1200)
+            );
+            questTeardownTimer = setTimeout(finalizeQuestTeardown, delay);
+
+            const lessonDone = pendingQuestTeardown?.lessonDone;
+            if (!lessonDone && !pendingNextClient && !pendingNextConnectPromise) {
+                prepareNextQuestSession();
+            }
+        }
+
+        function tryScheduleFarewellTeardown() {
+            if (awaitingQuestFarewell && farewellAssistantSeen) {
+                scheduleQuestTeardownAfterFarewell();
+            }
+        }
+
+        function finalizeQuestTeardown() {
+            if (!awaitingQuestFarewell || !pendingQuestTeardown) return;
+            clearQuestTeardownTimers();
+
+            const { completed, lessonDone } = pendingQuestTeardown;
+            awaitingQuestFarewell = false;
+            pendingQuestTeardown = null;
+            questCompleting = false;
+
+            const keepAudio = !lessonDone;
+            questSessionActive = false;
+            updateQuestBanner();
+
+            if (lessonDone) {
+                disconnectAPI(false, keepAudio);
+                showQuestModal(completed, true);
+            } else {
+                beginNextQuestHandoff(completed);
+            }
+        }
+
+        function cancelPendingNextQuestSession() {
+            if (pendingNextClient) {
+                pendingNextClient.disconnect();
+                pendingNextClient = null;
+            }
+            pendingNextConnectPromise = null;
+            pendingNextClientReadyAt = 0;
+        }
+
+        function adoptPendingNextClient() {
+            if (!pendingNextClient?.connected) return false;
+
+            const age = Date.now() - pendingNextClientReadyAt;
+            if (age > 25000) {
+                pendingNextClient.disconnect();
+                pendingNextClient = null;
+                pendingNextClientReadyAt = 0;
+                return false;
+            }
+
+            client = pendingNextClient;
+            pendingNextClient = null;
+            pendingNextClientReadyAt = 0;
+            attachClientHandlers(client);
+            connected = true;
+            return true;
+        }
+
+        function configureGeminiClient(geminiClient, questForSession, { preconnect = false } = {}) {
+            geminiClient.systemInstructions = buildQuestInstructions(
+                baseSystemInstructions,
+                questForSession
+            );
+            geminiClient.inputAudioTranscription = enableInputTranscription;
+            geminiClient.outputAudioTranscription = enableOutputTranscription;
+            geminiClient.googleGrounding = enableGrounding;
+            geminiClient.enableAffectiveDialog = enableAffectiveDialog;
+            geminiClient.responseModalities = ["AUDIO"];
+            geminiClient.voiceName = voice;
+            geminiClient.temperature = parseFloat(temperature);
+            geminiClient.proactivity = { proactiveAudio: preconnect ? false : enableProactiveAudio };
+            geminiClient.automaticActivityDetection = {
+                disabled: disableActivityDetection,
+                silence_duration_ms: parseInt(silenceDuration),
+                prefix_padding_ms: parseInt(prefixPadding),
+                end_of_speech_sensitivity: endSpeechSensitivity,
+                start_of_speech_sensitivity: startSpeechSensitivity,
+            };
+
+            if (!enableGrounding) {
+                if (enableAlertTool) geminiClient.addFunction(new ShowAlertTool());
+                if (enableCssStyleTool) geminiClient.addFunction(new AddCSSStyleTool());
+                if (enableQuestTool && questForSession) {
+                    geminiClient.addFunction(new CompleteQuestTool());
+                    geminiClient.setEnableFunctionCalls(true);
+                }
+            }
+        }
+
+        function attachClientHandlers(geminiClient, { preconnect = false } = {}) {
+            geminiClient.onReceiveResponse = (message) => handleMessage(message, geminiClient);
+            geminiClient.onErrorMessage = () => {};
+            const sessionClient = geminiClient;
+
+            geminiClient.onConnectionStarted = () => {
+                if (preconnect) return;
+                if (client !== sessionClient) return;
+                connected = true;
+                updateActionUI();
+            };
+
+            geminiClient.onClose = (event) => {
+                if (preconnect) {
+                    if (pendingNextClient === sessionClient) {
+                        pendingNextClient = null;
+                    }
+                    return;
+                }
+                if (client !== sessionClient) return;
+
+                connected = false;
+                const wasIntentional = intentionalDisconnect;
+                intentionalDisconnect = false;
+
+                if (!isAutoReconnecting && !wasIntentional && event && event.code !== 1000) {
+                    const reason = (event.reason && String(event.reason).trim()) || `コード ${event.code}`;
+                    if (event.code === 1008) {
+                        if (/origin/i.test(reason)) {
+                            addMessage(`接続できませんでした（${reason}）。カスタムドメインはプロキシの許可オリジンに含め、Cloud Run を再デプロイしてください。`, "system");
+                        } else {
+                            addMessage(`接続できませんでした（${reason}）。Vertex AI API をプロジェクト ai-sensei-8849b で有効化し、Cloud Run のサービスアカウントに Vertex 利用権限があるか確認してください。`, "system");
+                        }
+                    } else {
+                        addMessage(`接続が切れました（${reason}）`, "system");
+                    }
+                }
+                if (!isAutoReconnecting && !wasIntentional) {
+                    actionState = 'idle';
+                }
+                updateActionUI();
+                if (!isAutoReconnecting && !wasIntentional) {
+                    disconnectAPI();
+                }
+            };
+        }
+
+        function prepareNextQuestSession() {
+            if (pendingNextConnectPromise || pendingNextClient || isLessonComplete()) return;
+
+            const questForSession = getCurrentQuest();
+            if (!questForSession) return;
+
+            pendingNextConnectPromise = (async () => {
+                try {
+                    const nextClient = new GeminiLiveAPI(proxyUrl, projectId, model);
+                    configureGeminiClient(nextClient, questForSession, { preconnect: true });
+                    nextClient.onReceiveResponse = () => {};
+                    nextClient.onErrorMessage = () => {};
+                    nextClient.onConnectionStarted = () => {};
+                    nextClient.onClose = () => {
+                        if (pendingNextClient === nextClient) {
+                            pendingNextClient = null;
+                            pendingNextClientReadyAt = 0;
+                        }
+                    };
+                    await nextClient.connect();
+                    if (!awaitingQuestFarewell) {
+                        nextClient.disconnect();
+                        return;
+                    }
+                    pendingNextClient = nextClient;
+                    pendingNextClientReadyAt = Date.now();
+                } catch {
+                    pendingNextClient = null;
+                    pendingNextClientReadyAt = 0;
+                } finally {
+                    pendingNextConnectPromise = null;
+                }
+            })();
+        }
+
+        async function beginNextQuestHandoff(completed) {
+            showQuestToast(completed);
+            setQuestBannerTransitioning(true);
+            questHandoffActive = true;
+            clearChatOnNextStart = true;
+
+            questSessionActive = false;
+            disconnectAPI(false, true, false, true);
+            // Play right after disconnect so kids know the call continues (next quest loading).
+            questSfx.playQuestReady();
+
+            actionState = 'connecting';
+            questSessionActive = true;
+            questOpeningSent = false;
+            activeQuest = getCurrentQuest();
+            resetQuestSessionState();
+            updateActionUI();
+
+            if (pendingNextConnectPromise) {
+                try {
+                    await pendingNextConnectPromise;
+                } catch {
+                    // fall through to live connect
+                }
+            }
+
+            try {
+                if (!adoptPendingNextClient()) {
+                    cancelPendingNextQuestSession();
+                    nextConnectQuick = true;
+                    await connectAPI();
+                } else {
+                    if (audioStreamer) {
+                        audioStreamer.updateClient(client);
+                    } else {
+                        audioStreamer = new AudioStreamer(client);
+                    }
+                    if (!videoStreamer) {
+                        videoStreamer = new VideoStreamer(client);
+                    } else {
+                        videoStreamer.updateClient(client);
+                    }
+                    if (!audioPlayer) {
+                        audioPlayer = new AudioPlayer();
+                        await audioPlayer.init();
+                    }
+                    audioPlayer.setVolume(volumeLevel / 100);
+                }
+
+                clearChatOnNextStart = false;
+                chatMessages = [];
+                renderChat();
+                emptyState.style.display = '';
+
+                const micOk = await startMicForSession();
+                if (!micOk) {
+                    throw new Error('Microphone not ready');
+                }
+
+                announceQuestStart();
+                actionState = 'active';
+                updateActionUI();
+            } catch {
+                questHandoffActive = false;
+                setQuestBannerTransitioning(false);
+                questBanner.classList.remove('celebrating');
+                actionState = 'idle';
+                questSessionActive = false;
+                questOpeningSent = false;
+                cancelPendingNextQuestSession();
+                addMessage('次のクエストへの接続に失敗しました。「はじめる」をもう一度押してください。', 'system');
+                disconnectAPI(false, true, false, audioStreaming);
+                updateActionUI();
+            }
+        }
+
+        async function startMicForSession() {
+            if (!client?.connected) return false;
+
+            if (!audioStreamer) {
+                audioStreamer = new AudioStreamer(client);
+            } else {
+                audioStreamer.updateClient(client);
+            }
+
+            if (audioStreamer.mediaStream && audioStreamer.audioContext) {
+                audioStreamer.resumeStreaming();
+                audioStreaming = true;
+                return await audioStreamer.ensureStreaming();
+            }
+
+            await audioStreamer.start();
+            audioStreaming = true;
+            return await audioStreamer.ensureStreaming();
+        }
+
+        function resetQuestSessionState() {
+            awaitingQuestFarewell = false;
+            pendingQuestTeardown = null;
+            farewellAssistantSeen = false;
+            farewellSessionClient = null;
+            questCompleting = false;
+            clearQuestTeardownTimers();
+            clearQuestOpeningRetry();
+        }
+
+        function announceQuestStart() {
+            if (!client?.connected || !activeQuest || !questSessionActive || questOpeningSent) return;
+            questOpeningSent = true;
+            const nudge = buildQuestOpeningNudge(activeQuest);
+            if (!nudge) return;
+            client.sendTextMessage(nudge);
+            scheduleQuestOpeningRetry();
+        }
+
+        function getLatestFinishedUserUtterance() {
+            const last = [...chatMessages]
+                .reverse()
+                .find((m) => m.type === 'user-transcript' && m.isFinished);
+            return (last?.text || '').trim();
+        }
+
+        function getLatestUserUtterance(includePartial = false) {
+            const transcripts = chatMessages.filter((m) => m.type === 'user-transcript');
+            if (!transcripts.length) return '';
+            const last = transcripts[transcripts.length - 1];
+            if (includePartial || last.isFinished) {
+                return (last.text || '').trim();
+            }
+            return '';
+        }
+
+        function tryAcceptQuestComplete(source, userQuote = '') {
+            if (questCompleting || !activeQuest || !questSessionActive) return null;
+
+            syncQuestStepsAndBanner();
+
+            if (!isQuestStepsComplete(activeQuest)) return null;
+
+            const latest =
+                source === 'tool'
+                    ? getLatestUserUtterance(true)
+                    : getLatestFinishedUserUtterance();
+            const validation = validateQuestCompletion(
+                activeQuest,
+                userQuote,
+                latest,
+                getSessionUserText()
+            );
+            if (!validation.ok) return null;
+
+            onQuestComplete(source, validation.userQuote);
+            return validation.userQuote;
+        }
+
+        function onQuestComplete(source, userQuote = '') {
+            if (questCompleting || !activeQuest || !questSessionActive) return;
+            questCompleting = true;
+
+            const completed = activeQuest;
+            const questIndex = loadProgress();
+            const nextIndex = questIndex + 1;
+            saveProgress(nextIndex);
+            notifyParentProgress();
+            clearStepProgress(questIndex);
+            const lessonDone = nextIndex >= getQuests().length;
+
+            activeQuest = null;
+            awaitingQuestFarewell = true;
+            farewellSessionClient = client;
+            farewellAssistantSeen = false;
+            chatMessagesAtFarewell = chatMessages.length;
+            pendingQuestTeardown = { completed, lessonDone, userQuote };
+            resetSilenceTimer();
+
+            questSfx.playQuestComplete();
+            awardQuestStar(nextIndex - 1, true);
+
+            if (lessonDone) {
+                cancelPendingNextQuestSession();
+            }
+
+            clearQuestCompleteFallbackTimer();
+
+            if (client?.connected && source !== 'tool') {
+                client.sendTextMessage(buildQuestFarewellNudge(completed, userQuote));
+                farewellNudgeTimer = setTimeout(() => {
+                    if (awaitingQuestFarewell && !farewellAssistantSeen && client?.connected) {
+                        client.sendTextMessage(
+                            'The quest is complete. Say one short spoken celebration out loud now, like "Yatta! Great job!" Do not repeat if you already said it.'
+                        );
+                    }
+                }, 3500);
+            } else if (source === 'tool') {
+                // Tool response already instructs one celebration — skip text nudge and backup timer.
+                farewellNudgeTimer = setTimeout(() => {
+                    if (awaitingQuestFarewell && !farewellAssistantSeen && client?.connected) {
+                        client.sendTextMessage(
+                            'The quest is complete. Say one short spoken celebration out loud now. Do not repeat if you already said it.'
+                        );
+                    }
+                }, 6000);
+            }
+
+            questTeardownFallbackTimer = setTimeout(() => {
+                if (awaitingQuestFarewell) {
+                    farewellAssistantSeen = true;
+                    scheduleQuestTeardownAfterFarewell();
+                }
+            }, 15000);
+        }
+
+        function maybeMatchQuestFromTranscript(finished) {
+            if (!finished || !activeQuest || questCompleting) return;
+            const utterance = getLatestFinishedUserUtterance();
+            const before = new Set(loadCompletedStepIds());
+            syncQuestStepsAndBanner();
+            const after = loadCompletedStepIds();
+            const newly = after.filter((id) => !before.has(id));
+            if (newly.length) {
+                updateQuestBanner();
+            }
+
+            const allComplete = isQuestStepsComplete(activeQuest);
+            if (!client?.connected || !utterance) return;
+
+            if (allComplete) {
+                client.sendTextMessage(buildQuestCompleteTrackerNudge());
+                scheduleQuestCompleteFallback(utterance);
+                return;
+            }
+
+            client.sendTextMessage(
+                buildQuestStepGroundTruthNudge(activeQuest, utterance, newly)
+            );
+        }
+
+        questModalNext.addEventListener('click', () => {
+            hideQuestModal();
+            handleActionButton();
+        });
+
+        questModalDone.addEventListener('click', () => {
+            hideQuestModal();
+        });
+
+        questModalReset.addEventListener('click', () => {
+            clearQuestAdvanceTimer();
+            resetProgress();
+            hideQuestModal();
+            renderQuestStars();
+            updateQuestBanner();
+            updateActionUI();
+        });
+
+        renderQuestStars();
+        updateQuestBanner();
+
         // ============================================
         // UI Helpers
         // ============================================
+        const ICON_PHONE = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+        const ICON_PHONE_OFF = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M10.7 13.3 5 19"/><path d="M14.3 10.7 19 5"/><path d="M22 16.9v2a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h2a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L7.1 9.9a16 16 0 0 0 6 6l1.5-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6A2 2 0 0 1 22 16.9z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+        const ICON_REFRESH = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>';
+
+        function setActionBtnContent(iconHtml, label) {
+            btnAction.innerHTML = `${iconHtml}<span>${label}</span>`;
+        }
+
         function updateActionUI() {
+            if (isLessonComplete() && actionState === 'idle') {
+                btnAction.className = 'action-btn idle header-call-btn';
+                setActionBtnContent(ICON_REFRESH, 'Start over');
+                statusDot.className = 'status-indicator';
+                statusText.textContent = 'オフライン';
+                btnMute.classList.remove('visible');
+                return;
+            }
+
             // Header status dot
             if (connected) {
                 statusDot.className = 'status-indicator connected';
@@ -639,14 +1907,14 @@
 
             // Action button states
             if (actionState === 'connecting') {
-                btnAction.className = 'action-btn connecting';
-                btnAction.innerHTML = '<span class="action-spinner"></span> 接続中...';
+                btnAction.className = 'action-btn connecting header-call-btn';
+                btnAction.innerHTML = '<span class="action-spinner"></span><span>接続中...</span>';
             } else if (actionState === 'active') {
-                btnAction.className = 'action-btn active';
-                btnAction.innerHTML = '🎤 おわる';
+                btnAction.className = 'action-btn active header-call-btn';
+                setActionBtnContent(ICON_PHONE_OFF, 'おわる');
             } else {
-                btnAction.className = 'action-btn idle';
-                btnAction.innerHTML = '🎤 はじめる';
+                btnAction.className = 'action-btn idle header-call-btn';
+                setActionBtnContent(ICON_PHONE, 'はじめる');
             }
 
             // Mute button visibility
@@ -812,6 +2080,15 @@
                         proactivePrompt += `Here is what you have already said recently: ${recentAiMessages.map((msg, i) => `(${i + 1}) "${msg}"`).join(", ")}. You MUST say something COMPLETELY DIFFERENT from all of these. `;
                     }
                     proactivePrompt += "Check in briefly with 1-2 sentences.";
+                    if (questSessionActive && activeQuest && !awaitingQuestFarewell) {
+                        const next = getRemainingSteps(activeQuest)[0];
+                        if (next) {
+                            proactivePrompt +=
+                                " Beginner level: check in naturally about their Minecraft play. " +
+                                "Do NOT repeat English phrase coaching you already said. " +
+                                "Gameplay tips or fun facts OK; quest phrase only if they ask.";
+                        }
+                    }
                     client.sendTextMessage(proactivePrompt);
                 }
                 silenceTimer = null;
@@ -825,26 +2102,47 @@
             }
         }
 
+        async function ensureMicActive() {
+            if (!audioStreamer || !audioStreaming || isMuted) return;
+            try {
+                await audioStreamer.ensureStreaming();
+            } catch {
+                // ignore resume errors
+            }
+        }
+
         // ============================================
         // Message Handler
         // ============================================
-        function handleMessage(message) {
+        function handleMessage(message, sourceClient = client) {
             switch (message.type) {
                 case MultimodalLiveResponseType.TEXT:
+                    markFarewellAssistantActivity(sourceClient);
+                    markQuestSessionActivity(sourceClient);
                     addMessage(message.data, 'assistant');
                     break;
 
                 case MultimodalLiveResponseType.AUDIO:
+                    markFarewellAssistantActivity(sourceClient);
+                    markQuestSessionActivity(sourceClient);
                     if (audioPlayer) audioPlayer.play(message.data);
                     break;
 
                 case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
+                    if (sourceClient !== client) break;
                     resetSilenceTimer();
+                    ensureMicActive();
                     addMessage(message.data.text, 'user-transcript', 'append', message.data.finished);
+                    maybeMatchQuestFromTranscript(message.data.finished);
                     break;
 
                 case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
+                    markFarewellAssistantActivity(sourceClient);
+                    markQuestSessionActivity(sourceClient);
                     addMessage(message.data.text, 'assistant', 'append', message.data.finished);
+                    if (message.data.finished) {
+                        tryScheduleFarewellTeardown();
+                    }
                     break;
 
                 case MultimodalLiveResponseType.SETUP_COMPLETE:
@@ -861,16 +2159,53 @@
                     break;
 
                 case MultimodalLiveResponseType.TOOL_CALL: {
-                    const functionCalls = message.data.functionCalls;
+                    if (sourceClient !== client) break;
+                    const functionCalls = message.data.functionCalls || message.data.function_calls || [];
                     functionCalls.forEach((functionCall) => {
-                        const { name, args } = functionCall;
+                        const { id, name, args } = functionCall;
+                        if (name === 'complete_quest') {
+                            const userQuote = args?.user_quote || args?.userQuote || '';
+                            const questForTool = activeQuest;
+                            const latestUtterance = getLatestUserUtterance(true);
+
+                            if (id && (questCompleting || awaitingQuestFarewell)) {
+                                client.sendToolResponse(name, id, {
+                                    result: 'quest_recorded',
+                                    message: buildQuestAlreadyRecordedToolMessage(),
+                                });
+                                return;
+                            }
+
+                            const acceptedQuote = tryAcceptQuestComplete('tool', userQuote);
+                            if (id && acceptedQuote) {
+                                client.sendToolResponse(name, id, {
+                                    result: 'quest_recorded',
+                                    message: buildQuestRecordedToolMessage(questForTool, acceptedQuote),
+                                });
+                            } else if (id) {
+                                client.sendToolResponse(name, id, {
+                                    result: 'not_yet',
+                                    message: buildQuestRejectedToolMessage(
+                                        questForTool || getCurrentQuest(),
+                                        latestUtterance
+                                    ),
+                                });
+                            }
+                            return;
+                        }
                         client.callFunction(name, args);
+                        if (id && name) {
+                            client.sendToolResponse(name, id, { result: 'ok' });
+                        }
                     });
                     break;
                 }
 
                 case MultimodalLiveResponseType.TURN_COMPLETE:
-                    if (message.usageMetadata) {
+                    if (sourceClient !== client) break;
+                    if (awaitingQuestFarewell) {
+                        tryScheduleFarewellTeardown();
+                    } else if (message.usageMetadata) {
                         const usage = message.usageMetadata;
                         const inputTokens = usage.promptTokenCount || 0;
                         const outputTokens = usage.candidatesTokenCount || 0;
@@ -893,13 +2228,15 @@
                             if (d.modality === "AUDIO") tokenUsage.audioOutputTokens += d.tokenCount;
                         });
 
-                        if (tokenUsage.turnCount >= TURN_THRESHOLD && !isAutoReconnecting) {
+                        if (tokenUsage.turnCount >= TURN_THRESHOLD && !isAutoReconnecting && !questSessionActive) {
                             setTimeout(() => {
-                                if (!isAutoReconnecting) autoReconnect();
+                                if (!isAutoReconnecting && !questSessionActive) autoReconnect();
                             }, 1000);
                         }
                     }
-                    startSilenceTimer();
+                    if (!questTeardownTimer) {
+                        startSilenceTimer();
+                    }
                     break;
 
                 case MultimodalLiveResponseType.INTERRUPTED:
@@ -913,64 +2250,25 @@
         // Connect / Disconnect
         // ============================================
         async function connectAPI() {
+            const quickSwitch = nextConnectQuick;
+            nextConnectQuick = false;
+
+            if (quickSwitch) {
+                await new Promise((r) => setTimeout(r, 300));
+            }
+
             if (client && client.connected) {
-                disconnectAPI();
-                await new Promise(r => setTimeout(r, 500));
+                disconnectAPI(false, quickSwitch, false, quickSwitch && audioStreaming);
+                await new Promise((r) => setTimeout(r, quickSwitch ? 250 : 500));
             }
 
             try {
                 if (!isAutoReconnecting) justReconnected = false;
 
                 client = new GeminiLiveAPI(proxyUrl, projectId, model);
-
-                client.systemInstructions = systemInstructions;
-                client.inputAudioTranscription = enableInputTranscription;
-                client.outputAudioTranscription = enableOutputTranscription;
-                client.googleGrounding = enableGrounding;
-                client.enableAffectiveDialog = enableAffectiveDialog;
-                client.responseModalities = ["AUDIO"];
-                client.voiceName = voice;
-                client.temperature = parseFloat(temperature);
-                client.proactivity = { proactiveAudio: enableProactiveAudio };
-                client.automaticActivityDetection = {
-                    disabled: disableActivityDetection,
-                    silence_duration_ms: parseInt(silenceDuration),
-                    prefix_padding_ms: parseInt(prefixPadding),
-                    end_of_speech_sensitivity: endSpeechSensitivity,
-                    start_of_speech_sensitivity: startSpeechSensitivity,
-                };
-
-                if (!enableGrounding) {
-                    if (enableAlertTool) client.addFunction(new ShowAlertTool());
-                    if (enableCssStyleTool) client.addFunction(new AddCSSStyleTool());
-                }
-
-                client.onReceiveResponse = handleMessage;
-                client.onErrorMessage = (error) => {};
-                client.onConnectionStarted = () => {
-                    connected = true;
-                    updateActionUI();
-                };
-                client.onClose = (event) => {
-                    connected = false;
-                    if (!isAutoReconnecting && event && event.code !== 1000) {
-                        const reason = (event.reason && String(event.reason).trim()) || `コード ${event.code}`;
-                        if (event.code === 1008) {
-                            if (/origin/i.test(reason)) {
-                                addMessage(`接続できませんでした（${reason}）。カスタムドメインはプロキシの許可オリジンに含め、Cloud Run を再デプロイしてください。`, "system");
-                            } else {
-                                addMessage(`接続できませんでした（${reason}）。Vertex AI API をプロジェクト ai-sensei-8849b で有効化し、Cloud Run のサービスアカウントに Vertex 利用権限があるか確認してください。`, "system");
-                            }
-                        } else {
-                            addMessage(`接続が切れました（${reason}）`, "system");
-                        }
-                    }
-                    if (!isAutoReconnecting) {
-                        actionState = 'idle';
-                    }
-                    updateActionUI();
-                    if (!isAutoReconnecting) disconnectAPI();
-                };
+                const questForSession = getCurrentQuest();
+                configureGeminiClient(client, questForSession);
+                attachClientHandlers(client);
 
                 await client.connect();
 
@@ -991,15 +2289,21 @@
                     await audioPlayer.init();
                 }
                 audioPlayer.setVolume(volumeLevel / 100);
-
             } catch (error) {
+                throw error;
             }
         }
 
-        function disconnectAPI(isAutoReconnect = false) {
+        function disconnectAPI(isAutoReconnect = false, keepAudioPlayer = false, preserveQuestAdvance = false, keepMicStreamer = false) {
             resetSilenceTimer();
 
             if (!isAutoReconnect) {
+                if (!preserveQuestAdvance) {
+                    clearQuestAdvanceTimer();
+                }
+                if (!awaitingQuestFarewell) {
+                    clearQuestTeardownTimers();
+                }
                 tokenUsage = {
                     totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0,
                     turnCount: 0, textInputTokens: 0, imageInputTokens: 0,
@@ -1008,17 +2312,33 @@
             }
 
             if (client) {
+                intentionalDisconnect = true;
                 client.disconnect();
                 client = null;
             }
 
             if (!isAutoReconnect) {
-                if (audioStreamer) { audioStreamer.stop(); audioStreamer = null; }
+                if (audioStreamer) {
+                    if (keepMicStreamer) {
+                        audioStreamer.pauseStreaming();
+                    } else {
+                        audioStreamer.stop();
+                        audioStreamer = null;
+                        audioStreaming = false;
+                    }
+                } else if (!keepMicStreamer) {
+                    audioStreaming = false;
+                }
                 if (videoStreamer) { videoStreamer.stop(); videoStreamer = null; }
-                if (audioPlayer) { audioPlayer.destroy(); audioPlayer = null; }
+                if (audioPlayer && !keepAudioPlayer) {
+                    audioPlayer.destroy();
+                    audioPlayer = null;
+                }
 
                 connected = false;
-                audioStreaming = false;
+                if (!keepMicStreamer) {
+                    audioStreaming = false;
+                }
                 actionState = 'idle';
                 updateActionUI();
             } else {
@@ -1031,7 +2351,7 @@
         // Auto-Reconnect
         // ============================================
         async function autoReconnect() {
-            if (isAutoReconnecting) return;
+            if (isAutoReconnecting || questSessionActive) return;
             isAutoReconnecting = true;
             resetSilenceTimer();
 
@@ -1065,34 +2385,70 @@
         // Unified Start / Stop
         // ============================================
         async function handleActionButton() {
-            if (actionState === 'connecting') return; // ignore during connection
+            if (actionState === 'connecting') return;
+
+            if (isLessonComplete() && actionState === 'idle') {
+                resetProgress();
+                renderQuestStars();
+                updateQuestBanner();
+                updateActionUI();
+                return;
+            }
 
             if (actionState === 'active') {
-                // Stop everything
+                clearQuestAdvanceTimer();
+                clearQuestTeardownTimers();
+                cancelPendingNextQuestSession();
+                awaitingQuestFarewell = false;
+                pendingQuestTeardown = null;
+                farewellAssistantSeen = false;
+                questCompleting = false;
+                questSessionActive = false;
+                activeQuest = null;
                 disconnectAPI();
+                return;
+            }
+
+            activeQuest = getCurrentQuest();
+            if (!activeQuest) {
+                updateQuestBanner();
+                updateActionUI();
                 return;
             }
 
             // Idle → connect + auto-start mic
             actionState = 'connecting';
+            questSessionActive = true;
+            questOpeningSent = false;
+            resetQuestSessionState();
             updateActionUI();
 
+            if (clearChatOnNextStart) {
+                clearChatOnNextStart = false;
+                chatMessages = [];
+                renderChat();
+                emptyState.style.display = '';
+            }
+
             try {
+                await questSfx.ensureContext();
                 await connectAPI();
 
-                // Auto-start mic after connection
-                if (!audioStreamer && client) {
-                    audioStreamer = new AudioStreamer(client);
+                const micOk = await startMicForSession();
+                if (!micOk) {
+                    throw new Error('Microphone not ready');
                 }
-                if (audioStreamer) {
-                    await audioStreamer.start();
-                    audioStreaming = true;
-                }
+
+                announceQuestStart();
 
                 actionState = 'active';
                 updateActionUI();
             } catch (error) {
                 actionState = 'idle';
+                questSessionActive = false;
+                questOpeningSent = false;
+                addMessage('次のクエストへの接続に失敗しました。「はじめる」をもう一度押してください。', 'system');
+                disconnectAPI(false, true, false, audioStreaming);
                 updateActionUI();
             }
         }
@@ -1125,7 +2481,14 @@
 
         window.addEventListener('beforeunload', () => {
             resetSilenceTimer();
+            cancelPendingNextQuestSession();
             disconnectAPI();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                ensureMicActive();
+            }
         });
 
         // Initial render

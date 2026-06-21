@@ -107,8 +107,10 @@ def check_origin(origin: str) -> bool:
         except Exception:
             pass
 
-    # Local dev: any port on localhost / 127.0.0.1
+    # Local dev: any port on localhost / 127.0.0.1 / ::1
     if o.startswith("http://localhost:") or o.startswith("http://127.0.0.1:"):
+        return True
+    if o.startswith("http://[::1]:") or o == "http://localhost" or o == "http://127.0.0.1":
         return True
 
     return o in _allowed_origin_set()
