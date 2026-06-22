@@ -133,10 +133,347 @@
         /* ========== Admin View ========== */
         #admin-view {
             display: none;
-            max-width: 1100px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 2rem;
             animation: slideUp 0.6s ease-out;
+        }
+
+        #admin-view.admin-view--wide {
+            max-width: 1280px;
+        }
+
+        .admin-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .admin-tab {
+            padding: 0.65rem 1.25rem;
+            border: 2px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--bg-white);
+            color: var(--text-dark);
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .admin-tab:hover {
+            border-color: var(--primary-red);
+        }
+
+        .admin-tab.active {
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-red-dark) 100%);
+            border-color: transparent;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(216, 67, 21, 0.28);
+        }
+
+        .admin-tab-panel[hidden] {
+            display: none !important;
+        }
+
+        /* Progress dashboard */
+        .progress-panel {
+            background: var(--bg-white);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-panel h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.35rem;
+            color: var(--text-dark);
+        }
+
+        .progress-panel-desc {
+            color: #888;
+            font-size: 0.88rem;
+            margin-bottom: 1rem;
+        }
+
+        .progress-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .progress-summary-card {
+            background: linear-gradient(180deg, #fff8f0 0%, #fff 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 0.85rem 1rem;
+            text-align: center;
+        }
+
+        .progress-summary-num {
+            display: block;
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--primary-red);
+            line-height: 1.2;
+        }
+
+        .progress-summary-label {
+            display: block;
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 0.2rem;
+        }
+
+        .progress-student-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        .progress-student-card {
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1rem;
+            background: #fff;
+        }
+
+        .progress-student-card.complete {
+            border-color: #FFD54F;
+            background: linear-gradient(180deg, #fffde7 0%, #fff 100%);
+        }
+
+        .progress-student-card.empty {
+            opacity: 0.85;
+        }
+
+        .progress-student-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            align-items: flex-start;
+            margin-bottom: 0.85rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .progress-student-name {
+            font-size: 1rem;
+            margin: 0;
+            color: var(--text-dark);
+        }
+
+.progress-student-email {
+    margin: 0.15rem 0 0;
+    font-size: 0.78rem;
+    color: #888;
+    word-break: break-all;
+}
+
+.progress-admin-tag {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    background: #e3f2fd;
+    color: #1565c0;
+    font-size: 0.62rem;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+.progress-updated {
+            font-size: 0.72rem;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        .progress-student-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.65rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .progress-stat {
+            background: var(--beige);
+            border-radius: 10px;
+            padding: 0.55rem 0.65rem;
+        }
+
+        .progress-stat-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .progress-stat-value {
+            display: block;
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--text-dark);
+            margin-top: 0.15rem;
+        }
+
+        .progress-mission-title {
+            font-size: 0.92rem;
+        }
+
+        .progress-stat-sub {
+            display: block;
+            font-size: 0.72rem;
+            color: #78909c;
+            line-height: 1.35;
+            margin-top: 0.15rem;
+        }
+
+        .progress-status-pill {
+            display: inline-block;
+            margin-top: 0.35rem;
+            padding: 0.15rem 0.45rem;
+            border-radius: 999px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            font-size: 0.68rem;
+            font-weight: 700;
+        }
+
+        .progress-stars-row,
+        .progress-badge-row {
+            display: flex;
+            gap: 0.15rem;
+            margin-top: 0.35rem;
+            flex-wrap: wrap;
+        }
+
+        .progress-star {
+            color: #e0e0e0;
+            font-size: 0.95rem;
+            line-height: 1;
+        }
+
+        .progress-star.filled {
+            color: #ffb300;
+        }
+
+        .progress-badge-slot {
+            width: 14px;
+            height: 14px;
+            border: 2px dashed #cfd8dc;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+
+        .progress-badge-slot.filled {
+            border-style: solid;
+            border-color: #ffd54f;
+            background: #fff9c4;
+        }
+
+        .progress-mission-track {
+            margin-bottom: 0.75rem;
+        }
+
+        .progress-track-label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #888;
+            margin-bottom: 0.45rem;
+        }
+
+        .progress-mission-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.45rem;
+            border-radius: 8px;
+            margin-bottom: 0.25rem;
+            background: #f5f5f5;
+            font-size: 0.75rem;
+        }
+
+        .progress-mission-step.cleared {
+            background: #e8f5e9;
+        }
+
+        .progress-mission-step.current {
+            background: #fff8e1;
+            border: 1px solid #ffd54f;
+        }
+
+        .progress-mission-step-num {
+            flex-shrink: 0;
+            width: 1.35rem;
+            height: 1.35rem;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.68rem;
+        }
+
+        .progress-mission-step.cleared .progress-mission-step-num {
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: #fff;
+        }
+
+        .progress-mission-step-label {
+            color: #546e7a;
+            line-height: 1.3;
+        }
+
+        .progress-phrases-details {
+            font-size: 0.82rem;
+        }
+
+        .progress-phrases-details summary {
+            cursor: pointer;
+            font-weight: 700;
+            color: var(--primary-red);
+            padding: 0.35rem 0;
+        }
+
+        .progress-phrases-list {
+            list-style: none;
+            margin: 0.5rem 0 0;
+            padding: 0;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .progress-phrases-list li {
+            padding: 0.35rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .progress-phrases-list li strong {
+            display: block;
+            color: #1b3a57;
+        }
+
+        .progress-phrases-list li span {
+            display: block;
+            font-size: 0.75rem;
+            color: #78909c;
+        }
+
+        .progress-phrases-empty,
+        .progress-empty {
+            color: #888;
+            text-align: center;
+            padding: 2rem 1rem;
         }
 
         @keyframes slideUp {
@@ -934,6 +1271,12 @@
             </div>
         </div>
 
+        <div class="admin-tabs" role="tablist">
+            <button type="button" class="admin-tab active" data-tab="time" role="tab" aria-selected="true">時間管理</button>
+            <button type="button" class="admin-tab" data-tab="progress" role="tab" aria-selected="false">学習進捗</button>
+        </div>
+
+        <div id="tab-time" class="admin-tab-panel" role="tabpanel">
         <!-- Bulk Update -->
         <div class="bulk-panel">
             <h2>&#9200; 全ユーザーの時間を一括変更</h2>
@@ -1054,6 +1397,22 @@
                 </table>
             </div>
         </div>
+        </div>
+
+        <div id="tab-progress" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="progress-panel">
+                <h2>&#127891; 生徒の学習進捗</h2>
+                <p class="progress-panel-desc">Beginner レッスン1のミッション・スター・フレーズ・バッジを確認できます。生徒がログインして学習すると自動更新されます。</p>
+                <div class="search-bar">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="progress-search" placeholder="名前で検索..." autocomplete="off">
+                    <button class="search-clear" id="progress-search-clear" onclick="clearProgressSearch()">&times;</button>
+                </div>
+                <div id="progress-dashboard">
+                    <p class="progress-empty"><span class="spinner"></span> 読み込み中...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Toast -->
@@ -1065,6 +1424,7 @@
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
         import { getFirestore, collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-functions.js";
+        import { renderProgressDashboard } from "./js/admin-progress.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -1085,8 +1445,9 @@
         // ============================================
         // State
         // ============================================
-        let usersData = []; // { id, displayName, email, remainingTime }
+        let usersData = []; // { id, displayName, email, remainingTime, beginnerProgress, ... }
         let bulkMode = 'set'; // 'set' or 'add'
+        let activeAdminTab = 'time';
 
         // ============================================
         // Auth
@@ -1143,7 +1504,9 @@
                         displayName: data.displayName || '',
                         email: data.email || '',
                         remainingTime: parseInt(data.remainingTime, 10) || 0,
-                        role: data.role || ''
+                        role: data.role || '',
+                        beginnerProgress: data.beginnerProgress || null,
+                        progressUpdatedAt: data.progressUpdatedAt || null
                     });
                 });
 
@@ -1155,6 +1518,7 @@
                 });
 
                 renderUsers();
+                renderProgressPanel();
             } catch (err) {
                 tbody.innerHTML = '<tr class="loading-row"><td colspan="5">エラーが発生しました。</td></tr>';
                 showToast('ユーザーの読み込みに失敗しました。', 'error');
@@ -1177,6 +1541,45 @@
             renderUsers();
             input.focus();
         };
+
+        function renderProgressPanel() {
+            const container = document.getElementById('progress-dashboard');
+            if (!container) return;
+            const query = document.getElementById('progress-search')?.value || '';
+            container.innerHTML = renderProgressDashboard(usersData, query);
+        }
+
+        window.clearProgressSearch = function() {
+            const input = document.getElementById('progress-search');
+            if (!input) return;
+            input.value = '';
+            document.getElementById('progress-search-clear').style.display = 'none';
+            renderProgressPanel();
+            input.focus();
+        };
+
+        document.getElementById('progress-search')?.addEventListener('input', function() {
+            const clearBtn = document.getElementById('progress-search-clear');
+            if (clearBtn) clearBtn.style.display = this.value ? 'block' : 'none';
+            renderProgressPanel();
+        });
+
+        function switchAdminTab(tabName) {
+            activeAdminTab = tabName;
+            document.querySelectorAll('.admin-tab').forEach(btn => {
+                const active = btn.dataset.tab === tabName;
+                btn.classList.toggle('active', active);
+                btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            document.getElementById('tab-time').hidden = tabName !== 'time';
+            document.getElementById('tab-progress').hidden = tabName !== 'progress';
+            document.getElementById('admin-view').classList.toggle('admin-view--wide', tabName === 'progress');
+            if (tabName === 'progress') renderProgressPanel();
+        }
+
+        document.querySelectorAll('.admin-tab').forEach(btn => {
+            btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab));
+        });
 
         // ============================================
         // Render Users
@@ -1687,7 +2090,9 @@
                     displayName: data.displayName || '',
                     email: data.email || '',
                     remainingTime: parseInt(data.remainingTime, 10) || 0,
-                    role: data.role || ''
+                    role: data.role || '',
+                    beginnerProgress: data.beginnerProgress || null,
+                    progressUpdatedAt: data.progressUpdatedAt || null
                 });
             });
 
@@ -1696,6 +2101,10 @@
                 if (a.role !== 'admin' && b.role === 'admin') return -1;
                 return (a.displayName || a.email).localeCompare(b.displayName || b.email);
             });
+
+            if (activeAdminTab === 'progress') {
+                renderProgressPanel();
+            }
         }
 
         // Override loadUsers to also check auto-set

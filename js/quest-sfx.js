@@ -28,13 +28,21 @@ export class QuestSfx {
     osc.stop(start + duration + 0.03);
   }
 
-  /** Ascending chime — single quest cleared. */
+  /** Ascending chime — single quest cleared (happy celebration). */
   async playQuestComplete() {
     try {
       const ctx = await this.ensureContext();
       const t = ctx.currentTime;
-      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-        this._tone(ctx, freq, t + i * 0.1, 0.28, this.volume);
+      const vol = Math.min(this.volume * 1.15, 0.45);
+
+      // Bouncy major arpeggio
+      [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((freq, i) => {
+        this._tone(ctx, freq, t + i * 0.09, 0.24, vol, i % 2 === 0 ? "triangle" : "sine");
+      });
+
+      // Sparkle finish
+      [1567.98, 2093].forEach((freq, i) => {
+        this._tone(ctx, freq, t + 0.52 + i * 0.06, 0.2, vol * 0.8, "sine");
       });
     } catch {
       // ignore autoplay / audio errors

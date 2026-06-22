@@ -1,7 +1,20 @@
-import { LESSON_1_QUESTS } from "./quests/beginner-lesson1.js";
+import { LESSON_1_QUESTS, LESSON_1_TITLE } from "./quests/beginner-lesson1.js";
 
 export const PROGRESS_KEY = "gc_beginner_lesson1_questIndex";
 export const STEP_PROGRESS_KEY = "gc_beginner_lesson1_stepProgress";
+export const SELECTED_QUEST_KEY = "gc_beginner_lesson1_selectedQuest";
+export const LEARNED_PHRASES_KEY = "gc_beginner_lesson1_learnedPhrases";
+export const LESSON_BADGES_KEY = "gc_beginner_lessonBadges";
+
+/** Lesson badge slots for the beginner level (one badge per full lesson clear). */
+export const BEGINNER_LESSON_SLOTS = [
+  { id: "lesson1", label: "レッスン1", desc: "マイクラサバイバル" },
+  { id: "lesson2", label: "レッスン2", desc: "???", upcoming: true },
+  { id: "lesson3", label: "レッスン3", desc: "???", upcoming: true },
+  { id: "lesson4", label: "レッスン4", desc: "???", upcoming: true },
+  { id: "lesson5", label: "レッスン5", desc: "???", upcoming: true },
+  { id: "lesson6", label: "レッスン6", desc: "???", upcoming: true },
+];
 
 export function loadProgress() {
   try {
@@ -25,9 +38,82 @@ export function resetProgress() {
   try {
     localStorage.removeItem(PROGRESS_KEY);
     localStorage.removeItem(STEP_PROGRESS_KEY);
+    localStorage.removeItem(SELECTED_QUEST_KEY);
+    localStorage.removeItem(LEARNED_PHRASES_KEY);
+    localStorage.removeItem(LESSON_BADGES_KEY);
   } catch {
     // ignore
   }
+}
+
+export function getSelectedQuestIndex() {
+  try {
+    const raw = localStorage.getItem(SELECTED_QUEST_KEY);
+    if (raw === null || raw === "none") return null;
+    const index = parseInt(raw, 10);
+    if (!Number.isFinite(index) || index < 0) return null;
+    if (!isQuestUnlocked(index)) return null;
+    return index;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSelectedQuest() {
+  try {
+    localStorage.setItem(SELECTED_QUEST_KEY, "none");
+  } catch {
+    // ignore
+  }
+}
+
+export function setSelectedQuestIndex(index) {
+  if (index === null || index === undefined) {
+    clearSelectedQuest();
+    return true;
+  }
+  if (!Number.isFinite(index) || index < 0 || !isQuestUnlocked(index)) {
+    return false;
+  }
+  try {
+    localStorage.setItem(SELECTED_QUEST_KEY, String(index));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isQuestUnlocked(index) {
+  if (!Number.isFinite(index) || index < 0 || index >= LESSON_1_QUESTS.length) {
+    return false;
+  }
+  return index <= loadProgress();
+}
+
+export function getUnlockedQuests() {
+  const progress = loadProgress();
+  return LESSON_1_QUESTS.filter((_, i) => i <= progress);
+}
+
+export function getSelectedQuest() {
+  const index = getSelectedQuestIndex();
+  if (index === null) return null;
+  return LESSON_1_QUESTS[index] || null;
+}
+
+export function getQuestIndex(quest) {
+  if (!quest) return -1;
+  return LESSON_1_QUESTS.findIndex((q) => q.id === quest.id);
+}
+
+export function selectNextQuestAfterComplete() {
+  const index = loadProgress();
+  if (index >= LESSON_1_QUESTS.length) {
+    clearSelectedQuest();
+    return null;
+  }
+  setSelectedQuestIndex(index);
+  return LESSON_1_QUESTS[index];
 }
 
 export function getQuests() {
@@ -42,6 +128,106 @@ export function getCurrentQuest() {
 
 export function isLessonComplete() {
   return loadProgress() >= LESSON_1_QUESTS.length;
+}
+
+export function loadEarnedLessonBadges() {
+  try {
+    const raw = localStorage.getItem(LESSON_BADGES_KEY);
+    const stored = raw ? JSON.parse(raw) : [];
+    const earned = new Set(Array.isArray(stored) ? stored : []);
+    if (isLessonComplete()) {
+      earned.add("lesson1");
+    }
+    return [...earned];
+  } catch {
+    return isLessonComplete() ? ["lesson1"] : [];
+  }
+}
+
+export function isLessonBadgeEarned(lessonId) {
+  return loadEarnedLessonBadges().includes(lessonId);
+}
+
+export function recordLessonBadge(lessonId) {
+  if (!lessonId) return;
+  try {
+    const raw = localStorage.getItem(LESSON_BADGES_KEY);
+    const stored = raw ? JSON.parse(raw) : [];
+    const earned = new Set(Array.isArray(stored) ? stored : []);
+    if (earned.has(lessonId)) return;
+    earned.add(lessonId);
+    localStorage.setItem(LESSON_BADGES_KEY, JSON.stringify([...earned]));
+  } catch {
+    // ignore
+  }
+}
+
+export function getLessonBadgeSlots() {
+  const earned = new Set(loadEarnedLessonBadges());
+  return BEGINNER_LESSON_SLOTS.map((slot) => ({
+    ...slot,
+    earned: earned.has(slot.id),
+  }));
+}
+
+/** Snapshot for Firestore sync and admin dashboard. */
+export function buildProgressSnapshot() {
+  const totalQuests = LESSON_1_QUESTS.length;
+  const questIndex = loadProgress();
+  const starsEarned = Math.min(questIndex, totalQuests);
+  const lessonComplete = isLessonComplete();
+  const selectedIndex = getSelectedQuestIndex();
+  const phrases = getLearnedPhrases();
+  const badges = loadEarnedLessonBadges();
+
+  let missionIndex = null;
+  let missionTitleEn = "";
+  let missionGoal = "";
+  let missionStatus = "未開始";
+
+  if (lessonComplete) {
+    missionStatus = "レッスンクリア";
+    if (selectedIndex !== null && LESSON_1_QUESTS[selectedIndex]) {
+      missionIndex = selectedIndex;
+      missionTitleEn = LESSON_1_QUESTS[selectedIndex].titleEn || "";
+      missionGoal = LESSON_1_QUESTS[selectedIndex].goal || "";
+    }
+  } else if (selectedIndex !== null && LESSON_1_QUESTS[selectedIndex]) {
+    missionIndex = selectedIndex;
+    missionTitleEn = LESSON_1_QUESTS[selectedIndex].titleEn || "";
+    missionGoal = LESSON_1_QUESTS[selectedIndex].goal || "";
+    missionStatus = selectedIndex === questIndex ? "いまのミッション" : "復習中";
+  } else if (questIndex < totalQuests) {
+    missionIndex = questIndex;
+    missionTitleEn = LESSON_1_QUESTS[questIndex].titleEn || "";
+    missionGoal = LESSON_1_QUESTS[questIndex].goal || "";
+    missionStatus = "自由会話（次のミッション待ち）";
+  } else {
+    missionStatus = "自由会話";
+  }
+
+  return {
+    level: "beginner",
+    lessonTitle: LESSON_1_TITLE,
+    questIndex,
+    starsEarned,
+    totalQuests,
+    lessonComplete,
+    selectedQuestIndex: selectedIndex,
+    missionIndex,
+    missionNumber: missionIndex !== null ? missionIndex + 1 : null,
+    missionTitleEn,
+    missionGoal,
+    missionStatus,
+    phraseCount: phrases.length,
+    phrases: phrases.slice(0, 40).map((p) => ({
+      english: p.english,
+      japanese: p.japanese,
+      questTitle: p.questTitle,
+    })),
+    lessonBadges: badges,
+    badgeCount: badges.length,
+  };
 }
 
 function normalizeText(text) {
@@ -229,6 +415,8 @@ function buildFlexibleEnglishRegex(normPattern) {
       parts.push(`(?:${escapeRegex(token)}\\s+)?`);
     } else if (token === "it") {
       parts.push(`(?:${escapeRegex(token)}\\s+)?`);
+    } else if (token === "here" && i === tokens.length - 1) {
+      parts.push(`(?:${escapeRegex(token)}|there)`);
     } else if (token === "down" && i === tokens.length - 1) {
       parts.push("(?:down)?");
     } else {
@@ -238,6 +426,40 @@ function buildFlexibleEnglishRegex(normPattern) {
   }
 
   return new RegExp(parts.join("\\s+"), "i");
+}
+
+/** Salient keyword groups — each group needs at least one hit (STT-friendly fallback). */
+const STEP_SALIENT_GROUPS = {
+  found_tree: [["find", "found", "see", "look"], ["tree"]],
+  got_wood: [["get", "got", "have", "chop", "cut", "collect"], ["wood"]],
+  made_table: [["make", "made", "craft", "crafted", "built", "create"], ["table", "crafting", "craft"]],
+  placed_table: [["put", "place", "placed"], ["here", "down"]],
+  made_pickaxe: [["make", "made", "craft", "built"], ["pickaxe", "pick"]],
+  ready: [["ready"]],
+  found_stones: [["find", "found", "see"], ["stone", "stones", "cobblestone"]],
+  got_stones: [["get", "got", "have", "mine", "dig", "collect"], ["stone", "stones", "cobblestone"]],
+  found_food: [["find", "found", "see"], ["food", "meat", "apple", "beef", "pork", "chicken"]],
+  need_food: [["hungry", "hunger", "need", "want", "eat"], ["food", "eat"]],
+};
+
+function textWords(text) {
+  return normalizeEnglishForMatching(text).split(/\s+/).filter(Boolean);
+}
+
+function wordHitsKeyword(word, keyword) {
+  if (word === keyword) return true;
+  if (word.startsWith(keyword) || keyword.startsWith(word)) return true;
+  return false;
+}
+
+function matchesStepSalient(text, step) {
+  const groups = STEP_SALIENT_GROUPS[step?.id];
+  if (!groups?.length) return false;
+  const words = textWords(text);
+  if (!words.length) return false;
+  return groups.every((group) =>
+    group.some((keyword) => words.some((word) => wordHitsKeyword(word, keyword)))
+  );
 }
 
 /** Flexible phrase match (not exact wording). */
@@ -271,10 +493,57 @@ function userTextHasEnglish(text) {
   return /[a-zA-Z]/.test(text || "");
 }
 
+const VALID_SHORT_UTTERANCES = new Set([
+  "i", "a", "ok", "no", "hi", "go", "yes", "yeah", "yep", "wow",
+  "うん", "はい", "え", "ね", "あ", "う", "ん", "そう", "えっ", "わ", "や", "よ", "お",
+]);
+
+/** True when transcript is empty, noise, or too garbled to treat as intentional speech. */
+export function isUnrecognizableUserInput(text) {
+  const t = (text || "").trim();
+  if (!t) return true;
+
+  const normalized = t.toLowerCase().replace(/\s+/g, " ").trim();
+  if (VALID_SHORT_UTTERANCES.has(normalized)) return false;
+
+  if (/[\u3040-\u30ff\u3400-\u9fff]/.test(t)) {
+    if (t.length === 1 && /[\u3040-\u30ff]/.test(t)) return false;
+    if (/^(.)\1{3,}$/.test(normalized)) return true;
+    return false;
+  }
+
+  if (userTextHasEnglish(t)) return false;
+
+  if (/^(um+|uh+|ah+|hm+|mhm+|mmm+|hmm+|eh+|oh+)$/i.test(normalized)) return true;
+  if (/^[\*#\.\-_\?\!\,\:\;\"\'\(\)\[\]\s\d]+$/.test(t)) return true;
+
+  const letters = (t.match(/[\p{L}\p{N}]/gu) || []).length;
+  if (letters / t.length < 0.35) return true;
+  if (t.length < 12 && !/\b[a-z]{2,}\b/i.test(t)) return true;
+
+  return false;
+}
+
+/** Nudge Learny to ask the child to repeat after unclear/noise input. */
+export function buildUnclearInputRepeatNudge(userUtterance = "") {
+  const transcript = (userUtterance || "").trim();
+  const transcriptNote = transcript
+    ? `Speech transcript was unclear or may be background noise: "${transcript}". `
+    : "The user spoke but the transcript was empty or unclear (likely accidental noise). ";
+  return (
+    `[Response required — speak aloud in AUDIO now. Do NOT stay silent.] ${transcriptNote}` +
+    `Do NOT guess what they meant. Do NOT advance any quest step. ` +
+    `Warmly tell the child in Japanese (1–2 short sentences) that you could not quite catch it, ` +
+    `it might have been background noise, and ask them to say it again. ` +
+    `Example tone: 「ごめんね、ちょっと聞き取れなかったよ！もう一回言ってくれる？」`
+  );
+}
+
 export function matchesStep(text, step) {
   if (!step?.patterns?.length) return false;
-  const matched = step.patterns.some((pattern) => matchesPhrase(text, pattern));
-  if (!matched) return false;
+  const patternMatched = step.patterns.some((pattern) => matchesPhrase(text, pattern));
+  const salientMatched = !patternMatched && matchesStepSalient(text, step);
+  if (!patternMatched && !salientMatched) return false;
   if (step.patterns.every(isEnglishPattern) && !userTextHasEnglish(text)) {
     return false;
   }
@@ -324,69 +593,264 @@ export function clearAllStepProgress() {
   }
 }
 
-/** Mark newly matched steps from one utterance (sequential — next step only). */
-export function syncQuestStepsFromText(quest, userText, questIndex = loadProgress()) {
-  if (!quest?.steps?.length || !userText?.trim()) return [];
+/** Format a short English phrase for the phrase book display. */
+export function formatEnglishPhrase(text) {
+  if (!text) return "";
+  return text
+    .split(" ")
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (lower === "i") return "I";
+      if (lower === "i'm" || lower === "im") return "I'm";
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
 
-  const done = new Set(loadCompletedStepIds(questIndex));
-  const newly = [];
+export function getStepEnglishPhrase(step) {
+  const fromCoach = step?.coachNote?.match(/「([^」]+)」/)?.[1];
+  if (fromCoach) return fromCoach.replace(/\u3000/g, " ").trim();
 
-  for (const step of quest.steps) {
-    if (done.has(step.id)) continue;
-    if (matchesStep(userText, step)) {
-      done.add(step.id);
-      newly.push(step.id);
-    }
-    break;
+  const pattern = step?.patterns?.[0];
+  if (!pattern) return step?.label || "";
+
+  if (/^i[\s']/i.test(pattern)) {
+    return formatEnglishPhrase(pattern);
+  }
+  return formatEnglishPhrase(`i ${pattern}`);
+}
+
+function loadLearnedPhrasesMap() {
+  try {
+    const raw = localStorage.getItem(LEARNED_PHRASES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLearnedPhrasesMap(map) {
+  try {
+    localStorage.setItem(LEARNED_PHRASES_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+function phraseEntryKey(questIndex, stepId) {
+  return `${questIndex}:${stepId}`;
+}
+
+/** Persist phrases when mission steps are completed (survives quest replay reset). */
+export function recordLearnedSteps(quest, questIndex, stepIds) {
+  if (!quest?.steps?.length || !stepIds?.length) return;
+  if (!Number.isFinite(questIndex) || questIndex < 0) return;
+
+  const map = loadLearnedPhrasesMap();
+  let changed = false;
+
+  for (const stepId of stepIds) {
+    const step = quest.steps.find((s) => s.id === stepId);
+    if (!step) continue;
+    const key = phraseEntryKey(questIndex, stepId);
+    if (map[key]) continue;
+    map[key] = {
+      questIndex,
+      stepId,
+      questTitle: quest.titleEn || quest.title,
+      japanese: step.label,
+      english: getStepEnglishPhrase(step),
+      learnedAt: Date.now(),
+    };
+    changed = true;
   }
 
-  if (newly.length) {
-    saveCompletedStepIds(questIndex, [...done]);
+  if (changed) saveLearnedPhrasesMap(map);
+}
+
+/** One-time migration from legacy step-progress storage. */
+function migrateLearnedPhrasesFromStepProgress() {
+  const map = loadLearnedPhrasesMap();
+  if (Object.keys(map).length) return;
+
+  const quests = LESSON_1_QUESTS;
+  let changed = false;
+  quests.forEach((quest, questIndex) => {
+    const doneIds = loadCompletedStepIds(questIndex);
+    if (!doneIds.length) return;
+    for (const stepId of doneIds) {
+      const key = phraseEntryKey(questIndex, stepId);
+      if (map[key]) continue;
+      const step = quest.steps?.find((s) => s.id === stepId);
+      if (!step) continue;
+      map[key] = {
+        questIndex,
+        stepId,
+        questTitle: quest.titleEn || quest.title,
+        japanese: step.label,
+        english: getStepEnglishPhrase(step),
+        learnedAt: Date.now(),
+      };
+      changed = true;
+    }
+  });
+  if (changed) saveLearnedPhrasesMap(map);
+}
+
+/** All phrases saved in the phrase book (フレーズ panel). */
+export function getLearnedPhrases() {
+  migrateLearnedPhrasesFromStepProgress();
+  const map = loadLearnedPhrasesMap();
+  const quests = LESSON_1_QUESTS;
+
+  return Object.values(map).sort((a, b) => {
+    if (a.questIndex !== b.questIndex) return a.questIndex - b.questIndex;
+    const stepsA = quests[a.questIndex]?.steps || [];
+    const stepsB = quests[b.questIndex]?.steps || [];
+    const orderA = stepsA.findIndex((s) => s.id === a.stepId);
+    const orderB = stepsB.findIndex((s) => s.id === b.stepId);
+    return orderA - orderB;
+  });
+}
+
+/** In-memory step progress for replay sessions (does not touch localStorage). */
+let questSessionSteps = null;
+
+export function isQuestReplay(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0) return false;
+  return questIndex < loadProgress();
+}
+
+/** Start a call session — step progress is tracked in memory for the active call. */
+export function beginQuestSession(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0) {
+    questSessionSteps = null;
+    return;
+  }
+  questSessionSteps = {
+    questIndex,
+    stepIds: isQuestReplay(questIndex) ? [] : [...loadCompletedStepIds(questIndex)],
+  };
+}
+
+export function endQuestSession() {
+  if (questSessionSteps && !isQuestReplay(questSessionSteps.questIndex)) {
+    saveCompletedStepIds(questSessionSteps.questIndex, questSessionSteps.stepIds);
+  }
+  questSessionSteps = null;
+}
+
+export function resetQuestSessionSteps(questIndex) {
+  if (questSessionSteps?.questIndex === questIndex) {
+    questSessionSteps.stepIds = [];
+  }
+}
+
+function getEffectiveCompletedStepIds(questIndex) {
+  if (questSessionSteps?.questIndex === questIndex) {
+    return [...questSessionSteps.stepIds];
+  }
+  return loadCompletedStepIds(questIndex);
+}
+
+function saveEffectiveCompletedStepIds(questIndex, stepIds) {
+  if (questSessionSteps?.questIndex === questIndex) {
+    questSessionSteps.stepIds = [...stepIds];
+    return;
+  }
+  saveCompletedStepIds(questIndex, stepIds);
+}
+
+/** Step IDs for the active call (session override when replaying). */
+export function getCompletedStepIds(questIndex = loadProgress()) {
+  return getEffectiveCompletedStepIds(questIndex);
+}
+
+/** Step IDs in quest order from a done-set. */
+function orderedStepIds(quest, doneSet) {
+  return quest.steps.filter((s) => doneSet.has(s.id)).map((s) => s.id);
+}
+
+function splitSessionChunks(sessionUserText) {
+  return (sessionUserText || "")
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Apply one utterance; if it matches a later step, fill earlier steps too. */
+function applyUtteranceToSteps(quest, userText, doneSet) {
+  const newly = [];
+  if (!userText?.trim()) return newly;
+
+  const remaining = quest.steps.filter((s) => !doneSet.has(s.id));
+  if (!remaining.length) return newly;
+
+  let highestMatch = -1;
+  for (let i = 0; i < remaining.length; i++) {
+    if (matchesStep(userText, remaining[i])) highestMatch = i;
+  }
+  if (highestMatch < 0) return newly;
+
+  for (let i = 0; i <= highestMatch; i++) {
+    if (!doneSet.has(remaining[i].id)) {
+      doneSet.add(remaining[i].id);
+      newly.push(remaining[i].id);
+    }
   }
   return newly;
 }
 
-/** Reconcile step progress — keep prior steps, extend when session matches next ones. */
+/** Mark newly matched steps from one utterance. */
+export function syncQuestStepsFromText(quest, userText, questIndex = loadProgress()) {
+  if (!quest?.steps?.length || !userText?.trim()) return [];
+
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
+  const newly = applyUtteranceToSteps(quest, userText, done);
+
+  if (newly.length) {
+    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
+    recordLearnedSteps(quest, questIndex, newly);
+  }
+  return newly;
+}
+
+/** Reconcile step progress from full session text and individual phrases. */
 export function syncQuestStepsFromSessionText(quest, sessionUserText, questIndex = loadProgress()) {
   if (!quest?.steps?.length) return [];
 
-  const prevDone = new Set(loadCompletedStepIds(questIndex));
-  const done = [];
-  const newly = [];
+  const prevDone = new Set(getEffectiveCompletedStepIds(questIndex));
+  const done = new Set(prevDone);
+  const allNewly = [];
 
-  for (const step of quest.steps) {
-    const already = prevDone.has(step.id);
-    const matched =
-      Boolean(sessionUserText?.trim()) && matchesStep(sessionUserText, step);
-    if (already || matched) {
-      if (matched && !already) newly.push(step.id);
-      done.push(step.id);
-    } else {
-      break;
-    }
+  const texts = [sessionUserText, ...splitSessionChunks(sessionUserText)];
+  for (const text of texts) {
+    allNewly.push(...applyUtteranceToSteps(quest, text, done));
   }
 
-  if (newly.length || done.length !== prevDone.size) {
-    saveCompletedStepIds(questIndex, done);
+  const newly = [...new Set(allNewly.filter((id) => !prevDone.has(id)))];
+  if (newly.length || done.size !== prevDone.size) {
+    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
+    if (newly.length) recordLearnedSteps(quest, questIndex, newly);
   }
   return newly;
 }
 
 export function isQuestStepsComplete(quest, questIndex = loadProgress()) {
   if (!quest?.steps?.length) return false;
-  const done = new Set(loadCompletedStepIds(questIndex));
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
   return quest.steps.every((step) => done.has(step.id));
 }
 
 export function getRemainingSteps(quest, questIndex = loadProgress()) {
   if (!quest?.steps) return [];
-  const done = new Set(loadCompletedStepIds(questIndex));
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
   return quest.steps.filter((step) => !done.has(step.id));
 }
 
 export function getQuestStepSummary(quest, questIndex = loadProgress()) {
   if (!quest?.steps?.length) return "";
-  const done = new Set(loadCompletedStepIds(questIndex));
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
   return quest.steps
     .map((step) => `${done.has(step.id) ? "✓" : "○"} ${step.label}`)
     .join(" · ");
@@ -401,17 +865,25 @@ export function matchesQuest(text, quest) {
   return false;
 }
 
-export function validateQuestCompletion(quest, userQuote, latestUtterance, sessionUserText = "") {
+export function validateQuestCompletion(
+  quest,
+  userQuote,
+  latestUtterance,
+  sessionUserText = "",
+  questIndex = loadProgress()
+) {
   const quote = (userQuote || "").trim();
   const latest = (latestUtterance || quote).trim();
-  const session = normalizeText(sessionUserText || latest);
+  const session = sessionUserText || latest;
 
-  if (!latest && !session) {
+  syncQuestStepsFromSessionText(quest, session, questIndex);
+
+  if (!latest && !normalizeText(session)) {
     return { ok: false, reason: "no_speech" };
   }
 
-  if (!isQuestStepsComplete(quest)) {
-    const remaining = getRemainingSteps(quest)
+  if (!isQuestStepsComplete(quest, questIndex)) {
+    const remaining = getRemainingSteps(quest, questIndex)
       .map((s) => s.label)
       .join(", ");
     return { ok: false, reason: "steps_incomplete", remaining };
@@ -435,8 +907,8 @@ export function validateQuestCompletion(quest, userQuote, latestUtterance, sessi
   return { ok: true, userQuote: quote || latest };
 }
 
-export function buildQuestRejectedToolMessage(quest, userUtterance = "") {
-  const remaining = getRemainingSteps(quest);
+export function buildQuestRejectedToolMessage(quest, userUtterance = "", questIndex = loadProgress()) {
+  const remaining = getRemainingSteps(quest, questIndex);
   const next = remaining[0];
   const remainText = remaining.length
     ? `Still need: ${remaining.map((s) => s.label).join(", ")}.`
@@ -487,6 +959,64 @@ export function buildQuestAlreadyRecordedToolMessage() {
   return "Quest already recorded. Do not repeat congratulations or mention completion again.";
 }
 
+export const BEGINNER_FREE_CHAT_PROMPT = `あなたは「ゲームカレッジの先生：ラーニー先生（初級モード）」です。対象は日本の小学生（英語初心者）。Minecraftを遊びながら英語を楽しく学べるようにサポートします。あなたは"先生"というより、子どもの「やりたい！」を応援する相棒です。最優先は安心感とモチベーション。
+■言語バランス（初級）
+・日本語多めを基本：目安 日本語50％／英語50％（状況により調整OK）
+・英語は短くする（単語〜短文）
+・英語を出したら、必ず直後に日本語で意味補足して「何を言ってるかわかる」状態にする
+・英語だけで話し続けない
+■英語を教える頻度
+・英語を"教える"のは会話の2回に1回程度
+・それ以外は、観察コメントや会話（雑談・共感・応援）を優先
+・テストっぽい聞き方をしない（Whyで詰めない）
+■教え方（発音・説明）
+・英語の発音は必ずネイティブ風に示す（モデルとして提示）
+・フレーズ練習のあと、必要なら短く分解して説明してよい
+・発音は大きく間違っていなければ過度に訂正しない
+・言えたらすぐ英語で短く称賛＋日本語でも褒める（例：Perfect!／Great! など）
+■間違いへの対応
+・間違えたら必ず最初に「Nice try!」と言ってから修正する
+・1回目はゆっくりモデル発音で言い直しを示す
+・同じミスが2回続いたら、単語ごとに区切って練習→最後につなげる
+・失敗は必ず成功体験に戻す（言えた部分を拾って褒める）
+■ユーザーが英単語だけ言ったとき
+・英語で短く褒める＋日本語でも褒める
+・会話をつなぐ短い質問を1つだけ
+・文脈が確実でない場合は、文脈不要の質問にする
+■沈黙時（ユーザー無言）の対応（重要：推察しない／豆知識固定）
+・実況はしない（状況を当てる実況も禁止）
+・推察しない（「集中してるのかな？」「何か見つかった？」など、ユーザーの状態や状況を推測する発言は禁止）
+・無言時は質問しない（質問0）
+・無言時は毎回「マイクラ豆知識」を1つだけ話す
+・豆知識は短く、明るく、安心感があるトーン（しつこくしない）
+・無言時の英語比率：英語20〜40％／日本語60〜80％（日本語多めでOK）
+・同じ豆知識テーマの連続を避ける
+・同じ英語キーワードを2回連続で使わない
+・無言時は英語を"教える"モードにしすぎない（練習強制・言わせるの禁止）
+■キャラ（ガードレール）
+・明るく元気、でもしつこくしない
+・否定しない／責めない／無理に英語を言わせない
+・子どもの「やりたい！」を最優先で応援する
+■最重要：連続フレーズ禁止
+・直前の自分の発話と、同じフレーズ／同じ意味の言い回しを2回連続で言わない
+■安全・マナー（先生としての対応）
+・下ネタ、性的な内容、体のことをからかう話題には先生として乗らない／詳しく答えない
+・そういう話題が出たら、短く「その話はしないよ」と伝えて、別の安全な話題（Minecraftや英語学習）に戻す
+・暴言、いじめ、差別につながる言い方はしない／肯定しない
+・危険行為や自傷につながる話題には協力しない
+■音声入力の言語認識（最重要）
+・ユーザーの音声入力は必ず日本語または英語として解釈すること
+・日本語と英語以外の言語として認識しないこと
+・ユーザーが話している言語が不明な場合は日本語として扱うこと
+■聞き取れなかったとき（雑音・わけのわからない入力）
+・文字起こしが空、意味不明、雑音だけのときは内容を推測しない
+・必ず音声で返事する（沈黙禁止）
+・「ごめんね、ちょっと聞き取れなかった！もう一回言ってくれる？」のように、やさしく聞き返す
+・1〜2文で短く。クエストを進めたり、英語フレーズを教えたりしない
+■自由会話モード
+・今はミッションなし。子どもが英語やMinecraftについてなんでも聞いてくる自由会話モード。
+・「英語で〇〇ってなんて言うの？」「次は何をすればいい？」など、気軽に答える。`;
+
 export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの「ラーニー先生」（初級・日本の小学生）。Minecraftサバイバルワールドの中で一緒に成長する相棒。安心感と楽しさが最優先。
 
 ■話し方: 日本語多め＋短い英語。英語の直後に日本語で意味補足。詰めない。Nice try! から直す。言えたら英語＋日本語で短く褒める。
@@ -506,6 +1036,7 @@ export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■Minecraft: 木→作業台→ツルハシ→石→食料。ゲーム内の体験を一緒に楽しむ。正確より伝わる英語を褒める。
 ■クエスト開始: マイクラで「まずやること」をワクワク短く → できたら英語。プレイ優先。
 ■無言時: 推察・質問禁止。マイクラ豆知識1つ（短い英語1つ＋日本語）。同テーマ連続NG。
+■聞き取れなかったとき: 文字起こしが空・雑音・意味不明なら推測しない。必ず音声で「聞き取れなかった、もう一回言って」とやさしく聞き返す（沈黙禁止）。
 ■安全: 明るく否定しない。不適切話題は短く断りMinecraft/英語へ。`;
 
 function buildNaturalFlowReminder(nextStep) {
@@ -611,12 +1142,23 @@ export function buildQuestInstructions(basePrompt, quest) {
   return `${basePrompt}\n${block}`;
 }
 
+export function buildSessionInstructions(selectedQuest) {
+  return selectedQuest
+    ? buildQuestInstructions(BEGINNER_VOICE_BASE_PROMPT, selectedQuest)
+    : BEGINNER_FREE_CHAT_PROMPT;
+}
+
 /** Authoritative step status after each user utterance — sent to Learny. */
-export function buildQuestStepGroundTruthNudge(quest, userUtterance, newlyCompletedIds = []) {
+export function buildQuestStepGroundTruthNudge(
+  quest,
+  userUtterance,
+  newlyCompletedIds = [],
+  questIndex = loadProgress()
+) {
   if (!quest) return "";
   const utterance = (userUtterance || "").trim();
-  const done = new Set(loadCompletedStepIds());
-  const remaining = getRemainingSteps(quest);
+  const done = new Set(loadCompletedStepIds(questIndex));
+  const remaining = getRemainingSteps(quest, questIndex);
   const completedLabels = quest.steps
     .filter((s) => done.has(s.id))
     .map((s) => s.label)

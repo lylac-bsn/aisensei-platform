@@ -23,7 +23,12 @@ service cloud.firestore {
         && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
         // remainingTime must be a number >= 0
         && request.resource.data.remainingTime is number
-        && request.resource.data.remainingTime >= 0;
+        && request.resource.data.remainingTime >= 0
+        // Optional beginner quest progress sync from student app
+        && (!('beginnerProgress' in request.resource.data)
+            || request.resource.data.beginnerProgress is map)
+        && (!('progressUpdatedAt' in request.resource.data)
+            || request.resource.data.progressUpdatedAt is timestamp);
 
       // Users cannot create or delete their own documents
       allow create, delete: if false;

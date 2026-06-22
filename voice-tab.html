@@ -787,18 +787,138 @@
             display: flex;
         }
         .quest-modal-inner {
+            position: relative;
             background: var(--surface);
-            border-radius: var(--radius-md);
-            padding: 28px 24px;
+            border-radius: 20px;
+            padding: 28px 24px 24px;
             max-width: 340px;
             width: 100%;
             text-align: center;
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+            overflow: visible;
+        }
+        .quest-modal-inner.lesson-complete {
+            padding-top: 72px;
+        }
+        .quest-modal-inner.mission-complete {
+            padding-top: 72px;
+        }
+        .quest-modal-celebrate {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            height: 120px;
+            pointer-events: none;
+            overflow: visible;
+        }
+        .quest-modal-celebrate[hidden] {
+            display: none;
+        }
+        .quest-confetti {
+            position: absolute;
+            inset: -20px -12px auto;
+            height: 120px;
+            overflow: visible;
+            pointer-events: none;
+        }
+        .confetti-piece {
+            position: absolute;
+            top: 28px;
+            left: 50%;
+            opacity: 0;
+            animation: confetti-burst 2.4s ease-out forwards;
+        }
+        .confetti-piece.square {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+        }
+        .confetti-piece.circle {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+        }
+        .confetti-piece.star {
+            width: 14px;
+            height: 14px;
+            background: transparent !important;
+        }
+        .confetti-piece.star::before {
+            content: "★";
+            font-size: 14px;
+            line-height: 1;
+            color: inherit;
+            display: block;
+        }
+        @keyframes confetti-burst {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, 0) rotate(0deg) scale(0.3);
+            }
+            15% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+                transform: translate(
+                        calc(-50% + var(--dx, 0px)),
+                        calc(var(--dy, 80px))
+                    )
+                    rotate(var(--rot, 180deg))
+                    scale(1);
+            }
+        }
+        .quest-modal-badge {
+            position: absolute;
+            left: 50%;
+            top: -72px;
+            transform: translateX(-50%);
+            width: 160px;
+            height: 160px;
+            background: none;
+            border: none;
+            padding: 0;
+            filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.22));
+            animation: quest-modal-badge-pop 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        .quest-modal-badge img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: contain;
+            opacity: 1;
+        }
+        @keyframes quest-modal-badge-pop {
+            0% {
+                transform: translateX(-50%) scale(0.5) rotate(-6deg);
+            }
+            100% {
+                transform: translateX(-50%) scale(1) rotate(0deg);
+            }
         }
         .quest-modal-inner h2 {
-            font-size: var(--text-xl);
+            font-size: 1.35rem;
+            font-weight: 800;
             color: var(--primary-dark);
             margin-bottom: 8px;
+            line-height: 1.35;
+        }
+        .quest-modal-inner.lesson-complete h2 {
+            animation: title-fade-up 0.5s ease 0.25s both;
+        }
+        .quest-modal-inner.mission-complete h2 {
+            animation: title-fade-up 0.5s ease 0.25s both;
+        }
+        @keyframes title-fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         .quest-modal-inner p {
             font-size: var(--text-base);
@@ -810,6 +930,9 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+        .quest-modal-inner.lesson-complete .quest-modal-actions {
+            animation: title-fade-up 0.5s ease 0.4s both;
         }
         .quest-modal-btn {
             border: none;
@@ -920,13 +1043,19 @@
 
     <!-- Quest completion modal -->
     <div class="quest-modal" id="quest-modal" aria-hidden="true">
-        <div class="quest-modal-inner">
+        <div class="quest-modal-inner" id="quest-modal-inner">
+            <div class="quest-modal-celebrate" id="quest-modal-celebrate" hidden>
+                <div class="quest-confetti" id="quest-confetti" aria-hidden="true"></div>
+                <div class="quest-modal-badge" aria-hidden="true">
+                    <img src="images/mission-complete-badge.png" alt="" width="160" height="160" decoding="async">
+                </div>
+            </div>
             <h2 id="quest-modal-title">おめでとう！</h2>
             <p id="quest-modal-body">クエストクリア！</p>
             <div class="quest-modal-actions">
                 <button type="button" class="quest-modal-btn primary" id="quest-modal-next">次のクエスト</button>
                 <button type="button" class="quest-modal-btn secondary" id="quest-modal-done">ここで終わる</button>
-                <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">最初から</button>
+                <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">バッジを受け取る</button>
             </div>
         </div>
     </div>
@@ -947,17 +1076,30 @@
             loadProgress,
             saveProgress,
             resetProgress,
-            getCurrentQuest,
+            getSelectedQuest,
+            getSelectedQuestIndex,
+            setSelectedQuestIndex,
+            clearSelectedQuest,
+            selectNextQuestAfterComplete,
+            getQuestIndex,
             getQuests,
             isLessonComplete,
             validateQuestCompletion,
             syncQuestStepsFromSessionText,
+            syncQuestStepsFromText,
             isQuestStepsComplete,
             getQuestStepSummary,
             getRemainingSteps,
+            getCompletedStepIds,
+            beginQuestSession,
+            endQuestSession,
+            isQuestReplay,
             loadCompletedStepIds,
             clearStepProgress,
+            recordLearnedSteps,
+            recordLessonBadge,
             buildQuestInstructions,
+            buildSessionInstructions,
             buildQuestOpeningNudge,
             buildQuestFarewellNudge,
             buildQuestRecordedToolMessage,
@@ -965,7 +1107,10 @@
             buildQuestStepGroundTruthNudge,
             buildQuestCompleteTrackerNudge,
             buildQuestAlreadyRecordedToolMessage,
+            isUnrecognizableUserInput,
+            buildUnclearInputRepeatNudge,
             BEGINNER_VOICE_BASE_PROMPT,
+            BEGINNER_FREE_CHAT_PROMPT,
         } from './js/quest-engine.js';
         import { LESSON_1_TITLE } from './js/quests/beginner-lesson1.js';
         import { resolveProxyUrl } from './js/proxy-config.js';
@@ -979,6 +1124,7 @@
         const projectId = "ai-sensei-8849b";
         const model = "gemini-live-2.5-flash-native-audio";
         const baseSystemInstructions = BEGINNER_VOICE_BASE_PROMPT;
+        const freeChatInstructions = BEGINNER_FREE_CHAT_PROMPT;
         const voice = "Kore";
         const temperature = 1.0;
         const enableProactiveAudio = true;
@@ -1043,8 +1189,11 @@
         const btnSend = document.getElementById('btn-send');
         const chatArea = document.getElementById('chat-area');
         const emptyState = document.getElementById('empty-state');
+        const emptyStateTitle = emptyState?.querySelector('.empty-state-title');
+        const emptyStateDesc = emptyState?.querySelector('.empty-state-desc span');
         const chatInput = document.getElementById('chat-input');
         const questBanner = document.getElementById('quest-banner');
+        const questCardWrap = document.querySelector('.quest-card-wrap');
         const questBannerNum = document.getElementById('quest-banner-num');
         const questBannerTitleEn = document.getElementById('quest-banner-title-en');
         const questBannerGoal = document.getElementById('quest-banner-goal');
@@ -1054,6 +1203,9 @@
         const questSegments = document.getElementById('quest-segments');
         const questStars = document.getElementById('quest-stars');
         const questModal = document.getElementById('quest-modal');
+        const questModalInner = document.getElementById('quest-modal-inner');
+        const questModalCelebrate = document.getElementById('quest-modal-celebrate');
+        const questConfetti = document.getElementById('quest-confetti');
         const questModalTitle = document.getElementById('quest-modal-title');
         const questModalBody = document.getElementById('quest-modal-body');
         const questModalNext = document.getElementById('quest-modal-next');
@@ -1066,6 +1218,7 @@
 
         // Quest session state
         let activeQuest = null;
+        let activeQuestSessionIndex = null;
         let questSessionActive = false;
         let questCompleting = false;
         let intentionalDisconnect = false;
@@ -1088,6 +1241,12 @@
         let questOpeningRetryTimer = null;
         let questSessionAssistantSeen = false;
         let questCompleteFallbackTimer = null;
+        let missionAdvanceTimer = null;
+        let unclearInputRecoveryTimer = null;
+        let assistantSpokeSinceLastUserTurn = true;
+        let lastFinishedUserTranscriptAt = 0;
+        let lastUnclearInputNudgeKey = "";
+        let lastUnclearInputNudgeAt = 0;
         const questSfx = new QuestSfx();
 
         // ============================================
@@ -1107,7 +1266,7 @@
             }
         }
 
-        function renderQuestSteps(quest) {
+        function renderQuestSteps(quest, questIndex = getSelectedQuestIndex()) {
             questSteps.innerHTML = '';
             if (!quest?.steps?.length) {
                 questSteps.hidden = true;
@@ -1120,7 +1279,7 @@
             heading.textContent = 'ステップ：';
             questSteps.appendChild(heading);
 
-            const done = new Set(loadCompletedStepIds());
+            const done = new Set(getCompletedStepIds(questIndex));
             quest.steps.forEach((step, index) => {
                 const isDone = done.has(step.id);
                 const item = document.createElement('span');
@@ -1206,45 +1365,65 @@
             const quests = getQuests();
             const total = quests.length;
             const earned = loadProgress();
+            const selectedIndex = getSelectedQuestIndex();
+            const selectedQuest = getSelectedQuest();
+
+            renderQuestStars();
+
+            if (questCardWrap) {
+                questCardWrap.hidden = selectedQuest === null;
+            }
+
+            if (!selectedQuest) {
+                updateEmptyState();
+                return;
+            }
 
             renderQuestSegments(earned, total);
             questBannerProgress.textContent = `${earned} / ${total}`;
 
-            if (isLessonComplete()) {
-                questBanner.classList.add('lesson-complete');
-                questBannerNum.textContent = '✓';
-                questBannerTitleEn.textContent = LESSON_1_TITLE;
-                questBannerGoal.textContent = 'レッスンクリア！よくできました！';
-                questSteps.hidden = true;
-                questSteps.innerHTML = '';
-                questBannerHint.textContent = `${total} / ${total} クエスト完了`;
-                return;
-            }
+            const replaying = isQuestReplay(selectedIndex);
+            questBanner.classList.toggle('lesson-complete', isLessonComplete() && !replaying);
 
-            questBanner.classList.remove('lesson-complete');
-            const quest = getCurrentQuest();
-            if (!quest) return;
-
-            questBannerNum.textContent = String(quest.id);
-            questBannerTitleEn.textContent = quest.titleEn || quest.title;
-            questBannerGoal.textContent = `${quest.goal}！！`;
-            renderQuestSteps(quest);
-            const stepSummary = getQuestStepSummary(quest);
-            const remaining = getRemainingSteps(quest);
-            if (stepSummary) {
+            questBannerNum.textContent = String(selectedQuest.id);
+            questBannerTitleEn.textContent = selectedQuest.titleEn || selectedQuest.title;
+            questBannerGoal.textContent = `${selectedQuest.goal}！！`;
+            renderQuestSteps(selectedQuest, selectedIndex);
+            const stepSummary = getQuestStepSummary(selectedQuest, selectedIndex);
+            const remaining = getRemainingSteps(selectedQuest, selectedIndex);
+            if (replaying) {
+                questBannerHint.textContent = stepSummary
+                    ? `もう一度チャレンジ！ ステップ：${stepSummary}`
+                    : 'もう一度チャレンジ！右上の「はじめる」を押してね';
+            } else if (stepSummary) {
                 questBannerHint.textContent = remaining.length
                     ? `ステップ：${stepSummary}`
-                    : `すべてのステップ完了！ ${quest.hint || ""}`;
+                    : `すべてのステップ完了！ ${selectedQuest.hint || ""}`;
             } else {
-                questBannerHint.textContent = quest.hint ? `ヒント：${quest.hint}` : "";
+                questBannerHint.textContent = selectedQuest.hint ? `ヒント：${selectedQuest.hint}` : "";
             }
+            updateEmptyState();
         }
 
-        function getSessionUserText() {
-            return chatMessages
-                .filter((m) => m.type === "user-transcript")
-                .map((m) => m.text)
-                .join(" ");
+        function updateEmptyState() {
+            if (!emptyStateTitle || !emptyStateDesc) return;
+            const quest = getSelectedQuest();
+            const questIndex = getSelectedQuestIndex();
+            if (quest) {
+                if (isQuestReplay(questIndex)) {
+                    emptyStateTitle.textContent = 'もう一度チャレンジ！';
+                    emptyStateDesc.textContent =
+                        '右上の「はじめる」を押して、このミッションをもう一度やろう！';
+                } else {
+                    emptyStateTitle.textContent = 'ミッションの準備OK！';
+                    emptyStateDesc.textContent =
+                        '右上の「はじめる」を押して、ラーニー先生に電話してミッションを始めよう！';
+                }
+            } else {
+                emptyStateTitle.textContent = 'ラーニー先生に電話しよう！';
+                emptyStateDesc.textContent =
+                    '右上の「はじめる」を押して、英語やマイクラについてなんでも聞いてみよう！';
+            }
         }
 
         function notifyParentProgress() {
@@ -1255,31 +1434,295 @@
             }
         }
 
-        function syncQuestStepsAndBanner() {
-            if (!activeQuest || questCompleting) return [];
-            const newly = syncQuestStepsFromSessionText(
+        function notifySelectedQuestUpdate() {
+            try {
+                window.parent.postMessage(
+                    {
+                        type: "gc_selected_quest_update",
+                        questIndex: getSelectedQuestIndex(),
+                    },
+                    "*"
+                );
+            } catch {
+                // ignore cross-origin
+            }
+        }
+
+        function notifyCallState(extra = {}) {
+            try {
+                window.parent.postMessage(
+                    { type: "gc_call_state", state: actionState, ...extra },
+                    "*"
+                );
+            } catch {
+                // ignore cross-origin
+            }
+        }
+
+        function clearConversationHistory() {
+            chatMessages = [];
+            assistantSpokeSinceLastUserTurn = true;
+            lastFinishedUserTranscriptAt = 0;
+            lastUnclearInputNudgeKey = "";
+            lastUnclearInputNudgeAt = 0;
+            clearUnclearInputRecoveryTimer();
+            renderChat();
+        }
+
+        function resetIdleCallState() {
+            isAutoReconnecting = false;
+            justReconnected = false;
+            clearQuestAdvanceTimer();
+            clearMissionAdvanceTimer();
+            clearQuestTeardownTimers();
+            cancelPendingNextQuestSession();
+            awaitingQuestFarewell = false;
+            pendingQuestTeardown = null;
+            farewellAssistantSeen = false;
+            farewellSessionClient = null;
+            questCompleting = false;
+            questSessionActive = false;
+            questOpeningSent = false;
+            questHandoffActive = false;
+            activeQuest = null;
+            activeQuestSessionIndex = null;
+            resetQuestSessionState();
+        }
+
+        async function ensureStaleConnectionClosed() {
+            if (!client && !connected && !audioStreaming) return;
+            intentionalDisconnect = true;
+            disconnectAPI();
+            await new Promise((r) => setTimeout(r, 200));
+        }
+
+        function applyParentQuestSelection(questIndex) {
+            const prevIndex = getSelectedQuestIndex();
+            if (questIndex === null || questIndex === "free") {
+                clearSelectedQuest();
+            } else if (!setSelectedQuestIndex(Number(questIndex))) {
+                return false;
+            }
+            const nextIndex = getSelectedQuestIndex();
+            if (prevIndex !== nextIndex) {
+                clearConversationHistory();
+                if (actionState === "idle") {
+                    resetIdleCallState();
+                }
+            }
+            updateQuestBanner();
+            notifySelectedQuestUpdate();
+            return true;
+        }
+
+        function endActiveCall({ fromParent = false } = {}) {
+            if (actionState !== "active" && actionState !== "connecting") {
+                return false;
+            }
+            resetIdleCallState();
+            disconnectAPI();
+            actionState = "idle";
+            updateActionUI();
+            if (fromParent) {
+                notifyCallState({ selectionApplied: true });
+            }
+            return true;
+        }
+
+        function handleParentMessage(event) {
+            const data = event.data;
+            if (!data?.type) return;
+
+            switch (data.type) {
+                case "gc_quest_select":
+                    applyParentQuestSelection(data.questIndex);
+                    break;
+                case "gc_quest_clear":
+                    applyParentQuestSelection("free");
+                    break;
+                case "gc_progress_reset":
+                    applyProgressReset(data.questIndex ?? 0);
+                    break;
+                case "gc_end_call":
+                    endActiveCall({ fromParent: true });
+                    break;
+                case "gc_end_call_and_select":
+                    endActiveCall({ fromParent: false });
+                    applyParentQuestSelection(data.questIndex);
+                    notifyCallState({ selectionApplied: true });
+                    break;
+                case "gc_end_call_and_reset":
+                    endActiveCall({ fromParent: false });
+                    notifyCallState({ selectionApplied: true });
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        function applyProgressReset(questIndex = 0) {
+            clearQuestAdvanceTimer();
+            resetProgress();
+            hideQuestModal();
+            if (Number.isFinite(questIndex) && questIndex >= 0) {
+                setSelectedQuestIndex(questIndex);
+            } else {
+                clearSelectedQuest();
+            }
+            renderQuestStars();
+            updateQuestBanner();
+            updateActionUI();
+            notifySelectedQuestUpdate();
+            notifyParentProgress();
+        }
+
+        function buildConnectErrorMessage() {
+            const selected = getSelectedQuest();
+            const isLocalProxy =
+                proxyUrl.includes("127.0.0.1") || proxyUrl.includes("localhost");
+            const proxyHint = isLocalProxy
+                ? " ローカルプロキシを使う場合は proxy-server を起動してください（?proxy=local）。"
+                : "";
+            if (selected) {
+                return `クエストへの接続に失敗しました。「はじめる」をもう一度押してください。${proxyHint}`;
+            }
+            return `ラーニー先生への接続に失敗しました。「はじめる」をもう一度押してください。${proxyHint}`;
+        }
+
+        function clearUnclearInputRecoveryTimer() {
+            if (unclearInputRecoveryTimer) {
+                clearTimeout(unclearInputRecoveryTimer);
+                unclearInputRecoveryTimer = null;
+            }
+        }
+
+        function markAssistantResponded() {
+            assistantSpokeSinceLastUserTurn = true;
+            clearUnclearInputRecoveryTimer();
+        }
+
+        function sendUnclearInputRepeatNudge(utterance = "") {
+            if (!client?.connected || awaitingQuestFarewell || questCompleting) return false;
+
+            const dedupeKey = utterance.trim() || "(empty)";
+            const now = Date.now();
+            if (
+                lastUnclearInputNudgeKey === dedupeKey &&
+                now - lastUnclearInputNudgeAt < 8000
+            ) {
+                return false;
+            }
+
+            lastUnclearInputNudgeKey = dedupeKey;
+            lastUnclearInputNudgeAt = now;
+            client.sendTextMessage(buildUnclearInputRepeatNudge(utterance));
+            return true;
+        }
+
+        function scheduleUnclearInputRecoveryIfSilent(utterance = "") {
+            clearUnclearInputRecoveryTimer();
+            unclearInputRecoveryTimer = setTimeout(() => {
+                unclearInputRecoveryTimer = null;
+                if (assistantSpokeSinceLastUserTurn || !client?.connected) return;
+                if (awaitingQuestFarewell || questCompleting) return;
+                sendUnclearInputRepeatNudge(utterance);
+            }, 2800);
+        }
+
+        function handleFinishedUserTranscript() {
+            const utterance = getLatestFinishedUserUtterance();
+            lastFinishedUserTranscriptAt = Date.now();
+            assistantSpokeSinceLastUserTurn = false;
+
+            if (!isUnrecognizableUserInput(utterance)) {
+                return false;
+            }
+
+            sendUnclearInputRepeatNudge(utterance);
+            scheduleUnclearInputRecoveryIfSilent(utterance);
+            return true;
+        }
+
+        function getSessionUserText() {
+            return chatMessages
+                .filter((m) => m.type === "user-transcript")
+                .map((m) => m.text)
+                .join(" ");
+        }
+
+        function syncQuestStepsAndBanner(latestUtterance = '') {
+            if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return [];
+            let newly = [];
+            if (latestUtterance?.trim()) {
+                newly = syncQuestStepsFromText(
+                    activeQuest,
+                    latestUtterance,
+                    activeQuestSessionIndex
+                );
+            }
+            const sessionNewly = syncQuestStepsFromSessionText(
                 activeQuest,
-                getSessionUserText()
+                getSessionUserText(),
+                activeQuestSessionIndex
             );
-            if (newly.length) {
+            const allNewly = [...new Set([...newly, ...sessionNewly])];
+            if (allNewly.length) {
                 updateQuestBanner();
                 notifyParentProgress();
             }
-            return newly;
+            return allNewly;
+        }
+
+        function launchQuestConfetti() {
+            if (!questConfetti) return;
+            questConfetti.innerHTML = '';
+            const colors = ['#FFD54F', '#FFC107', '#4CAF50', '#66BB6A', '#42A5F5', '#FF8A80'];
+            const shapes = ['star', 'square', 'circle'];
+            const count = 36;
+            for (let i = 0; i < count; i++) {
+                const piece = document.createElement('span');
+                const shape = shapes[i % shapes.length];
+                piece.className = `confetti-piece ${shape}`;
+                const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                const dist = 40 + Math.random() * 90;
+                const dx = Math.cos(angle) * dist;
+                const dy = 20 + Math.sin(angle) * dist * 0.6 + Math.random() * 40;
+                piece.style.setProperty('--dx', `${dx}px`);
+                piece.style.setProperty('--dy', `${dy}px`);
+                piece.style.setProperty('--rot', `${Math.round(Math.random() * 540 - 270)}deg`);
+                piece.style.animationDelay = `${Math.random() * 0.35}s`;
+                if (shape === 'star') {
+                    piece.style.color = colors[i % colors.length];
+                } else {
+                    piece.style.backgroundColor = colors[i % colors.length];
+                }
+                questConfetti.appendChild(piece);
+            }
         }
 
         function showQuestModal(completedQuest, lessonDone) {
+            questModalInner.classList.remove('lesson-complete', 'mission-complete');
             if (lessonDone) {
-                questModalTitle.textContent = 'レッスンクリア！';
-                questModalBody.textContent = `${LESSON_1_TITLE}のクエストを全部クリアしたよ！すごい！`;
+                questModalInner.classList.add('lesson-complete');
+                questModalCelebrate.hidden = false;
+                launchQuestConfetti();
+                questModalTitle.textContent = 'レッスンクリアおめでとう！';
+                questModalBody.textContent = '';
+                questModalBody.hidden = true;
                 questModalNext.style.display = 'none';
                 questModalDone.style.display = 'none';
                 questModalReset.style.display = 'block';
+                questModalReset.textContent = 'バッジを受け取る';
                 questSfx.playLessonComplete();
             } else {
+                questModalInner.classList.remove('lesson-complete', 'mission-complete');
+                questModalCelebrate.hidden = true;
+                if (questConfetti) questConfetti.innerHTML = '';
                 questModalTitle.textContent = `${completedQuest?.title || 'クエスト'}クリア！`;
+                questModalBody.hidden = false;
                 questModalBody.textContent = `${completedQuest?.goal || ''}、できたね！次のクエストに進む？`;
                 questModalNext.style.display = 'block';
+                questModalNext.textContent = '次のクエスト';
                 questModalDone.style.display = 'block';
                 questModalReset.style.display = 'none';
             }
@@ -1290,6 +1733,9 @@
         function hideQuestModal() {
             questModal.classList.remove('active');
             questModal.setAttribute('aria-hidden', 'true');
+            questModalInner.classList.remove('lesson-complete', 'mission-complete');
+            questModalCelebrate.hidden = true;
+            if (questConfetti) questConfetti.innerHTML = '';
         }
 
         function clearQuestAdvanceTimer() {
@@ -1300,7 +1746,7 @@
         }
 
         function showQuestToast(completedQuest) {
-            const nextQuest = getCurrentQuest();
+            const nextQuest = getSelectedQuest();
             const earned = loadProgress();
             const total = getQuests().length;
             questBanner.classList.add('celebrating');
@@ -1331,6 +1777,13 @@
             updateQuestBanner();
         }
 
+        function clearMissionAdvanceTimer() {
+            if (missionAdvanceTimer) {
+                clearTimeout(missionAdvanceTimer);
+                missionAdvanceTimer = null;
+            }
+        }
+
         function scheduleAutoAdvance() {
             clearQuestAdvanceTimer();
             questAdvanceTimer = setTimeout(() => {
@@ -1357,7 +1810,7 @@
                     questCompleting ||
                     awaitingQuestFarewell ||
                     !activeQuest ||
-                    !isQuestStepsComplete(activeQuest)
+                    !isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
                 ) {
                     return;
                 }
@@ -1459,7 +1912,7 @@
             if (!awaitingQuestFarewell || !pendingQuestTeardown) return;
             clearQuestTeardownTimers();
 
-            const { completed, lessonDone } = pendingQuestTeardown;
+            const { completed, lessonDone, isNewClear } = pendingQuestTeardown;
             awaitingQuestFarewell = false;
             pendingQuestTeardown = null;
             questCompleting = false;
@@ -1471,8 +1924,14 @@
             if (lessonDone) {
                 disconnectAPI(false, keepAudio);
                 showQuestModal(completed, true);
-            } else {
+                actionState = 'idle';
+                updateActionUI();
+            } else if (isNewClear) {
                 beginNextQuestHandoff(completed);
+            } else {
+                disconnectAPI(false, keepAudio);
+                actionState = 'idle';
+                updateActionUI();
             }
         }
 
@@ -1505,10 +1964,7 @@
         }
 
         function configureGeminiClient(geminiClient, questForSession, { preconnect = false } = {}) {
-            geminiClient.systemInstructions = buildQuestInstructions(
-                baseSystemInstructions,
-                questForSession
-            );
+            geminiClient.systemInstructions = buildSessionInstructions(questForSession);
             geminiClient.inputAudioTranscription = enableInputTranscription;
             geminiClient.outputAudioTranscription = enableOutputTranscription;
             geminiClient.googleGrounding = enableGrounding;
@@ -1585,7 +2041,7 @@
         function prepareNextQuestSession() {
             if (pendingNextConnectPromise || pendingNextClient || isLessonComplete()) return;
 
-            const questForSession = getCurrentQuest();
+            const questForSession = getSelectedQuest();
             if (!questForSession) return;
 
             pendingNextConnectPromise = (async () => {
@@ -1617,22 +2073,33 @@
             })();
         }
 
-        async function beginNextQuestHandoff(completed) {
+        async function beginNextQuestHandoff(completed, { playReadySound = true, pauseBeforeConnect = 0, skipInitialDisconnect = false } = {}) {
             showQuestToast(completed);
             setQuestBannerTransitioning(true);
             questHandoffActive = true;
             clearChatOnNextStart = true;
 
             questSessionActive = false;
-            disconnectAPI(false, true, false, true);
-            // Play right after disconnect so kids know the call continues (next quest loading).
-            questSfx.playQuestReady();
+            if (!skipInitialDisconnect) {
+                disconnectAPI(false, true, false, true);
+                if (playReadySound) {
+                    questSfx.playQuestReady();
+                }
+                if (pauseBeforeConnect > 0) {
+                    await new Promise((r) => setTimeout(r, pauseBeforeConnect));
+                }
+            }
 
             actionState = 'connecting';
             questSessionActive = true;
             questOpeningSent = false;
-            activeQuest = getCurrentQuest();
+            activeQuest = getSelectedQuest();
+            activeQuestSessionIndex = getSelectedQuestIndex();
             resetQuestSessionState();
+            if (activeQuestSessionIndex !== null) {
+                beginQuestSession(activeQuestSessionIndex);
+            }
+            updateQuestBanner();
             updateActionUI();
 
             if (pendingNextConnectPromise) {
@@ -1687,7 +2154,7 @@
                 questSessionActive = false;
                 questOpeningSent = false;
                 cancelPendingNextQuestSession();
-                addMessage('次のクエストへの接続に失敗しました。「はじめる」をもう一度押してください。', 'system');
+                addMessage(buildConnectErrorMessage(), 'system');
                 disconnectAPI(false, true, false, audioStreaming);
                 updateActionUI();
             }
@@ -1719,6 +2186,9 @@
             farewellAssistantSeen = false;
             farewellSessionClient = null;
             questCompleting = false;
+            assistantSpokeSinceLastUserTurn = true;
+            lastFinishedUserTranscriptAt = 0;
+            clearUnclearInputRecoveryTimer();
             clearQuestTeardownTimers();
             clearQuestOpeningRetry();
         }
@@ -1752,19 +2222,20 @@
         function tryAcceptQuestComplete(source, userQuote = '') {
             if (questCompleting || !activeQuest || !questSessionActive) return null;
 
-            syncQuestStepsAndBanner();
-
-            if (!isQuestStepsComplete(activeQuest)) return null;
-
             const latest =
                 source === 'tool'
                     ? getLatestUserUtterance(true)
                     : getLatestFinishedUserUtterance();
+            syncQuestStepsAndBanner(latest);
+
+            if (!isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return null;
+
             const validation = validateQuestCompletion(
                 activeQuest,
                 userQuote,
                 latest,
-                getSessionUserText()
+                getSessionUserText(),
+                activeQuestSessionIndex
             );
             if (!validation.ok) return null;
 
@@ -1777,29 +2248,55 @@
             questCompleting = true;
 
             const completed = activeQuest;
-            const questIndex = loadProgress();
-            const nextIndex = questIndex + 1;
-            saveProgress(nextIndex);
+            const completedIndex = activeQuestSessionIndex;
+            const currentProgress = loadProgress();
+            const isNewClear = completedIndex === currentProgress;
+            let lessonDone = false;
+
+            if (isNewClear) {
+                recordLearnedSteps(
+                    completed,
+                    completedIndex,
+                    completed.steps.map((s) => s.id)
+                );
+                const nextIndex = currentProgress + 1;
+                saveProgress(nextIndex);
+                clearStepProgress(completedIndex);
+                lessonDone = nextIndex >= getQuests().length;
+                awardQuestStar(nextIndex - 1, true);
+                if (lessonDone) {
+                    recordLessonBadge("lesson1");
+                    setSelectedQuestIndex(completedIndex);
+                } else {
+                    selectNextQuestAfterComplete();
+                }
+            } else {
+                recordLearnedSteps(
+                    completed,
+                    completedIndex,
+                    completed.steps.map((s) => s.id)
+                );
+            }
+
             notifyParentProgress();
-            clearStepProgress(questIndex);
-            const lessonDone = nextIndex >= getQuests().length;
+            notifySelectedQuestUpdate();
 
             activeQuest = null;
+            activeQuestSessionIndex = null;
             awaitingQuestFarewell = true;
             farewellSessionClient = client;
             farewellAssistantSeen = false;
             chatMessagesAtFarewell = chatMessages.length;
-            pendingQuestTeardown = { completed, lessonDone, userQuote };
+            pendingQuestTeardown = { completed, lessonDone, userQuote, isNewClear };
             resetSilenceTimer();
-
-            questSfx.playQuestComplete();
-            awardQuestStar(nextIndex - 1, true);
+            clearQuestCompleteFallbackTimer();
 
             if (lessonDone) {
+                questSfx.playLessonComplete();
                 cancelPendingNextQuestSession();
+            } else {
+                questSfx.playQuestComplete();
             }
-
-            clearQuestCompleteFallbackTimer();
 
             if (client?.connected && source !== 'tool') {
                 client.sendTextMessage(buildQuestFarewellNudge(completed, userQuote));
@@ -1811,7 +2308,6 @@
                     }
                 }, 3500);
             } else if (source === 'tool') {
-                // Tool response already instructs one celebration — skip text nudge and backup timer.
                 farewellNudgeTimer = setTimeout(() => {
                     if (awaitingQuestFarewell && !farewellAssistantSeen && client?.connected) {
                         client.sendTextMessage(
@@ -1830,17 +2326,17 @@
         }
 
         function maybeMatchQuestFromTranscript(finished) {
-            if (!finished || !activeQuest || questCompleting) return;
+            if (!finished || !activeQuest || questCompleting || activeQuestSessionIndex === null) return;
             const utterance = getLatestFinishedUserUtterance();
-            const before = new Set(loadCompletedStepIds());
-            syncQuestStepsAndBanner();
-            const after = loadCompletedStepIds();
+            const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
+            syncQuestStepsAndBanner(utterance);
+            const after = getCompletedStepIds(activeQuestSessionIndex);
             const newly = after.filter((id) => !before.has(id));
             if (newly.length) {
                 updateQuestBanner();
             }
 
-            const allComplete = isQuestStepsComplete(activeQuest);
+            const allComplete = isQuestStepsComplete(activeQuest, activeQuestSessionIndex);
             if (!client?.connected || !utterance) return;
 
             if (allComplete) {
@@ -1850,7 +2346,7 @@
             }
 
             client.sendTextMessage(
-                buildQuestStepGroundTruthNudge(activeQuest, utterance, newly)
+                buildQuestStepGroundTruthNudge(activeQuest, utterance, newly, activeQuestSessionIndex)
             );
         }
 
@@ -1864,12 +2360,12 @@
         });
 
         questModalReset.addEventListener('click', () => {
-            clearQuestAdvanceTimer();
-            resetProgress();
             hideQuestModal();
-            renderQuestStars();
-            updateQuestBanner();
-            updateActionUI();
+            try {
+                window.parent.postMessage({ type: 'gc_open_panel', panel: 'badges' }, '*');
+            } catch {
+                // ignore cross-origin
+            }
         });
 
         renderQuestStars();
@@ -1887,15 +2383,6 @@
         }
 
         function updateActionUI() {
-            if (isLessonComplete() && actionState === 'idle') {
-                btnAction.className = 'action-btn idle header-call-btn';
-                setActionBtnContent(ICON_REFRESH, 'Start over');
-                statusDot.className = 'status-indicator';
-                statusText.textContent = 'オフライン';
-                btnMute.classList.remove('visible');
-                return;
-            }
-
             // Header status dot
             if (connected) {
                 statusDot.className = 'status-indicator connected';
@@ -1933,6 +2420,8 @@
                     btnMute.title = 'マイクミュート';
                 }
             }
+
+            notifyCallState();
         }
 
         function toggleMute() {
@@ -2081,7 +2570,7 @@
                     }
                     proactivePrompt += "Check in briefly with 1-2 sentences.";
                     if (questSessionActive && activeQuest && !awaitingQuestFarewell) {
-                        const next = getRemainingSteps(activeQuest)[0];
+                        const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
                         if (next) {
                             proactivePrompt +=
                                 " Beginner level: check in naturally about their Minecraft play. " +
@@ -2117,12 +2606,14 @@
         function handleMessage(message, sourceClient = client) {
             switch (message.type) {
                 case MultimodalLiveResponseType.TEXT:
+                    markAssistantResponded();
                     markFarewellAssistantActivity(sourceClient);
                     markQuestSessionActivity(sourceClient);
                     addMessage(message.data, 'assistant');
                     break;
 
                 case MultimodalLiveResponseType.AUDIO:
+                    markAssistantResponded();
                     markFarewellAssistantActivity(sourceClient);
                     markQuestSessionActivity(sourceClient);
                     if (audioPlayer) audioPlayer.play(message.data);
@@ -2133,10 +2624,16 @@
                     resetSilenceTimer();
                     ensureMicActive();
                     addMessage(message.data.text, 'user-transcript', 'append', message.data.finished);
-                    maybeMatchQuestFromTranscript(message.data.finished);
+                    if (message.data.finished) {
+                        const unclear = handleFinishedUserTranscript();
+                        if (!unclear) {
+                            maybeMatchQuestFromTranscript(true);
+                        }
+                    }
                     break;
 
                 case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
+                    markAssistantResponded();
                     markFarewellAssistantActivity(sourceClient);
                     markQuestSessionActivity(sourceClient);
                     addMessage(message.data.text, 'assistant', 'append', message.data.finished);
@@ -2186,8 +2683,9 @@
                                 client.sendToolResponse(name, id, {
                                     result: 'not_yet',
                                     message: buildQuestRejectedToolMessage(
-                                        questForTool || getCurrentQuest(),
-                                        latestUtterance
+                                        questForTool || getSelectedQuest(),
+                                        latestUtterance,
+                                        activeQuestSessionIndex ?? loadProgress()
                                     ),
                                 });
                             }
@@ -2234,7 +2732,19 @@
                             }, 1000);
                         }
                     }
-                    if (!questTeardownTimer) {
+                    if (
+                        !assistantSpokeSinceLastUserTurn &&
+                        lastFinishedUserTranscriptAt &&
+                        Date.now() - lastFinishedUserTranscriptAt < 12000
+                    ) {
+                        const utterance = getLatestFinishedUserUtterance();
+                        const noModelOutput =
+                            (message.usageMetadata?.candidatesTokenCount || 0) === 0;
+                        if (isUnrecognizableUserInput(utterance) || noModelOutput) {
+                            scheduleUnclearInputRecoveryIfSilent(utterance);
+                        }
+                    }
+                    if (!questTeardownTimer && !awaitingQuestFarewell) {
                         startSilenceTimer();
                     }
                     break;
@@ -2266,7 +2776,7 @@
                 if (!isAutoReconnecting) justReconnected = false;
 
                 client = new GeminiLiveAPI(proxyUrl, projectId, model);
-                const questForSession = getCurrentQuest();
+                const questForSession = activeQuest ?? getSelectedQuest();
                 configureGeminiClient(client, questForSession);
                 attachClientHandlers(client);
 
@@ -2296,6 +2806,10 @@
 
         function disconnectAPI(isAutoReconnect = false, keepAudioPlayer = false, preserveQuestAdvance = false, keepMicStreamer = false) {
             resetSilenceTimer();
+            clearUnclearInputRecoveryTimer();
+            if (!isAutoReconnect) {
+                endQuestSession();
+            }
 
             if (!isAutoReconnect) {
                 if (!preserveQuestAdvance) {
@@ -2385,52 +2899,44 @@
         // Unified Start / Stop
         // ============================================
         async function handleActionButton() {
-            if (actionState === 'connecting') return;
-
-            if (isLessonComplete() && actionState === 'idle') {
-                resetProgress();
-                renderQuestStars();
-                updateQuestBanner();
+            if (actionState === 'connecting') {
+                resetIdleCallState();
+                disconnectAPI();
+                actionState = 'idle';
                 updateActionUI();
                 return;
             }
 
             if (actionState === 'active') {
-                clearQuestAdvanceTimer();
-                clearQuestTeardownTimers();
-                cancelPendingNextQuestSession();
-                awaitingQuestFarewell = false;
-                pendingQuestTeardown = null;
-                farewellAssistantSeen = false;
-                questCompleting = false;
-                questSessionActive = false;
-                activeQuest = null;
+                resetIdleCallState();
                 disconnectAPI();
-                return;
-            }
-
-            activeQuest = getCurrentQuest();
-            if (!activeQuest) {
-                updateQuestBanner();
+                actionState = 'idle';
                 updateActionUI();
                 return;
             }
 
-            // Idle → connect + auto-start mic
+            activeQuest = getSelectedQuest();
+            activeQuestSessionIndex = activeQuest ? getSelectedQuestIndex() : null;
+            questSessionActive = !!activeQuest;
+
             actionState = 'connecting';
-            questSessionActive = true;
             questOpeningSent = false;
             resetQuestSessionState();
             updateActionUI();
 
+            clearConversationHistory();
+
+            if (activeQuestSessionIndex !== null) {
+                beginQuestSession(activeQuestSessionIndex);
+                updateQuestBanner();
+            }
+
             if (clearChatOnNextStart) {
                 clearChatOnNextStart = false;
-                chatMessages = [];
-                renderChat();
-                emptyState.style.display = '';
             }
 
             try {
+                await ensureStaleConnectionClosed();
                 await questSfx.ensureContext();
                 await connectAPI();
 
@@ -2439,16 +2945,17 @@
                     throw new Error('Microphone not ready');
                 }
 
-                announceQuestStart();
+                if (activeQuest) {
+                    announceQuestStart();
+                }
 
                 actionState = 'active';
                 updateActionUI();
             } catch (error) {
+                resetIdleCallState();
                 actionState = 'idle';
-                questSessionActive = false;
-                questOpeningSent = false;
-                addMessage('次のクエストへの接続に失敗しました。「はじめる」をもう一度押してください。', 'system');
-                disconnectAPI(false, true, false, audioStreaming);
+                addMessage(buildConnectErrorMessage(), 'system');
+                disconnectAPI(false, true, false, false);
                 updateActionUI();
             }
         }
@@ -2491,9 +2998,12 @@
             }
         });
 
+        window.addEventListener('message', handleParentMessage);
+
         // Initial render
         renderChat();
         updateActionUI();
+        notifySelectedQuestUpdate();
     </script>
 </body>
 </html>

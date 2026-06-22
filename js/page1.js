@@ -4,6 +4,7 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { initProgressSync, scheduleProgressSync } from "./progress-sync.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -70,6 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const timerData = userData?.timer || null;
             startTimerForUser(user.uid, timerData);
+
+            initProgressSync(db, user.uid);
         } else {
             // Not logged in - redirect to login page
             currentUserRole = '';
@@ -144,6 +147,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
             saveTime(true);
+        }
+    });
+
+    window.addEventListener('message', (e) => {
+        if (e.data?.type === 'gc_quest_progress_update' && currentUser) {
+            scheduleProgressSync(db, currentUser.uid);
+        }
+    });
+
+    window.addEventListener('learny-progress-changed', () => {
+        if (currentUser) {
+            scheduleProgressSync(db, currentUser.uid);
         }
     });
 

@@ -75,13 +75,17 @@
 
             <aside class="user-dashboard" aria-label="ダッシュボード">
                 <div class="dashboard-buttons">
-                    <button type="button" class="dashboard-btn" data-panel="instructions" aria-label="使い方" aria-expanded="false" title="使い方">
-                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg>
-                        <span class="dashboard-btn-label">使い方</span>
+                    <button type="button" class="dashboard-btn" data-panel="missions" aria-label="ミッション" aria-expanded="false" title="ミッション">
+                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                        <span class="dashboard-btn-label">ミッション</span>
                     </button>
                     <button type="button" class="dashboard-btn" data-panel="words" aria-label="覚えたフレーズ" aria-expanded="false" title="覚えたフレーズ">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                         <span class="dashboard-btn-label">フレーズ</span>
+                    </button>
+                    <button type="button" class="dashboard-btn" data-panel="instructions" aria-label="使い方" aria-expanded="false" title="使い方">
+                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg>
+                        <span class="dashboard-btn-label">使い方</span>
                     </button>
                     <button type="button" class="dashboard-btn dashboard-btn--stars" data-panel="stars" aria-label="スター" aria-expanded="false" title="スター">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg>
@@ -91,6 +95,10 @@
                     <button type="button" class="dashboard-btn" data-panel="badges" aria-label="バッジ" aria-expanded="false" title="バッジ">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg>
                         <span class="dashboard-btn-label">バッジ</span>
+                    </button>
+                    <button type="button" class="dashboard-btn dashboard-btn--startover" id="dashboard-startover-btn" aria-label="最初から" title="最初から" hidden>
+                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>
+                        <span class="dashboard-btn-label">最初から</span>
                     </button>
                 </div>
 
@@ -107,17 +115,20 @@
                     <div class="instructions-panel instructions-panel--popover" id="instructions-server1">
                         <h2>使い方</h2>
                         <ol class="instructions-list">
-                            <li>ミッションを確認して、ラーニー先生の画面<strong>右上</strong>の<span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><strong>はじめる</strong>を押して電話しよう！</li>
-                            <li>クエストには<strong>2つのステップ</strong>があるよ。英語で順番に言えばクリア！（例：「I found a tree!」→「I got wood!」）</li>
+                            <li>右の<strong>ミッション</strong>から、やりたいクエストを選ぶか、「<strong>自由におしゃべり</strong>」を選んで自由会話モードにしよう。</li>
+                            <li>ラーニー先生の画面<strong>右上</strong>の<span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><strong>はじめる</strong>を押して電話しよう！</li>
+                            <li>ミッション中は<strong>2つのステップ</strong>を英語で順番に言えばクリア！（例：「I found a tree!」→「I got wood!」）</li>
                             <li>通話中は会話がリアルタイムで<strong>文字起こし</strong>されるよ。下の入力欄から文字メッセージも送れる。</li>
                             <li>終わりたいときは<span class="instr-icon instr-icon--hangup" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.7 13.3 5 19"/><path d="M14.3 10.7 19 5"/><path d="M22 16.9v2a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h2a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L7.1 9.9a16 16 0 0 0 6 6l1.5-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6A2 2 0 0 1 22 16.9z"/><line x1="2" y1="2" x2="22" y2="22"/></svg></span><strong>おわる</strong>で電話を切れる。クエストをクリアすると次のミッションへ進める！</li>
                         </ol>
                         <h2>右のボタン</h2>
                         <ul class="instructions-feature-list">
+                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></span><strong>ミッション</strong> — クエストを選ぶ／自由会話モード</li>
+                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg></span><strong>最初から</strong> — レッスンクリア後に進捗をリセット（使い方の下）</li>
                             <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg></span><strong>使い方</strong> — この説明を見る</li>
                             <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><strong>フレーズ</strong> — 覚えた英語フレーズ</li>
                             <li><span class="instr-icon instr-icon--star" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg></span><strong>スター</strong> — クリアしたクエスト数</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg></span><strong>バッジ</strong> — クリアしたミッションの記録</li>
+                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg></span><strong>バッジ</strong> — レッスンを全部クリアするともらえる</li>
                         </ul>
                         <h2>ヒント</h2>
                         <p class="hint-text">ラーニー先生は日本語もわかるけど、英語で話すともっと上手に教えてくれるよ。</p>
