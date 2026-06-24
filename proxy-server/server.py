@@ -48,7 +48,7 @@ ALLOWED_ORIGINS = [
 
 # Allowed service URL pattern (SSRF protection)
 # Only allow connections to Google AI Platform Gemini API endpoints
-# Example: wss://us-central1-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent
+# Example: wss://asia-northeast1-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent
 ALLOWED_SERVICE_URL_PATTERN = re.compile(
     r"^wss://[a-z0-9-]+\.googleapis\.com/ws/google\.cloud\.aiplatform\.[a-zA-Z0-9._/]+"
 )

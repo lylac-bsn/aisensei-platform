@@ -337,6 +337,12 @@
             border: 1px solid var(--border);
         }
 
+        .msg-row.assistant.thinking .msg-bubble {
+            color: var(--system-text);
+            font-style: italic;
+            opacity: 0.9;
+        }
+
         .msg-row.system .msg-bubble {
             background: transparent;
             color: var(--system-text);
@@ -952,6 +958,121 @@
             color: var(--text-secondary);
         }
 
+        /* ===== Quest transition loading ===== */
+        .quest-loading-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 250;
+            background: rgba(240, 242, 245, 0.88);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .quest-loading-overlay.active {
+            display: flex;
+            animation: quest-loading-fade-in 0.35s ease-out;
+        }
+        @keyframes quest-loading-fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .quest-loading-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            max-width: 340px;
+            width: 100%;
+            padding: 32px 28px 28px;
+            text-align: center;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow:
+                var(--shadow-lg),
+                0 0 0 1px rgba(67, 160, 71, 0.1),
+                0 12px 40px rgba(67, 160, 71, 0.08);
+        }
+        .quest-loading-dots {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            height: 20px;
+        }
+        .quest-loading-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            background: var(--primary);
+            opacity: 0;
+            transform: scale(0.35) translateX(-14px);
+            animation: quest-dot-march 1.35s cubic-bezier(0.34, 1.45, 0.64, 1) infinite;
+        }
+        .quest-loading-dot:nth-child(1) { animation-delay: 0s; }
+        .quest-loading-dot:nth-child(2) { animation-delay: 0.16s; }
+        .quest-loading-dot:nth-child(3) { animation-delay: 0.32s; }
+        @keyframes quest-dot-march {
+            0% {
+                opacity: 0;
+                transform: scale(0.35) translateX(-14px);
+                box-shadow: none;
+            }
+            18% {
+                opacity: 1;
+                transform: scale(1.18) translateX(0);
+                box-shadow: 0 0 16px rgba(67, 160, 71, 0.55);
+            }
+            32% {
+                opacity: 1;
+                transform: scale(1) translateX(0);
+                box-shadow: 0 0 8px rgba(67, 160, 71, 0.35);
+            }
+            52% {
+                opacity: 0.7;
+                transform: scale(0.88) translateX(2px);
+                box-shadow: none;
+            }
+            68%, 100% {
+                opacity: 0;
+                transform: scale(0.35) translateX(14px);
+                box-shadow: none;
+            }
+        }
+        .quest-loading-title {
+            margin: 0;
+            font-size: var(--text-xl);
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1.35;
+            letter-spacing: 0.01em;
+        }
+        .quest-loading-sub {
+            margin: 0;
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .quest-loading-overlay.active {
+                animation: none;
+            }
+            .quest-loading-dot {
+                animation: quest-dot-pulse 1.2s ease-in-out infinite;
+                opacity: 0.45;
+                transform: none;
+            }
+            .quest-loading-dot:nth-child(1) { animation-delay: 0s; }
+            .quest-loading-dot:nth-child(2) { animation-delay: 0.2s; }
+            .quest-loading-dot:nth-child(3) { animation-delay: 0.4s; }
+            @keyframes quest-dot-pulse {
+                0%, 100% { opacity: 0.35; transform: scale(0.85); }
+                50% { opacity: 1; transform: scale(1); }
+            }
+        }
+
         /* ===== Responsive ===== */
         @media (max-width: 480px) {
             .header { padding: 14px 14px; }
@@ -1060,6 +1181,19 @@
         </div>
     </div>
 
+    <!-- Mission / lesson transition loading -->
+    <div class="quest-loading-overlay" id="quest-loading-overlay" aria-hidden="true" role="status" aria-live="polite">
+        <div class="quest-loading-card">
+            <div class="quest-loading-dots" aria-hidden="true">
+                <span class="quest-loading-dot"></span>
+                <span class="quest-loading-dot"></span>
+                <span class="quest-loading-dot"></span>
+            </div>
+            <p class="quest-loading-title" id="quest-loading-title">準備中...</p>
+            <p class="quest-loading-sub" id="quest-loading-sub"></p>
+        </div>
+    </div>
+
     <!-- Import utilities as ES modules -->
     <script type="module">
         // Silence all console output for this iframe
@@ -1080,6 +1214,7 @@
             getSelectedQuestIndex,
             setSelectedQuestIndex,
             clearSelectedQuest,
+            ensureDefaultMissionSelected,
             selectNextQuestAfterComplete,
             getQuestIndex,
             getQuests,
@@ -1101,6 +1236,7 @@
             buildQuestInstructions,
             buildSessionInstructions,
             buildQuestOpeningNudge,
+            buildActiveMissionHeader,
             buildQuestFarewellNudge,
             buildQuestRecordedToolMessage,
             buildQuestRejectedToolMessage,
@@ -1109,24 +1245,35 @@
             buildQuestAlreadyRecordedToolMessage,
             isUnrecognizableUserInput,
             buildUnclearInputRepeatNudge,
+            buildNoAudioRecoveryNudge,
+            userHintsStepSuccessInJapanese,
+            isHostileOrOffTopicUtterance,
+            assistantClaimsQuestComplete,
+            assistantFalselyCreditsEnglishStep,
+            buildJapaneseOnlyStepCorrectionNudge,
+            buildWrongStepPhraseCorrectionNudge,
+            userMissedEnglishStepPhrase,
+            reconcileEnglishStepProof,
+            buildHostileRedirectNudge,
+            buildPrematureCompleteCorrectionNudge,
             BEGINNER_VOICE_BASE_PROMPT,
             BEGINNER_FREE_CHAT_PROMPT,
         } from './js/quest-engine.js';
         import { LESSON_1_TITLE } from './js/quests/beginner-lesson1.js';
-        import { resolveProxyUrl } from './js/proxy-config.js';
+        import { resolveProxyUrl, US_CLOUD_PROXY_URL, TOKYO_CLOUD_PROXY_URL } from './js/proxy-config.js';
         import { QuestSfx } from './js/quest-sfx.js';
 
         // ============================================
         // Configuration
         // ============================================
-        const proxyUrl = resolveProxyUrl();
+        let activeProxyUrl = resolveProxyUrl();
         // Must match the GCP project where Cloud Run proxy runs (same project as Firebase ai-sensei-8849b).
         const projectId = "ai-sensei-8849b";
         const model = "gemini-live-2.5-flash-native-audio";
         const baseSystemInstructions = BEGINNER_VOICE_BASE_PROMPT;
         const freeChatInstructions = BEGINNER_FREE_CHAT_PROMPT;
         const voice = "Kore";
-        const temperature = 1.0;
+        const temperature = 0.9;
         const enableProactiveAudio = true;
         const enableGrounding = false;
         const enableAffectiveDialog = true;
@@ -1137,12 +1284,13 @@
         const enableOutputTranscription = true;
         const volumeLevel = 80;
 
-        // Activity Detection
+        // Activity Detection — avoid cutting kids off mid-thought (reduces stuck / double replies)
         const disableActivityDetection = false;
         const silenceDuration = 500;
-        const prefixPadding = 500;
+        const prefixPadding = 300;
         const endSpeechSensitivity = "END_SENSITIVITY_UNSPECIFIED";
-        const startSpeechSensitivity = "START_SENSITIVITY_UNSPECIFIED";
+        const startSpeechSensitivity = "START_SENSITIVITY_HIGH";
+        const SILENCE_PROMPT_MS = 30000;
 
         // ============================================
         // State
@@ -1153,12 +1301,26 @@
         let audioPlayer = null;
         let connected = false;
         let audioStreaming = false;
-        let silenceTimer = null;
+        let silenceWatchId = null;
+        let lastSilenceUserSpeechAt = 0;
+        let lastSilenceAssistantDoneAt = 0;
+        let lastSilencePromptAt = 0;
+        const SILENCE_WATCH_INTERVAL_MS = 3000;
         let isAutoReconnecting = false;
         let justReconnected = false;
         let chatMessages = [];
+        let assistantThinkingRow = null;
         const MAX_MESSAGES = 20;
         const TURN_THRESHOLD = 4;
+        const NO_AUDIO_RECOVERY_FIRST_MS = 1600;
+        const NO_AUDIO_RECOVERY_RETRY_MS = 2800;
+        const MAX_NO_AUDIO_RECOVERY_ATTEMPTS = 2;
+        const QUEST_TRACKER_DELAY_MS = 2000;
+        const QUEST_TRACKER_DELAY_WRONG_MS = 1400;
+        const QUEST_TRACKER_DELAY_STEP_MS = 900;
+        const POST_BARGE_IN_WATCHDOG_MS = 1800;
+        const POST_BARGE_IN_RECOVERY_MS = 900;
+        const STALE_ASSISTANT_OUTPUT_MS = 400;
 
         let tokenUsage = {
             totalInputTokens: 0,
@@ -1211,7 +1373,12 @@
         const questModalNext = document.getElementById('quest-modal-next');
         const questModalDone = document.getElementById('quest-modal-done');
         const questModalReset = document.getElementById('quest-modal-reset');
+        const questLoadingOverlay = document.getElementById('quest-loading-overlay');
+        const questLoadingTitle = document.getElementById('quest-loading-title');
+        const questLoadingSub = document.getElementById('quest-loading-sub');
         let isMuted = false;
+        let questLoadingToken = 0;
+        let questModalConnectLoadingToken = 0;
 
         // Possible action-button states: 'idle' | 'connecting' | 'active'
         let actionState = 'idle';
@@ -1242,11 +1409,33 @@
         let questSessionAssistantSeen = false;
         let questCompleteFallbackTimer = null;
         let missionAdvanceTimer = null;
-        let unclearInputRecoveryTimer = null;
-        let assistantSpokeSinceLastUserTurn = true;
+        let noAudioRecoveryTimer = null;
+        let questTrackerTimer = null;
+        let assistantRespondedSinceLastUserTurn = true;
+        let assistantAudibleThisTurn = false;
+        let awaitingAssistantReply = false;
+        let awaitingAssistantSince = 0;
+        let noAudioRecoveryAttempts = 0;
         let lastFinishedUserTranscriptAt = 0;
-        let lastUnclearInputNudgeKey = "";
-        let lastUnclearInputNudgeAt = 0;
+        let lastUserTurnSeq = 0;
+        let pendingQuestTracker = null;
+        let lastRecoveryNudgeKey = "";
+        let lastRecoveryNudgeAt = 0;
+        let lastPrematureCompleteCorrectionAt = 0;
+        let lastSteeringNudgeTurnSeq = -1;
+        let steeringNudgeSentThisTurn = false;
+        let falseCreditCorrectionSentThisTurn = false;
+        let assistantTurnOpen = false;
+        let deferredSteeringNudges = [];
+        let deferredSteeringFlushTimer = null;
+        let pendingFalseCreditAssistantText = '';
+        let lastAppSteeringInjectAt = 0;
+        let userBargeInThisTurn = false;
+        let lastAssistantAudioAt = 0;
+        let staleAssistantOutputUntil = 0;
+        let postBargeInPending = false;
+        let postBargeInWatchdogTimer = null;
+        let completeQuestRejectedTurnSeq = -1;
         const questSfx = new QuestSfx();
 
         // ============================================
@@ -1365,8 +1554,12 @@
             const quests = getQuests();
             const total = quests.length;
             const earned = loadProgress();
-            const selectedIndex = getSelectedQuestIndex();
-            const selectedQuest = getSelectedQuest();
+            const selectedIndex =
+                questSessionActive && activeQuestSessionIndex !== null
+                    ? activeQuestSessionIndex
+                    : getSelectedQuestIndex();
+            const selectedQuest =
+                questSessionActive && activeQuest ? activeQuest : getSelectedQuest();
 
             renderQuestStars();
 
@@ -1459,13 +1652,127 @@
             }
         }
 
+        function hideAssistantThinking() {
+            if (assistantThinkingRow?.isConnected) {
+                assistantThinkingRow.remove();
+            }
+            assistantThinkingRow = null;
+        }
+
+        function showAssistantThinking() {
+            if (
+                !connected ||
+                actionState !== 'active' ||
+                awaitingQuestFarewell ||
+                questCompleting ||
+                !awaitingAssistantReply ||
+                assistantAudibleThisTurn
+            ) {
+                return;
+            }
+            hideAssistantThinking();
+
+            const prevMsg =
+                chatMessages.length > 0
+                    ? chatMessages[chatMessages.length - 1]
+                    : null;
+            assistantThinkingRow = createMsgRow(
+                { type: 'assistant', text: '考え中…', isThinking: true },
+                prevMsg
+            );
+            assistantThinkingRow.classList.add('thinking');
+            emptyState.style.display = 'none';
+
+            const rows = chatArea.querySelectorAll('.msg-row:not(.thinking)');
+            if (rows.length > 0) {
+                rows[rows.length - 1].insertAdjacentElement('afterend', assistantThinkingRow);
+            } else {
+                chatArea.appendChild(assistantThinkingRow);
+            }
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function bumpStaleAssistantOutputWindow(ms = STALE_ASSISTANT_OUTPUT_MS) {
+            staleAssistantOutputUntil = Math.max(
+                staleAssistantOutputUntil,
+                Date.now() + ms
+            );
+        }
+
+        function shouldDiscardAssistantOutput() {
+            return Date.now() < staleAssistantOutputUntil;
+        }
+
+        function finalizeInterruptedAssistantMessage() {
+            for (let i = chatMessages.length - 1; i >= 0; i--) {
+                const m = chatMessages[i];
+                if (m.type === 'assistant') {
+                    m.isFinished = true;
+                    return;
+                }
+                if (m.type === 'user-transcript' || m.type === 'user') return;
+            }
+        }
+
+        function clearPostBargeInWatchdog() {
+            if (postBargeInWatchdogTimer) {
+                clearTimeout(postBargeInWatchdogTimer);
+                postBargeInWatchdogTimer = null;
+            }
+        }
+
+        function resolvePostBargeIn() {
+            postBargeInPending = false;
+            clearPostBargeInWatchdog();
+        }
+
+        function armPostBargeInWatchdog() {
+            postBargeInPending = true;
+            clearPostBargeInWatchdog();
+            postBargeInWatchdogTimer = setTimeout(() => {
+                postBargeInWatchdogTimer = null;
+                if (!postBargeInPending || !client?.connected) return;
+                if (assistantAudibleThisTurn || assistantTurnOpen) {
+                    resolvePostBargeIn();
+                    return;
+                }
+
+                client.signalUserTurnComplete();
+                if (!awaitingAssistantReply) {
+                    awaitingAssistantReply = true;
+                    awaitingAssistantSince = Date.now();
+                }
+                const utterance = getLatestUserTurnText();
+                scheduleNoAudioRecovery(utterance, {
+                    unclear: isUnrecognizableUserInput(utterance),
+                    postBargeIn: true,
+                });
+            }, POST_BARGE_IN_WATCHDOG_MS);
+        }
+
         function clearConversationHistory() {
+            hideAssistantThinking();
+            resolvePostBargeIn();
+            staleAssistantOutputUntil = 0;
             chatMessages = [];
-            assistantSpokeSinceLastUserTurn = true;
+            assistantRespondedSinceLastUserTurn = true;
+            assistantAudibleThisTurn = false;
+            awaitingAssistantReply = false;
+            awaitingAssistantSince = 0;
+            noAudioRecoveryAttempts = 0;
             lastFinishedUserTranscriptAt = 0;
-            lastUnclearInputNudgeKey = "";
-            lastUnclearInputNudgeAt = 0;
-            clearUnclearInputRecoveryTimer();
+            lastUserTurnSeq = 0;
+            pendingQuestTracker = null;
+            steeringNudgeSentThisTurn = false;
+            falseCreditCorrectionSentThisTurn = false;
+            assistantTurnOpen = false;
+            deferredSteeringNudges = [];
+            pendingFalseCreditAssistantText = '';
+            lastRecoveryNudgeKey = "";
+            lastRecoveryNudgeAt = 0;
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            clearQuestTrackerTimer();
             renderChat();
         }
 
@@ -1489,11 +1796,52 @@
             resetQuestSessionState();
         }
 
-        async function ensureStaleConnectionClosed() {
+        async function ensureStaleConnectionClosed({ keepMic = false } = {}) {
             if (!client && !connected && !audioStreaming) return;
             intentionalDisconnect = true;
-            disconnectAPI();
+            disconnectAPI(false, false, false, keepMic);
             await new Promise((r) => setTimeout(r, 200));
+        }
+
+        /** Lock mic + audio hardware while the はじめる click is still a valid user gesture. */
+        async function preflightMicAccess() {
+            if (!audioStreamer) {
+                audioStreamer = new AudioStreamer(client);
+            }
+            if (audioStreamer.mediaStream?.active && audioStreamer.audioWorklet) {
+                return;
+            }
+
+            try {
+                await audioStreamer.start();
+                audioStreamer.pauseStreaming();
+            } catch (error) {
+                if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+                    throw new Error("Microphone permission denied");
+                }
+                if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+                    throw new Error("No microphone found");
+                }
+                throw error;
+            }
+        }
+
+        async function preflightAudioOutput() {
+            if (!audioPlayer) {
+                audioPlayer = new AudioPlayer();
+            }
+            if (!audioPlayer.isInitialized) {
+                await audioPlayer.init();
+                audioPlayer.setVolume(volumeLevel / 100);
+            }
+        }
+
+        function getProxyFallbackUrls() {
+            const urls = [activeProxyUrl];
+            for (const url of [TOKYO_CLOUD_PROXY_URL, US_CLOUD_PROXY_URL]) {
+                if (!urls.includes(url)) urls.push(url);
+            }
+            return urls;
         }
 
         function applyParentQuestSelection(questIndex) {
@@ -1576,101 +1924,541 @@
             notifyParentProgress();
         }
 
-        function buildConnectErrorMessage() {
+        function buildConnectErrorMessage(error = null) {
             const selected = getSelectedQuest();
             const isLocalProxy =
-                proxyUrl.includes("127.0.0.1") || proxyUrl.includes("localhost");
+                activeProxyUrl.includes("127.0.0.1") || activeProxyUrl.includes("localhost");
             const proxyHint = isLocalProxy
                 ? " ローカルプロキシを使う場合は proxy-server を起動してください（?proxy=local）。"
                 : "";
+            const detail = (error?.message || "").trim();
+            if (/microphone|notallowed|permission|denied/i.test(detail)) {
+                return (
+                    `マイクの許可が必要です。ブラウザのアドレスバーでマイクを「許可」にして、「はじめる」をもう一度押してください。${proxyHint}`
+                );
+            }
+            if (/session not ready|setup failed|websocket/i.test(detail)) {
+                return (
+                    `接続の準備に失敗しました。ページを再読み込み（Cmd+Shift+R）してから「はじめる」をもう一度押してください。${proxyHint}`
+                );
+            }
             if (selected) {
                 return `クエストへの接続に失敗しました。「はじめる」をもう一度押してください。${proxyHint}`;
             }
             return `ラーニー先生への接続に失敗しました。「はじめる」をもう一度押してください。${proxyHint}`;
         }
 
-        function clearUnclearInputRecoveryTimer() {
-            if (unclearInputRecoveryTimer) {
-                clearTimeout(unclearInputRecoveryTimer);
-                unclearInputRecoveryTimer = null;
+        function logConnectFailure(error, phase = "") {
+            if (error) {
+                console.warn("[Learny connect]", phase || "failed", error.message || error);
             }
+        }
+
+        function clearNoAudioRecoveryTimer() {
+            if (noAudioRecoveryTimer) {
+                clearTimeout(noAudioRecoveryTimer);
+                noAudioRecoveryTimer = null;
+            }
+        }
+
+        function clearQuestTrackerTimer() {
+            if (questTrackerTimer) {
+                clearTimeout(questTrackerTimer);
+                questTrackerTimer = null;
+            }
+        }
+
+        function sendClientText(text, { steering = false } = {}) {
+            if (!client?.connected) return false;
+            const sent = client.sendTextMessage(text);
+            if (sent && steering) lastAppSteeringInjectAt = Date.now();
+            return sent;
+        }
+
+        function clearDeferredSteeringFlushTimer() {
+            if (deferredSteeringFlushTimer) {
+                clearTimeout(deferredSteeringFlushTimer);
+                deferredSteeringFlushTimer = null;
+            }
+        }
+
+        function assistantOutputBusy() {
+            return assistantTurnOpen;
+        }
+
+        function scheduleDeferredSteeringFlush(delayMs = 500) {
+            clearDeferredSteeringFlushTimer();
+            deferredSteeringFlushTimer = setTimeout(() => {
+                deferredSteeringFlushTimer = null;
+                flushDeferredSteeringNudges();
+            }, delayMs);
+        }
+
+        function flushDeferredSteeringNudges() {
+            if (assistantTurnOpen) {
+                scheduleDeferredSteeringFlush(400);
+                return;
+            }
+            deferredSteeringNudges = deferredSteeringNudges.filter(
+                (item) => item.turnSeq === lastUserTurnSeq
+            );
+            while (deferredSteeringNudges.length > 0) {
+                const item = deferredSteeringNudges.shift();
+                if (sendSteeringNudgeNow(item.text, item.options)) return;
+            }
+        }
+
+        function sendSteeringNudgeNow(
+            text,
+            { recoveryRetry = false, falseCreditCorrection = false } = {}
+        ) {
+            if (!text?.trim()) return false;
+            if (falseCreditCorrection) {
+                if (falseCreditCorrectionSentThisTurn) return false;
+            } else if (!recoveryRetry && steeringNudgeSentThisTurn) {
+                return false;
+            } else if (!recoveryRetry && lastSteeringNudgeTurnSeq === lastUserTurnSeq) {
+                return false;
+            }
+            const sent = sendClientText(text, { steering: true });
+            if (sent) {
+                lastSteeringNudgeTurnSeq = lastUserTurnSeq;
+                if (falseCreditCorrection) {
+                    falseCreditCorrectionSentThisTurn = true;
+                    steeringNudgeSentThisTurn = true;
+                } else if (!recoveryRetry) {
+                    steeringNudgeSentThisTurn = true;
+                }
+            }
+            return sent;
+        }
+
+        /** At most one app-injected steering nudge per child turn (avoids double replies). */
+        function sendSteeringNudge(
+            text,
+            { recoveryRetry = false, falseCreditCorrection = false } = {}
+        ) {
+            if (!text?.trim()) return false;
+            if (assistantOutputBusy()) {
+                deferredSteeringNudges.push({
+                    text,
+                    options: { recoveryRetry, falseCreditCorrection },
+                    turnSeq: lastUserTurnSeq,
+                });
+                scheduleDeferredSteeringFlush(500);
+                return true;
+            }
+            return sendSteeringNudgeNow(text, { recoveryRetry, falseCreditCorrection });
+        }
+
+        function assistantOutputActive() {
+            if (assistantTurnOpen) return true;
+            if (lastAssistantAudioAt && Date.now() - lastAssistantAudioAt < 8000) return true;
+            return Boolean(audioPlayer?.getPlaybackMsRemaining?.() > 80);
+        }
+
+        function updateBargeInMicStreaming() {
+            if (!audioStreamer) return;
+            audioStreamer.setBargeInStream(assistantOutputActive());
+        }
+
+        function handleUserBargeIn() {
+            if (!assistantOutputActive()) return;
+            userBargeInThisTurn = true;
+            armPostBargeInWatchdog();
+            bumpStaleAssistantOutputWindow();
+            finalizeInterruptedAssistantMessage();
+            if (audioPlayer) audioPlayer.interrupt();
+            assistantTurnOpen = false;
+            assistantAudibleThisTurn = false;
+            lastAssistantAudioAt = 0;
+            pendingFalseCreditAssistantText = '';
+            pendingQuestTracker = null;
+            clearQuestTrackerTimer();
+            deferredSteeringNudges = [];
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            updateBargeInMicStreaming();
+        }
+
+        function markAssistantTurnStarted() {
+            hideAssistantThinking();
+            if (assistantTurnOpen) return;
+            assistantTurnOpen = true;
+            updateBargeInMicStreaming();
+            if (pendingQuestTracker) {
+                const { utterance, newly } = pendingQuestTracker;
+                if (!questTrackerNeedsFollowUp(utterance, newly)) {
+                    pendingQuestTracker = null;
+                    clearQuestTrackerTimer();
+                }
+            }
+        }
+
+        function markAssistantTurnEnded({ skipDeferred = false } = {}) {
+            assistantTurnOpen = false;
+            updateBargeInMicStreaming();
+            if (!skipDeferred) {
+                scheduleDeferredSteeringFlush(450);
+            }
+        }
+
+        function markSteeringNudgeSent() {
+            lastSteeringNudgeTurnSeq = lastUserTurnSeq;
+            steeringNudgeSentThisTurn = true;
+            pendingQuestTracker = null;
+            clearQuestTrackerTimer();
+        }
+
+        function assistantAlreadyHandledTurn(utterance, newly) {
+            if (!assistantAudibleThisTurn) return false;
+            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return false;
+            return !questTrackerNeedsFollowUp(utterance, newly);
+        }
+
+        function markAssistantAudible() {
+            markAssistantTurnStarted();
+            assistantAudibleThisTurn = true;
+            assistantRespondedSinceLastUserTurn = true;
+            awaitingAssistantReply = false;
+            awaitingAssistantSince = 0;
+            noAudioRecoveryAttempts = 0;
+            clearNoAudioRecoveryTimer();
+            updateBargeInMicStreaming();
         }
 
         function markAssistantResponded() {
-            assistantSpokeSinceLastUserTurn = true;
-            clearUnclearInputRecoveryTimer();
+            markAssistantAudible();
         }
 
-        function sendUnclearInputRepeatNudge(utterance = "") {
+        function markAssistantAudioReceived() {
+            markAssistantAudible();
+        }
+
+        function markUserTurnStarted() {
+            lastUserTurnSeq += 1;
+            assistantRespondedSinceLastUserTurn = false;
+            assistantAudibleThisTurn = false;
+            awaitingAssistantReply = true;
+            awaitingAssistantSince = Date.now();
+            noAudioRecoveryAttempts = 0;
+            steeringNudgeSentThisTurn = false;
+            falseCreditCorrectionSentThisTurn = false;
+            assistantTurnOpen = false;
+            deferredSteeringNudges = [];
+            pendingFalseCreditAssistantText = '';
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            userBargeInThisTurn = false;
+            lastAssistantAudioAt = 0;
+            updateBargeInMicStreaming();
+        }
+
+        function ensureNoAudioRecoveryScheduled({
+            unclear = false,
+            postBargeIn = false,
+            stepCompleted = false,
+        } = {}) {
+            if (
+                !awaitingAssistantReply ||
+                !client?.connected ||
+                awaitingQuestFarewell ||
+                questCompleting
+            ) {
+                return;
+            }
+            if (assistantAudibleThisTurn) return;
+
+            const elapsed = Date.now() - awaitingAssistantSince;
+            const baseDelay = stepCompleted
+                ? 1500
+                : postBargeIn
+                  ? POST_BARGE_IN_RECOVERY_MS
+                  : unclear
+                    ? NO_AUDIO_RECOVERY_FIRST_MS
+                    : noAudioRecoveryAttempts === 0
+                      ? NO_AUDIO_RECOVERY_FIRST_MS
+                      : NO_AUDIO_RECOVERY_RETRY_MS;
+            const delay = Math.max(400, baseDelay - elapsed);
+
+            clearNoAudioRecoveryTimer();
+
+            noAudioRecoveryTimer = setTimeout(() => {
+                noAudioRecoveryTimer = null;
+                if (assistantAudibleThisTurn || !client?.connected) return;
+                if (awaitingQuestFarewell || questCompleting) return;
+                if (!awaitingAssistantReply) return;
+
+                const utterance = getLatestUserTurnText();
+                const isUnclear = isUnrecognizableUserInput(utterance);
+                const sent = sendNoAudioRecoveryNudge(utterance, isUnclear);
+                if (!sent) {
+                    ensureNoAudioRecoveryScheduled({ unclear: isUnclear });
+                    return;
+                }
+
+                noAudioRecoveryAttempts += 1;
+                if (
+                    noAudioRecoveryAttempts < MAX_NO_AUDIO_RECOVERY_ATTEMPTS &&
+                    !assistantAudibleThisTurn
+                ) {
+                    ensureNoAudioRecoveryScheduled({ unclear: isUnclear });
+                }
+            }, delay);
+        }
+
+        function sendNoAudioRecoveryNudge(utterance = "", unclear = false) {
             if (!client?.connected || awaitingQuestFarewell || questCompleting) return false;
 
-            const dedupeKey = utterance.trim() || "(empty)";
+            const dedupeKey = `${unclear ? "u:" : "r:"}${noAudioRecoveryAttempts}:${utterance.trim().slice(0, 48) || "(empty)"}`;
+            const dedupeWindow = unclear ? 8000 : 5000;
             const now = Date.now();
-            if (
-                lastUnclearInputNudgeKey === dedupeKey &&
-                now - lastUnclearInputNudgeAt < 8000
-            ) {
+            if (lastRecoveryNudgeKey === dedupeKey && now - lastRecoveryNudgeAt < dedupeWindow) {
                 return false;
             }
 
-            lastUnclearInputNudgeKey = dedupeKey;
-            lastUnclearInputNudgeAt = now;
-            client.sendTextMessage(buildUnclearInputRepeatNudge(utterance));
-            return true;
+            lastRecoveryNudgeKey = dedupeKey;
+            lastRecoveryNudgeAt = now;
+            const nudge = unclear
+                ? buildUnclearInputRepeatNudge(utterance, activeQuest, activeQuestSessionIndex)
+                : buildNoAudioRecoveryNudge(utterance, activeQuest, activeQuestSessionIndex);
+            const recoveryRetry = noAudioRecoveryAttempts > 0;
+            return sendSteeringNudgeNow(nudge, { recoveryRetry });
         }
 
-        function scheduleUnclearInputRecoveryIfSilent(utterance = "") {
-            clearUnclearInputRecoveryTimer();
-            unclearInputRecoveryTimer = setTimeout(() => {
-                unclearInputRecoveryTimer = null;
-                if (assistantSpokeSinceLastUserTurn || !client?.connected) return;
-                if (awaitingQuestFarewell || questCompleting) return;
-                sendUnclearInputRepeatNudge(utterance);
-            }, 2800);
+        /** Send quest tracker only when the app needs to steer Learny (not every turn). */
+        function shouldSendQuestTracker(utterance, newly) {
+            if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return false;
+            if (isHostileOrOffTopicUtterance(utterance)) return true;
+            if (newly?.length) return true;
+            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return true;
+            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
+            if (next && userMissedEnglishStepPhrase(utterance, next)) return true;
+            return Boolean(next && userHintsStepSuccessInJapanese(utterance, next));
+        }
+
+        function buildTypedUserTurnPayload(text, newly) {
+            if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return text;
+            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
+            if (next && userMissedEnglishStepPhrase(text, next)) {
+                return buildQuestStepGroundTruthNudge(
+                    activeQuest,
+                    text,
+                    newly,
+                    activeQuestSessionIndex,
+                    false,
+                    { compact: true }
+                );
+            }
+            return text;
+        }
+
+        function syncQuestFromUserText(text) {
+            if (!activeQuest || questCompleting || activeQuestSessionIndex === null || !text?.trim()) {
+                return [];
+            }
+            const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
+            syncQuestStepsAndBanner(text);
+            const after = getCompletedStepIds(activeQuestSessionIndex);
+            const newly = after.filter((id) => !before.has(id));
+            if (newly.length) {
+                updateQuestBanner();
+            }
+            if (
+                questSessionActive &&
+                !questCompleting &&
+                !awaitingQuestFarewell &&
+                isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
+            ) {
+                tryAcceptQuestComplete("auto", text);
+                return newly;
+            }
+            if (client?.connected && shouldSendQuestTracker(text, newly)) {
+                scheduleQuestTrackerFromTranscript(text, newly);
+            }
+            return newly;
+        }
+
+        function scheduleNoAudioRecovery(
+            utterance = "",
+            { unclear = false, postBargeIn = false, stepCompleted = false } = {}
+        ) {
+            ensureNoAudioRecoveryScheduled({ unclear, postBargeIn, stepCompleted });
+        }
+
+        function questTrackerNeedsFollowUp(utterance, newly) {
+            if (newly?.length) return true;
+            if (!activeQuest || activeQuestSessionIndex === null) return false;
+            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
+            if (next && userMissedEnglishStepPhrase(utterance, next)) return true;
+            return Boolean(next && userHintsStepSuccessInJapanese(utterance, next));
+        }
+
+        function sendPendingQuestTracker() {
+            if (!pendingQuestTracker || !client?.connected || !activeQuest || questCompleting) {
+                pendingQuestTracker = null;
+                return;
+            }
+            const { utterance, newly, turnSeq } = pendingQuestTracker;
+            pendingQuestTracker = null;
+            if (turnSeq !== lastUserTurnSeq) return;
+            if (!utterance?.trim()) return;
+            if (steeringNudgeSentThisTurn || falseCreditCorrectionSentThisTurn) return;
+
+            if (assistantAlreadyHandledTurn(utterance, newly)) return;
+
+            if (newly?.length && assistantAudibleThisTurn) return;
+
+            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
+            const wrongAttempt = next && userMissedEnglishStepPhrase(utterance, next);
+            if (wrongAttempt && assistantAudibleThisTurn) return;
+
+            const allComplete = isQuestStepsComplete(activeQuest, activeQuestSessionIndex);
+            if (allComplete) {
+                if (!assistantAudibleThisTurn) {
+                    sendSteeringNudge(buildQuestCompleteTrackerNudge());
+                    scheduleQuestCompleteFallback(utterance);
+                }
+                return;
+            }
+            if (isHostileOrOffTopicUtterance(utterance)) {
+                sendSteeringNudge(
+                    buildHostileRedirectNudge(activeQuest, utterance, activeQuestSessionIndex)
+                );
+                return;
+            }
+            sendSteeringNudge(
+                buildQuestStepGroundTruthNudge(
+                    activeQuest,
+                    utterance,
+                    newly,
+                    activeQuestSessionIndex,
+                    assistantAudibleThisTurn,
+                    { compact: true }
+                )
+            );
+        }
+
+        function getQuestTrackerDelayMs(utterance, newly) {
+            if (newly?.length) return QUEST_TRACKER_DELAY_STEP_MS;
+            if (!activeQuest || activeQuestSessionIndex === null) return QUEST_TRACKER_DELAY_MS;
+            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
+            if (next && userMissedEnglishStepPhrase(utterance, next)) {
+                return QUEST_TRACKER_DELAY_WRONG_MS;
+            }
+            if (next && userHintsStepSuccessInJapanese(utterance, next)) {
+                return QUEST_TRACKER_DELAY_STEP_MS;
+            }
+            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) {
+                return QUEST_TRACKER_DELAY_STEP_MS;
+            }
+            return QUEST_TRACKER_DELAY_MS;
+        }
+
+        function scheduleQuestTrackerFromTranscript(utterance, newly) {
+            pendingQuestTracker = {
+                utterance,
+                newly,
+                turnSeq: lastUserTurnSeq,
+            };
+            queueQuestTrackerFire(getQuestTrackerDelayMs(utterance, newly));
+        }
+
+        function queueQuestTrackerFire(delayMs) {
+            clearQuestTrackerTimer();
+            questTrackerTimer = setTimeout(() => {
+                questTrackerTimer = null;
+                if (!pendingQuestTracker || pendingQuestTracker.turnSeq !== lastUserTurnSeq) {
+                    return;
+                }
+                const { utterance, newly } = pendingQuestTracker;
+
+                if (assistantAudibleThisTurn) {
+                    if (!questTrackerNeedsFollowUp(utterance, newly)) {
+                        pendingQuestTracker = null;
+                    }
+                    return;
+                }
+
+                if (assistantTurnOpen) {
+                    queueQuestTrackerFire(350);
+                    return;
+                }
+
+                if (assistantAlreadyHandledTurn(utterance, newly)) {
+                    pendingQuestTracker = null;
+                    return;
+                }
+
+                sendPendingQuestTracker();
+            }, delayMs);
         }
 
         function handleFinishedUserTranscript() {
             const utterance = getLatestFinishedUserUtterance();
+            const afterBargeIn = postBargeInPending;
+            markUserTurnStarted();
             lastFinishedUserTranscriptAt = Date.now();
-            assistantSpokeSinceLastUserTurn = false;
+            const unclear = isUnrecognizableUserInput(utterance);
 
-            if (!isUnrecognizableUserInput(utterance)) {
-                return false;
+            if (client?.connected) {
+                client.signalUserTurnComplete();
             }
+            resolvePostBargeIn();
 
-            sendUnclearInputRepeatNudge(utterance);
-            scheduleUnclearInputRecoveryIfSilent(utterance);
-            return true;
+            scheduleNoAudioRecovery(utterance, { unclear, postBargeIn: afterBargeIn });
+            showAssistantThinking();
+            return unclear;
         }
 
         function getSessionUserText() {
-            return chatMessages
-                .filter((m) => m.type === "user-transcript")
-                .map((m) => m.text)
-                .join(" ");
+            return getSessionUserUtterances().join(" ");
         }
 
-        function syncQuestStepsAndBanner(latestUtterance = '') {
+        function getSessionUserUtterances() {
+            return chatMessages
+                .filter((m) => m.type === "user-transcript" || m.type === "user")
+                .map((m) => (m.text || "").trim())
+                .filter(Boolean);
+        }
+
+        function syncQuestStepsFromSession(latestUtterance = "") {
             if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return [];
-            let newly = [];
+            const sessionUtterances = getSessionUserUtterances();
+            const sessionText = sessionUtterances.join(" ");
+            const prev = new Set(getCompletedStepIds(activeQuestSessionIndex));
+            if (sessionText.trim()) {
+                syncQuestStepsFromSessionText(
+                    activeQuest,
+                    sessionText,
+                    activeQuestSessionIndex,
+                    sessionUtterances
+                );
+            }
             if (latestUtterance?.trim()) {
-                newly = syncQuestStepsFromText(
+                syncQuestStepsFromText(
                     activeQuest,
                     latestUtterance,
                     activeQuestSessionIndex
                 );
             }
-            const sessionNewly = syncQuestStepsFromSessionText(
+            reconcileEnglishStepProof(
                 activeQuest,
-                getSessionUserText(),
-                activeQuestSessionIndex
+                activeQuestSessionIndex,
+                sessionUtterances
             );
-            const allNewly = [...new Set([...newly, ...sessionNewly])];
-            if (allNewly.length) {
+            const after = getCompletedStepIds(activeQuestSessionIndex);
+            const newly = after.filter((id) => !prev.has(id));
+            const removed = [...prev].filter((id) => !after.includes(id));
+            if (newly.length || removed.length) {
                 updateQuestBanner();
-                notifyParentProgress();
+                if (newly.length) notifyParentProgress();
             }
-            return allNewly;
+            return newly;
+        }
+
+        function syncQuestStepsAndBanner(latestUtterance = "") {
+            return syncQuestStepsFromSession(latestUtterance);
         }
 
         function launchQuestConfetti() {
@@ -1698,6 +2486,34 @@
                 }
                 questConfetti.appendChild(piece);
             }
+        }
+
+        function showQuestLoading(title, subtitle = '') {
+            questLoadingToken += 1;
+            if (questLoadingTitle) questLoadingTitle.textContent = title || '準備中...';
+            if (questLoadingSub) {
+                questLoadingSub.textContent = subtitle || '';
+                questLoadingSub.hidden = !subtitle;
+            }
+            if (questLoadingOverlay) {
+                questLoadingOverlay.classList.add('active');
+                questLoadingOverlay.setAttribute('aria-hidden', 'false');
+            }
+            return questLoadingToken;
+        }
+
+        function hideQuestLoading(expectedToken) {
+            if (expectedToken && expectedToken !== questLoadingToken) return;
+            if (questLoadingOverlay) {
+                questLoadingOverlay.classList.remove('active');
+                questLoadingOverlay.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        function clearQuestModalConnectLoading() {
+            if (!questModalConnectLoadingToken) return;
+            hideQuestLoading(questModalConnectLoadingToken);
+            questModalConnectLoadingToken = 0;
         }
 
         function showQuestModal(completedQuest, lessonDone) {
@@ -1894,12 +2710,19 @@
                 9000,
                 Math.max(3200, chars * 85 + 2000, audioMs + 1200)
             );
-            questTeardownTimer = setTimeout(finalizeQuestTeardown, delay);
-
-            const lessonDone = pendingQuestTeardown?.lessonDone;
-            if (!lessonDone && !pendingNextClient && !pendingNextConnectPromise) {
-                prepareNextQuestSession();
+            const teardown = pendingQuestTeardown;
+            if (teardown?.lessonDone) {
+                showQuestLoading(
+                    'レッスンクリア！',
+                    'バッジを準備しています…'
+                );
+            } else if (teardown?.isNewClear) {
+                showQuestLoading(
+                    'ミッションクリア！',
+                    '次のミッションを準備しています…'
+                );
             }
+            questTeardownTimer = setTimeout(finalizeQuestTeardown, delay);
         }
 
         function tryScheduleFarewellTeardown() {
@@ -1922,6 +2745,7 @@
             updateQuestBanner();
 
             if (lessonDone) {
+                hideQuestLoading();
                 disconnectAPI(false, keepAudio);
                 showQuestModal(completed, true);
                 actionState = 'idle';
@@ -1929,6 +2753,7 @@
             } else if (isNewClear) {
                 beginNextQuestHandoff(completed);
             } else {
+                hideQuestLoading();
                 disconnectAPI(false, keepAudio);
                 actionState = 'idle';
                 updateActionUI();
@@ -1945,10 +2770,18 @@
         }
 
         function adoptPendingNextClient() {
-            if (!pendingNextClient?.connected) return false;
+            if (!pendingNextClient) return false;
+
+            const wsOpen = pendingNextClient.webSocket?.readyState === WebSocket.OPEN;
+            if (!pendingNextClient.connected || !pendingNextClient.sessionReady || !wsOpen) {
+                pendingNextClient.disconnect();
+                pendingNextClient = null;
+                pendingNextClientReadyAt = 0;
+                return false;
+            }
 
             const age = Date.now() - pendingNextClientReadyAt;
-            if (age > 25000) {
+            if (age > 12000) {
                 pendingNextClient.disconnect();
                 pendingNextClient = null;
                 pendingNextClientReadyAt = 0;
@@ -1964,7 +2797,12 @@
         }
 
         function configureGeminiClient(geminiClient, questForSession, { preconnect = false } = {}) {
-            geminiClient.systemInstructions = buildSessionInstructions(questForSession);
+            geminiClient.functions = [];
+            geminiClient.functionsMap = {};
+            geminiClient.systemInstructions = buildSessionInstructions(
+                questForSession,
+                activeQuestSessionIndex ?? getSelectedQuestIndex()
+            );
             geminiClient.inputAudioTranscription = enableInputTranscription;
             geminiClient.outputAudioTranscription = enableOutputTranscription;
             geminiClient.googleGrounding = enableGrounding;
@@ -1972,7 +2810,9 @@
             geminiClient.responseModalities = ["AUDIO"];
             geminiClient.voiceName = voice;
             geminiClient.temperature = parseFloat(temperature);
-            geminiClient.proactivity = { proactiveAudio: preconnect ? false : enableProactiveAudio };
+            geminiClient.proactivity = {
+                proactiveAudio: preconnect ? false : enableProactiveAudio,
+            };
             geminiClient.automaticActivityDetection = {
                 disabled: disableActivityDetection,
                 silence_duration_ms: parseInt(silenceDuration),
@@ -2046,7 +2886,7 @@
 
             pendingNextConnectPromise = (async () => {
                 try {
-                    const nextClient = new GeminiLiveAPI(proxyUrl, projectId, model);
+                    const nextClient = new GeminiLiveAPI(activeProxyUrl, projectId, model);
                     configureGeminiClient(nextClient, questForSession, { preconnect: true });
                     nextClient.onReceiveResponse = () => {};
                     nextClient.onErrorMessage = () => {};
@@ -2058,7 +2898,7 @@
                         }
                     };
                     await nextClient.connect();
-                    if (!awaitingQuestFarewell) {
+                    if (!awaitingQuestFarewell && !questHandoffActive) {
                         nextClient.disconnect();
                         return;
                     }
@@ -2073,7 +2913,53 @@
             })();
         }
 
+        async function connectAPIWithRetry(maxAttempts = 3) {
+            let lastError = null;
+            for (const proxyCandidate of getProxyFallbackUrls()) {
+                activeProxyUrl = proxyCandidate;
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    try {
+                        if (attempt > 0) {
+                            cancelPendingNextQuestSession();
+                            if (client) {
+                                intentionalDisconnect = true;
+                                client.disconnect();
+                                client = null;
+                                connected = false;
+                            }
+                            await new Promise((r) => setTimeout(r, 350 + attempt * 250));
+                        }
+                        nextConnectQuick = attempt > 0;
+                    await connectAPI();
+                    if (client?.connected && client.webSocket?.readyState === WebSocket.OPEN) {
+                        return;
+                    }
+                    lastError = new Error('Session not ready after connect');
+                    } catch (error) {
+                        lastError = error;
+                    }
+                }
+            }
+            throw lastError || new Error('Connect failed');
+        }
+
         async function beginNextQuestHandoff(completed, { playReadySound = true, pauseBeforeConnect = 0, skipInitialDisconnect = false } = {}) {
+            let loadingToken;
+            if (questLoadingOverlay?.classList.contains('active')) {
+                loadingToken = questLoadingToken;
+                if (questLoadingTitle) {
+                    questLoadingTitle.textContent = '次のミッションを準備中…';
+                }
+                if (questLoadingSub) {
+                    questLoadingSub.textContent = 'ラーニー先生を呼び出しています';
+                    questLoadingSub.hidden = false;
+                }
+            } else {
+                loadingToken = showQuestLoading(
+                    '次のミッションを準備中…',
+                    'ラーニー先生を呼び出しています'
+                );
+            }
             showQuestToast(completed);
             setQuestBannerTransitioning(true);
             questHandoffActive = true;
@@ -2081,7 +2967,7 @@
 
             questSessionActive = false;
             if (!skipInitialDisconnect) {
-                disconnectAPI(false, true, false, true);
+                disconnectAPI(false, true, false, true, true);
                 if (playReadySound) {
                     questSfx.playQuestReady();
                 }
@@ -2102,19 +2988,25 @@
             updateQuestBanner();
             updateActionUI();
 
-            if (pendingNextConnectPromise) {
-                try {
-                    await pendingNextConnectPromise;
-                } catch {
-                    // fall through to live connect
-                }
-            }
-
             try {
+                if (!audioStreamer?.mediaStream?.active) {
+                    await preflightMicAccess();
+                }
+                prepareNextQuestSession();
+                if (pendingNextConnectPromise) {
+                    try {
+                        await Promise.race([
+                            pendingNextConnectPromise,
+                            new Promise((r) => setTimeout(r, 2500)),
+                        ]);
+                    } catch {
+                        cancelPendingNextQuestSession();
+                    }
+                }
+
                 if (!adoptPendingNextClient()) {
                     cancelPendingNextQuestSession();
-                    nextConnectQuick = true;
-                    await connectAPI();
+                    await connectAPIWithRetry(3);
                 } else {
                     if (audioStreamer) {
                         audioStreamer.updateClient(client);
@@ -2146,7 +3038,9 @@
                 announceQuestStart();
                 actionState = 'active';
                 updateActionUI();
-            } catch {
+                hideQuestLoading(loadingToken);
+            } catch (error) {
+                hideQuestLoading(loadingToken);
                 questHandoffActive = false;
                 setQuestBannerTransitioning(false);
                 questBanner.classList.remove('celebrating');
@@ -2154,7 +3048,7 @@
                 questSessionActive = false;
                 questOpeningSent = false;
                 cancelPendingNextQuestSession();
-                addMessage(buildConnectErrorMessage(), 'system');
+                addMessage(buildConnectErrorMessage(error), 'system');
                 disconnectAPI(false, true, false, audioStreaming);
                 updateActionUI();
             }
@@ -2169,15 +3063,21 @@
                 audioStreamer.updateClient(client);
             }
 
-            if (audioStreamer.mediaStream && audioStreamer.audioContext) {
+            if (audioStreamer.mediaStream?.active && audioStreamer.audioWorklet) {
+                audioStreamer.setMuted(isMuted);
                 audioStreamer.resumeStreaming();
                 audioStreaming = true;
-                return await audioStreamer.ensureStreaming();
+                return audioStreamer.ensureStreaming();
             }
 
-            await audioStreamer.start();
-            audioStreaming = true;
-            return await audioStreamer.ensureStreaming();
+            try {
+                await audioStreamer.start();
+                audioStreamer.setMuted(isMuted);
+                audioStreaming = true;
+                return audioStreamer.ensureStreaming();
+            } catch {
+                return false;
+            }
         }
 
         function resetQuestSessionState() {
@@ -2186,19 +3086,33 @@
             farewellAssistantSeen = false;
             farewellSessionClient = null;
             questCompleting = false;
-            assistantSpokeSinceLastUserTurn = true;
+            assistantRespondedSinceLastUserTurn = true;
+            assistantAudibleThisTurn = false;
+            awaitingAssistantReply = false;
+            awaitingAssistantSince = 0;
+            noAudioRecoveryAttempts = 0;
             lastFinishedUserTranscriptAt = 0;
-            clearUnclearInputRecoveryTimer();
+            pendingQuestTracker = null;
+            steeringNudgeSentThisTurn = false;
+            falseCreditCorrectionSentThisTurn = false;
+            assistantTurnOpen = false;
+            deferredSteeringNudges = [];
+            pendingFalseCreditAssistantText = '';
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            clearQuestTrackerTimer();
             clearQuestTeardownTimers();
             clearQuestOpeningRetry();
+            resolvePostBargeIn();
+            staleAssistantOutputUntil = 0;
         }
 
         function announceQuestStart() {
             if (!client?.connected || !activeQuest || !questSessionActive || questOpeningSent) return;
             questOpeningSent = true;
-            const nudge = buildQuestOpeningNudge(activeQuest);
+            const nudge = buildQuestOpeningNudge(activeQuest, activeQuestSessionIndex);
             if (!nudge) return;
-            client.sendTextMessage(nudge);
+            sendClientText(nudge);
             scheduleQuestOpeningRetry();
         }
 
@@ -2207,6 +3121,77 @@
                 .reverse()
                 .find((m) => m.type === 'user-transcript' && m.isFinished);
             return (last?.text || '').trim();
+        }
+
+        /** Latest voice transcript or typed chat message (for silence recovery). */
+        function getLatestUserTurnText() {
+            for (let i = chatMessages.length - 1; i >= 0; i--) {
+                const m = chatMessages[i];
+                if (m.type === 'user' && m.text?.trim()) return m.text.trim();
+                if (m.type === 'user-transcript' && m.isFinished && m.text?.trim()) {
+                    return m.text.trim();
+                }
+            }
+            return '';
+        }
+
+        function maybeCorrectPrematureQuestCompleteClaim(assistantText) {
+            if (
+                !questSessionActive ||
+                !activeQuest ||
+                questCompleting ||
+                awaitingQuestFarewell
+            ) {
+                return;
+            }
+
+            const latestUser = getLatestUserTurnText();
+            const falseCredit = assistantFalselyCreditsEnglishStep(
+                assistantText,
+                activeQuest,
+                latestUser,
+                activeQuestSessionIndex
+            );
+            if (falseCredit) {
+                reconcileEnglishStepProof(
+                    activeQuest,
+                    activeQuestSessionIndex,
+                    getSessionUserUtterances()
+                );
+                updateQuestBanner();
+                if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return;
+                const now = Date.now();
+                if (now - lastPrematureCompleteCorrectionAt < 8000) return;
+                lastPrematureCompleteCorrectionAt = now;
+                const correctionNudge = userMissedEnglishStepPhrase(latestUser, falseCredit)
+                    ? buildWrongStepPhraseCorrectionNudge(
+                          activeQuest,
+                          falseCredit,
+                          latestUser,
+                          activeQuestSessionIndex
+                      )
+                    : buildJapaneseOnlyStepCorrectionNudge(
+                          activeQuest,
+                          falseCredit,
+                          latestUser,
+                          activeQuestSessionIndex
+                      );
+                sendSteeringNudge(correctionNudge, { falseCreditCorrection: true });
+                return;
+            }
+
+            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) {
+                return;
+            }
+            if (!assistantClaimsQuestComplete(assistantText)) return;
+            if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return;
+
+            const now = Date.now();
+            if (now - lastPrematureCompleteCorrectionAt < 8000) return;
+            lastPrematureCompleteCorrectionAt = now;
+            sendSteeringNudge(
+                buildPrematureCompleteCorrectionNudge(activeQuest, activeQuestSessionIndex)
+            );
         }
 
         function getLatestUserUtterance(includePartial = false) {
@@ -2226,7 +3211,7 @@
                 source === 'tool'
                     ? getLatestUserUtterance(true)
                     : getLatestFinishedUserUtterance();
-            syncQuestStepsAndBanner(latest);
+            syncQuestStepsFromSession(latest);
 
             if (!isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return null;
 
@@ -2235,7 +3220,8 @@
                 userQuote,
                 latest,
                 getSessionUserText(),
-                activeQuestSessionIndex
+                activeQuestSessionIndex,
+                getSessionUserUtterances()
             );
             if (!validation.ok) return null;
 
@@ -2288,7 +3274,8 @@
             farewellAssistantSeen = false;
             chatMessagesAtFarewell = chatMessages.length;
             pendingQuestTeardown = { completed, lessonDone, userQuote, isNewClear };
-            resetSilenceTimer();
+            resetSilenceWatchState();
+            stopSilenceWatch();
             clearQuestCompleteFallbackTimer();
 
             if (lessonDone) {
@@ -2296,25 +3283,13 @@
                 cancelPendingNextQuestSession();
             } else {
                 questSfx.playQuestComplete();
+                prepareNextQuestSession();
             }
 
             if (client?.connected && source !== 'tool') {
-                client.sendTextMessage(buildQuestFarewellNudge(completed, userQuote));
-                farewellNudgeTimer = setTimeout(() => {
-                    if (awaitingQuestFarewell && !farewellAssistantSeen && client?.connected) {
-                        client.sendTextMessage(
-                            'The quest is complete. Say one short spoken celebration out loud now, like "Yatta! Great job!" Do not repeat if you already said it.'
-                        );
-                    }
-                }, 3500);
+                scheduleFarewellNudgeIfNeeded(completed, userQuote);
             } else if (source === 'tool') {
-                farewellNudgeTimer = setTimeout(() => {
-                    if (awaitingQuestFarewell && !farewellAssistantSeen && client?.connected) {
-                        client.sendTextMessage(
-                            'The quest is complete. Say one short spoken celebration out loud now. Do not repeat if you already said it.'
-                        );
-                    }
-                }, 6000);
+                scheduleFarewellNudgeIfNeeded(completed, userQuote, { toolPath: true });
             }
 
             questTeardownFallbackTimer = setTimeout(() => {
@@ -2323,6 +3298,27 @@
                     scheduleQuestTeardownAfterFarewell();
                 }
             }, 15000);
+        }
+
+        function scheduleFarewellNudgeIfNeeded(completed, userQuote = '', { toolPath = false } = {}) {
+            if (farewellNudgeTimer) {
+                clearTimeout(farewellNudgeTimer);
+                farewellNudgeTimer = null;
+            }
+            if (assistantAudibleThisTurn) {
+                farewellAssistantSeen = true;
+                return;
+            }
+            const delayMs = toolPath ? 5000 : 4500;
+            farewellNudgeTimer = setTimeout(() => {
+                farewellNudgeTimer = null;
+                if (!awaitingQuestFarewell || farewellAssistantSeen || !client?.connected) return;
+                if (assistantAudibleThisTurn) {
+                    farewellAssistantSeen = true;
+                    return;
+                }
+                sendClientText(buildQuestFarewellNudge(completed, userQuote));
+            }, delayMs);
         }
 
         function maybeMatchQuestFromTranscript(finished) {
@@ -2336,39 +3332,58 @@
                 updateQuestBanner();
             }
 
-            const allComplete = isQuestStepsComplete(activeQuest, activeQuestSessionIndex);
-            if (!client?.connected || !utterance) return;
-
-            if (allComplete) {
-                client.sendTextMessage(buildQuestCompleteTrackerNudge());
-                scheduleQuestCompleteFallback(utterance);
+            if (
+                questSessionActive &&
+                !questCompleting &&
+                !awaitingQuestFarewell &&
+                isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
+            ) {
+                tryAcceptQuestComplete("auto", utterance);
                 return;
             }
 
-            client.sendTextMessage(
-                buildQuestStepGroundTruthNudge(activeQuest, utterance, newly, activeQuestSessionIndex)
-            );
+            if (!client?.connected || !utterance) return;
+
+            if (!shouldSendQuestTracker(utterance, newly)) return;
+            scheduleQuestTrackerFromTranscript(utterance, newly);
+            if (newly.length) {
+                scheduleNoAudioRecovery(utterance, {
+                    stepCompleted: true,
+                    unclear: isUnrecognizableUserInput(utterance),
+                });
+            }
         }
 
         questModalNext.addEventListener('click', () => {
             hideQuestModal();
+            questModalConnectLoadingToken = showQuestLoading(
+                '次のミッションを準備中…',
+                'ラーニー先生を呼び出しています'
+            );
             handleActionButton();
         });
 
         questModalDone.addEventListener('click', () => {
             hideQuestModal();
+            hideQuestLoading();
         });
 
         questModalReset.addEventListener('click', () => {
             hideQuestModal();
+            const badgeToken = showQuestLoading(
+                'バッジを準備中…',
+                'バッジ画面を開いています'
+            );
             try {
                 window.parent.postMessage({ type: 'gc_open_panel', panel: 'badges' }, '*');
             } catch {
                 // ignore cross-origin
             }
+            setTimeout(() => hideQuestLoading(badgeToken), 1200);
         });
 
         renderQuestStars();
+        ensureDefaultMissionSelected();
         updateQuestBanner();
 
         // ============================================
@@ -2409,7 +3424,7 @@
                 btnMute.classList.add('visible');
                 // Re-apply mute to new tracks after auto-reconnect
                 if (isMuted && audioStreamer && audioStreamer.mediaStream) {
-                    audioStreamer.mediaStream.getAudioTracks().forEach(t => { t.enabled = false; });
+                    audioStreamer.setMuted(true);
                 }
             } else if (actionState === 'idle') {
                 btnMute.classList.remove('visible');
@@ -2427,18 +3442,17 @@
         function toggleMute() {
             if (!audioStreamer || !audioStreamer.mediaStream) return;
             isMuted = !isMuted;
-            const tracks = audioStreamer.mediaStream.getAudioTracks();
-            tracks.forEach(track => { track.enabled = !isMuted; });
+            audioStreamer.setMuted(isMuted);
+            updateBargeInMicStreaming();
             if (isMuted) {
                 btnMute.classList.add('muted');
                 btnMute.textContent = '🔇';
                 btnMute.title = 'ミュート解除';
-                resetSilenceTimer(); // Pause silence timer while muted
             } else {
                 btnMute.classList.remove('muted');
                 btnMute.textContent = '🎙️';
                 btnMute.title = 'マイクミュート';
-                startSilenceTimer(); // Resume silence timer when unmuted
+                ensureSilenceWatch();
             }
         }
 
@@ -2480,6 +3494,7 @@
 
         // Full re-render (only used when message list changes structurally)
         function renderChat() {
+            hideAssistantThinking();
             chatArea.querySelectorAll('.msg-row').forEach(el => el.remove());
 
             if (chatMessages.length === 0) {
@@ -2513,6 +3528,9 @@
         // Message Management
         // ============================================
         function addMessage(text, type, mode = 'add', isFinished = false) {
+            if (type === 'assistant' && text?.trim()) {
+                hideAssistantThinking();
+            }
             if (mode !== 'add' && chatMessages.length > 0) {
                 const last = chatMessages[chatMessages.length - 1];
                 if (last.type === type && !last.isFinished) {
@@ -2551,48 +3569,94 @@
         }
 
         // ============================================
-        // Silence Timer
+        // Silence watch — prompt Learny after the child is quiet
         // ============================================
-        function startSilenceTimer() {
-            resetSilenceTimer();
-            if (isMuted) return; // Don't start silence timer while muted
-            silenceTimer = setTimeout(() => {
-                if (client && client.connected) {
-                    const recentAiMessages = chatMessages
-                        .filter(m => m.type === 'assistant')
-                        .slice(-5)
-                        .map(m => m.text.substring(0, 80));
-
-                    let proactivePrompt = "[IMPORTANT: You MUST respond with audio speech now based on the conversation context. DO NOT repeat what you already said.] ";
-                    proactivePrompt += "The user has been quiet for 30 seconds. ";
-                    if (recentAiMessages.length > 0) {
-                        proactivePrompt += `Here is what you have already said recently: ${recentAiMessages.map((msg, i) => `(${i + 1}) "${msg}"`).join(", ")}. You MUST say something COMPLETELY DIFFERENT from all of these. `;
-                    }
-                    proactivePrompt += "Check in briefly with 1-2 sentences.";
-                    if (questSessionActive && activeQuest && !awaitingQuestFarewell) {
-                        const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-                        if (next) {
-                            proactivePrompt +=
-                                " Beginner level: check in naturally about their Minecraft play. " +
-                                "Do NOT repeat English phrase coaching you already said. " +
-                                "Gameplay tips or fun facts OK; quest phrase only if they ask.";
-                        }
-                    }
-                    client.sendTextMessage(proactivePrompt);
-                }
-                silenceTimer = null;
-            }, 30000);
+        function shouldMarkSilenceUserSpeech(text, finished) {
+            const t = (text || '').trim();
+            if (!t || !finished) return false;
+            return !isUnrecognizableUserInput(t);
         }
 
-        function resetSilenceTimer() {
-            if (silenceTimer) {
-                clearTimeout(silenceTimer);
-                silenceTimer = null;
+        function buildSilenceProactivePrompt() {
+            let proactivePrompt =
+                "[Speak now] The child has been quiet for 30 seconds. " +
+                "You MUST respond with audible speech now (do not stay silent). " +
+                "Do NOT repeat anything you already said this session. ";
+            if (questSessionActive && activeQuest && !awaitingQuestFarewell) {
+                proactivePrompt =
+                    `${buildActiveMissionHeader(activeQuest, activeQuestSessionIndex)}\n` +
+                    proactivePrompt +
+                    "Gently check in about the current Minecraft step and English phrase — friendly buddy tone (1–2 sentences, EN then JP).";
+            } else {
+                proactivePrompt +=
+                    "Check in with one fun Minecraft tip — casual and upbeat (1–2 sentences, EN then JP).";
             }
+            return proactivePrompt;
+        }
+
+        function canRunSilenceWatch() {
+            return (
+                actionState === 'active' &&
+                client?.connected &&
+                !awaitingQuestFarewell &&
+                !questCompleting &&
+                !questTeardownTimer
+            );
+        }
+
+        function resetSilenceWatchState() {
+            lastSilenceUserSpeechAt = 0;
+            lastSilenceAssistantDoneAt = Date.now();
+            lastSilencePromptAt = 0;
+        }
+
+        function markSilenceWatchUserActivity() {
+            lastSilenceUserSpeechAt = Date.now();
+        }
+
+        function markSilenceWatchAssistantDone() {
+            lastSilenceAssistantDoneAt = Date.now();
+        }
+
+        function silenceWatchQuietMs() {
+            const anchor = Math.max(lastSilenceUserSpeechAt, lastSilenceAssistantDoneAt);
+            return Date.now() - anchor;
+        }
+
+        function tickSilenceWatch() {
+            if (!canRunSilenceWatch()) {
+                stopSilenceWatch();
+                return;
+            }
+
+            const quietMs = silenceWatchQuietMs();
+            const sincePromptMs = Date.now() - lastSilencePromptAt;
+            if (quietMs < SILENCE_PROMPT_MS || sincePromptMs < SILENCE_PROMPT_MS) return;
+
+            lastSilencePromptAt = Date.now();
+            lastSilenceAssistantDoneAt = Date.now();
+            sendClientText(buildSilenceProactivePrompt());
+        }
+
+        function startSilenceWatch() {
+            if (silenceWatchId) return;
+            silenceWatchId = setInterval(tickSilenceWatch, SILENCE_WATCH_INTERVAL_MS);
+        }
+
+        function stopSilenceWatch() {
+            if (!silenceWatchId) return;
+            clearInterval(silenceWatchId);
+            silenceWatchId = null;
+        }
+
+        function ensureSilenceWatch() {
+            if (canRunSilenceWatch()) startSilenceWatch();
+            else stopSilenceWatch();
         }
 
         async function ensureMicActive() {
-            if (!audioStreamer || !audioStreaming || isMuted) return;
+            if (!audioStreamer || !audioStreaming) return;
+            if (isMuted && !audioStreamer.bargeInStream) return;
             try {
                 await audioStreamer.ensureStreaming();
             } catch {
@@ -2606,43 +3670,82 @@
         function handleMessage(message, sourceClient = client) {
             switch (message.type) {
                 case MultimodalLiveResponseType.TEXT:
+                    if (shouldDiscardAssistantOutput()) break;
+                    resolvePostBargeIn();
+                    markAssistantTurnStarted();
                     markAssistantResponded();
                     markFarewellAssistantActivity(sourceClient);
-                    markQuestSessionActivity(sourceClient);
                     addMessage(message.data, 'assistant');
                     break;
 
                 case MultimodalLiveResponseType.AUDIO:
-                    markAssistantResponded();
+                    if (shouldDiscardAssistantOutput()) break;
+                    resolvePostBargeIn();
+                    lastAssistantAudioAt = Date.now();
+                    markAssistantAudioReceived();
                     markFarewellAssistantActivity(sourceClient);
                     markQuestSessionActivity(sourceClient);
+                    updateBargeInMicStreaming();
                     if (audioPlayer) audioPlayer.play(message.data);
                     break;
 
                 case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
                     if (sourceClient !== client) break;
-                    resetSilenceTimer();
+                    if (message.data.text?.trim() && assistantOutputActive()) {
+                        handleUserBargeIn();
+                    }
+                    if (
+                        !isMuted &&
+                        shouldMarkSilenceUserSpeech(
+                            message.data.text,
+                            message.data.finished
+                        )
+                    ) {
+                        markSilenceWatchUserActivity();
+                    }
                     ensureMicActive();
                     addMessage(message.data.text, 'user-transcript', 'append', message.data.finished);
                     if (message.data.finished) {
-                        const unclear = handleFinishedUserTranscript();
-                        if (!unclear) {
-                            maybeMatchQuestFromTranscript(true);
+                        const allowTurn = !isMuted || userBargeInThisTurn;
+                        if (allowTurn) {
+                            const unclear = handleFinishedUserTranscript();
+                            if (!unclear) {
+                                maybeMatchQuestFromTranscript(true);
+                            }
                         }
+                        userBargeInThisTurn = false;
+                        updateBargeInMicStreaming();
                     }
                     break;
 
                 case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
-                    markAssistantResponded();
+                    if (shouldDiscardAssistantOutput()) break;
+                    if (message.data.text?.trim()) {
+                        resolvePostBargeIn();
+                        markAssistantTurnStarted();
+                    }
                     markFarewellAssistantActivity(sourceClient);
-                    markQuestSessionActivity(sourceClient);
                     addMessage(message.data.text, 'assistant', 'append', message.data.finished);
                     if (message.data.finished) {
+                        pendingFalseCreditAssistantText =
+                            chatMessages.length
+                                ? chatMessages[chatMessages.length - 1].text
+                                : message.data.text;
                         tryScheduleFarewellTeardown();
+                        markSilenceWatchAssistantDone();
+                        ensureSilenceWatch();
                     }
                     break;
 
                 case MultimodalLiveResponseType.SETUP_COMPLETE:
+                    if (
+                        questSessionActive &&
+                        activeQuest &&
+                        !questOpeningSent &&
+                        actionState !== "idle"
+                    ) {
+                        announceQuestStart();
+                    }
                     if (justReconnected && client) {
                         const recentMessages = chatMessages
                             .filter(msg => msg.type === 'user' || msg.type === 'assistant' || msg.type === 'user-transcript')
@@ -2653,6 +3756,7 @@
                         }
                         justReconnected = false;
                     }
+                    ensureSilenceWatch();
                     break;
 
                 case MultimodalLiveResponseType.TOOL_CALL: {
@@ -2675,17 +3779,42 @@
 
                             const acceptedQuote = tryAcceptQuestComplete('tool', userQuote);
                             if (id && acceptedQuote) {
-                                client.sendToolResponse(name, id, {
-                                    result: 'quest_recorded',
-                                    message: buildQuestRecordedToolMessage(questForTool, acceptedQuote),
-                                });
+                                const alreadySpoke = assistantAudibleThisTurn;
+                                client.sendToolResponse(
+                                    name,
+                                    id,
+                                    {
+                                        result: 'quest_recorded',
+                                        message: buildQuestRecordedToolMessage(
+                                            questForTool,
+                                            acceptedQuote,
+                                            alreadySpoke
+                                        ),
+                                    },
+                                    alreadySpoke ? 'SILENT' : 'WHEN_IDLE'
+                                );
+                                if (alreadySpoke) {
+                                    farewellAssistantSeen = true;
+                                }
                             } else if (id) {
+                                completeQuestRejectedTurnSeq = lastUserTurnSeq;
+                                const quest = questForTool || getSelectedQuest();
+                                const questIdx = activeQuestSessionIndex ?? loadProgress();
+                                const validation = validateQuestCompletion(
+                                    quest,
+                                    userQuote,
+                                    latestUtterance,
+                                    getSessionUserText(),
+                                    questIdx,
+                                    getSessionUserUtterances()
+                                );
                                 client.sendToolResponse(name, id, {
                                     result: 'not_yet',
                                     message: buildQuestRejectedToolMessage(
-                                        questForTool || getSelectedQuest(),
+                                        quest,
                                         latestUtterance,
-                                        activeQuestSessionIndex ?? loadProgress()
+                                        questIdx,
+                                        validation.reason || ''
                                     ),
                                 });
                             }
@@ -2701,6 +3830,18 @@
 
                 case MultimodalLiveResponseType.TURN_COMPLETE:
                     if (sourceClient !== client) break;
+                    if (postBargeInPending) {
+                        pendingFalseCreditAssistantText = '';
+                        markAssistantTurnEnded({ skipDeferred: true });
+                        markSilenceWatchAssistantDone();
+                        ensureSilenceWatch();
+                        break;
+                    }
+                    if (pendingFalseCreditAssistantText) {
+                        maybeCorrectPrematureQuestCompleteClaim(pendingFalseCreditAssistantText);
+                        pendingFalseCreditAssistantText = '';
+                    }
+                    markAssistantTurnEnded();
                     if (awaitingQuestFarewell) {
                         tryScheduleFarewellTeardown();
                     } else if (message.usageMetadata) {
@@ -2733,25 +3874,41 @@
                         }
                     }
                     if (
-                        !assistantSpokeSinceLastUserTurn &&
+                        !assistantAudibleThisTurn &&
+                        awaitingAssistantReply &&
                         lastFinishedUserTranscriptAt &&
                         Date.now() - lastFinishedUserTranscriptAt < 12000
                     ) {
-                        const utterance = getLatestFinishedUserUtterance();
-                        const noModelOutput =
-                            (message.usageMetadata?.candidatesTokenCount || 0) === 0;
-                        if (isUnrecognizableUserInput(utterance) || noModelOutput) {
-                            scheduleUnclearInputRecoveryIfSilent(utterance);
-                        }
+                        const utterance = getLatestUserTurnText();
+                        scheduleNoAudioRecovery(utterance, {
+                            unclear: isUnrecognizableUserInput(utterance),
+                        });
                     }
-                    if (!questTeardownTimer && !awaitingQuestFarewell) {
-                        startSilenceTimer();
-                    }
+                    markSilenceWatchAssistantDone();
+                    ensureSilenceWatch();
                     break;
 
                 case MultimodalLiveResponseType.INTERRUPTED:
-                    if (audioPlayer) audioPlayer.interrupt();
-                    resetSilenceTimer();
+                    assistantTurnOpen = false;
+                    updateBargeInMicStreaming();
+                    const appCausedInterrupt = Date.now() - lastAppSteeringInjectAt < 900;
+                    if (!appCausedInterrupt) {
+                        userBargeInThisTurn = true;
+                        armPostBargeInWatchdog();
+                        bumpStaleAssistantOutputWindow();
+                        finalizeInterruptedAssistantMessage();
+                        assistantAudibleThisTurn = false;
+                        lastAssistantAudioAt = 0;
+                        pendingFalseCreditAssistantText = '';
+                        pendingQuestTracker = null;
+                        clearQuestTrackerTimer();
+                        deferredSteeringNudges = [];
+                        clearDeferredSteeringFlushTimer();
+                        clearNoAudioRecoveryTimer();
+                        if (audioPlayer) audioPlayer.interrupt();
+                    } else {
+                        scheduleDeferredSteeringFlush(700);
+                    }
                     break;
             }
         }
@@ -2764,18 +3921,18 @@
             nextConnectQuick = false;
 
             if (quickSwitch) {
-                await new Promise((r) => setTimeout(r, 300));
+                await new Promise((r) => setTimeout(r, 450));
             }
 
             if (client && client.connected) {
                 disconnectAPI(false, quickSwitch, false, quickSwitch && audioStreaming);
-                await new Promise((r) => setTimeout(r, quickSwitch ? 250 : 500));
+                await new Promise((r) => setTimeout(r, quickSwitch ? 400 : 500));
             }
 
             try {
                 if (!isAutoReconnecting) justReconnected = false;
 
-                client = new GeminiLiveAPI(proxyUrl, projectId, model);
+                client = new GeminiLiveAPI(activeProxyUrl, projectId, model);
                 const questForSession = activeQuest ?? getSelectedQuest();
                 configureGeminiClient(client, questForSession);
                 attachClientHandlers(client);
@@ -2794,8 +3951,8 @@
                     videoStreamer.updateClient(client);
                 }
 
-                if (!audioPlayer) {
-                    audioPlayer = new AudioPlayer();
+                if (!audioPlayer?.isInitialized) {
+                    audioPlayer = audioPlayer || new AudioPlayer();
                     await audioPlayer.init();
                 }
                 audioPlayer.setVolume(volumeLevel / 100);
@@ -2804,9 +3961,13 @@
             }
         }
 
-        function disconnectAPI(isAutoReconnect = false, keepAudioPlayer = false, preserveQuestAdvance = false, keepMicStreamer = false) {
-            resetSilenceTimer();
-            clearUnclearInputRecoveryTimer();
+        function disconnectAPI(isAutoReconnect = false, keepAudioPlayer = false, preserveQuestAdvance = false, keepMicStreamer = false, preserveActionState = false) {
+            stopSilenceWatch();
+            resolvePostBargeIn();
+            staleAssistantOutputUntil = 0;
+            clearNoAudioRecoveryTimer();
+            clearQuestTrackerTimer();
+            pendingQuestTracker = null;
             if (!isAutoReconnect) {
                 endQuestSession();
             }
@@ -2853,7 +4014,9 @@
                 if (!keepMicStreamer) {
                     audioStreaming = false;
                 }
-                actionState = 'idle';
+                if (!preserveActionState) {
+                    actionState = 'idle';
+                }
                 updateActionUI();
             } else {
                 connected = false;
@@ -2867,7 +4030,7 @@
         async function autoReconnect() {
             if (isAutoReconnecting || questSessionActive) return;
             isAutoReconnecting = true;
-            resetSilenceTimer();
+            stopSilenceWatch();
 
             savedMediaStates = {
                 audioStreaming: audioStreaming,
@@ -2936,7 +4099,9 @@
             }
 
             try {
-                await ensureStaleConnectionClosed();
+                await preflightMicAccess();
+                await preflightAudioOutput();
+                await ensureStaleConnectionClosed({ keepMic: true });
                 await questSfx.ensureContext();
                 await connectAPI();
 
@@ -2951,12 +4116,17 @@
 
                 actionState = 'active';
                 updateActionUI();
+                resetSilenceWatchState();
+                ensureSilenceWatch();
+                clearQuestModalConnectLoading();
             } catch (error) {
+                logConnectFailure(error, "handleActionButton");
                 resetIdleCallState();
                 actionState = 'idle';
-                addMessage(buildConnectErrorMessage(), 'system');
+                addMessage(buildConnectErrorMessage(error), 'system');
                 disconnectAPI(false, true, false, false);
                 updateActionUI();
+                clearQuestModalConnectLoading();
             }
         }
 
@@ -2968,10 +4138,50 @@
             if (!text) return;
 
             if (client) {
-                resetSilenceTimer();
+                markSilenceWatchUserActivity();
+                resolvePostBargeIn();
+                markUserTurnStarted();
                 addMessage(text, 'user');
-                client.sendTextMessage(text);
+                showAssistantThinking();
+
+                let newly = [];
+                if (activeQuest && !questCompleting && activeQuestSessionIndex !== null) {
+                    const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
+                    syncQuestStepsAndBanner(text);
+                    const after = getCompletedStepIds(activeQuestSessionIndex);
+                    newly = after.filter((id) => !before.has(id));
+                    if (newly.length) updateQuestBanner();
+                }
+
+                const payload = buildTypedUserTurnPayload(text, newly);
+                const usedGroundTruth = payload !== text;
+                if (!sendClientText(payload)) {
+                    hideAssistantThinking();
+                    awaitingAssistantReply = false;
+                    addMessage('接続の準備中です。少し待ってからもう一度送ってね。', 'system');
+                    return;
+                }
+                if (usedGroundTruth) markSteeringNudgeSent();
+
                 chatInput.value = '';
+                lastFinishedUserTranscriptAt = Date.now();
+
+                if (
+                    questSessionActive &&
+                    !questCompleting &&
+                    !awaitingQuestFarewell &&
+                    activeQuest &&
+                    isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
+                ) {
+                    tryAcceptQuestComplete('auto', text);
+                } else if (!usedGroundTruth) {
+                    syncQuestFromUserText(text);
+                }
+
+                scheduleNoAudioRecovery(text, {
+                    unclear: isUnrecognizableUserInput(text),
+                    stepCompleted: newly.length > 0,
+                });
             }
         }
 
@@ -2987,7 +4197,7 @@
         });
 
         window.addEventListener('beforeunload', () => {
-            resetSilenceTimer();
+            stopSilenceWatch();
             cancelPendingNextQuestSession();
             disconnectAPI();
         });

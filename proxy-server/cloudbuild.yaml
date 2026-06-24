@@ -22,7 +22,7 @@ steps:
       - '--image'
       - 'gcr.io/${PROJECT_ID}/gemini-proxy:latest'
       - '--region'
-      - 'us-central1'
+      - 'asia-northeast1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'

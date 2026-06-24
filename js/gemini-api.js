@@ -2,6 +2,9 @@
  * Gemini Live API Utilities
  */
 
+/** Vertex region for Gemini Live (model + Bidi WebSocket). Must match an enabled region for the project. */
+const GEMINI_REGION = "us-central1";
+
 // Response type constants
 export const MultimodalLiveResponseType = {
   TEXT: "TEXT",
@@ -122,7 +125,7 @@ export class GeminiLiveAPI {
     this.proxyUrl = proxyUrl;
     this.projectId = projectId;
     this.model = model;
-    this.modelUri = `projects/${this.projectId}/locations/us-central1/publishers/google/models/${this.model}`;
+    this.modelUri = `projects/${this.projectId}/locations/${GEMINI_REGION}/publishers/google/models/${this.model}`;
     this.responseModalities = ["AUDIO"];
     this.systemInstructions = "";
     this.googleGrounding = false;
@@ -147,9 +150,12 @@ export class GeminiLiveAPI {
       start_of_speech_sensitivity: "START_SENSITIVITY_UNSPECIFIED",
     };
 
-    this.apiHost = "us-central1-aiplatform.googleapis.com";
+    this.apiHost = `${GEMINI_REGION}-aiplatform.googleapis.com`;
     this.serviceUrl = `wss://${this.apiHost}/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
     this.connected = false;
+    this.sessionReady = false;
+    this._setupSent = false;
+    this._setupTimeout = null;
     this.webSocket = null;
     this.lastSetupMessage = null; // Store the last setup message
 
@@ -188,7 +194,7 @@ export class GeminiLiveAPI {
 
   setProjectId(projectId) {
     this.projectId = projectId;
-    this.modelUri = `projects/${this.projectId}/locations/us-central1/publishers/google/models/${this.model}`;
+    this.modelUri = `projects/${this.projectId}/locations/${GEMINI_REGION}/publishers/google/models/${this.model}`;
   }
 
   setSystemInstructions(newSystemInstructions) {
@@ -246,6 +252,12 @@ export class GeminiLiveAPI {
 
   disconnect() {
     this.connected = false;
+    this.sessionReady = false;
+    this._setupSent = false;
+    if (this._setupTimeout) {
+      clearTimeout(this._setupTimeout);
+      this._setupTimeout = null;
+    }
     this._rejectConnect(new Error("Connection closed"));
 
     if (!this.webSocket) return;
@@ -270,15 +282,20 @@ export class GeminiLiveAPI {
   }
 
   sendMessage(message) {
-    // console.log("🟩 Sending message: ", message);
-    if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
-      this.webSocket.send(JSON.stringify(message));
-    }
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return false;
+    this.webSocket.send(JSON.stringify(message));
+    return true;
   }
 
   onReceiveMessage(messageEvent) {
-    // console.log("Message received: ", messageEvent);
     const messageData = JSON.parse(messageEvent.data);
+    if (messageData?.setupComplete && !this.sessionReady) {
+      this.sessionReady = true;
+      if (this._setupTimeout) {
+        clearTimeout(this._setupTimeout);
+        this._setupTimeout = null;
+      }
+    }
     const message = new MultimodalLiveResponseMessage(messageData);
     this.onReceiveResponse(message);
   }
@@ -306,10 +323,17 @@ export class GeminiLiveAPI {
 
     this.webSocket.onopen = () => {
       this.connected = true;
+      this.sessionReady = false;
+      this._setupSent = false;
       this.totalBytesSent = 0;
       this.sendInitialSetupMessages();
       this.onConnectionStarted();
       this._resolveConnect();
+      if (this._setupTimeout) clearTimeout(this._setupTimeout);
+      this._setupTimeout = setTimeout(() => {
+        this._setupTimeout = null;
+        if (!this.sessionReady) this.sessionReady = true;
+      }, 12000);
     };
 
     this.webSocket.onmessage = this.onReceiveMessage.bind(this);
@@ -394,7 +418,7 @@ export class GeminiLiveAPI {
         turn_complete: true,
       },
     };
-    this.sendMessage(textMessage);
+    return this.sendMessage(textMessage);
   }
 
   sendTextMessageWithHistory(conversationHistory, currentPrompt) {
@@ -427,10 +451,10 @@ export class GeminiLiveAPI {
     this.sendMessage(textMessage);
   }
 
-  sendToolResponse(name, id, responseBody = {}) {
+  sendToolResponse(name, id, responseBody = {}, scheduling = "WHEN_IDLE") {
     const response = {
       ...responseBody,
-      scheduling: responseBody.scheduling || "INTERRUPT",
+      scheduling: responseBody.scheduling || scheduling,
     };
     const message = {
       tool_response: {
@@ -473,6 +497,24 @@ export class GeminiLiveAPI {
 
   sendAudioMessage(base64PCM) {
     this.sendRealtimeInputMessage(base64PCM, "audio/pcm");
+  }
+
+  /**
+   * After barge-in, server VAD often misses end-of-speech. Explicitly hand the
+   * turn back so the model can respond to the child's interrupt utterance.
+   */
+  signalUserTurnComplete() {
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return false;
+    this.sendMessage({
+      realtime_input: {
+        activity_end: {},
+      },
+    });
+    return this.sendMessage({
+      client_content: {
+        turn_complete: true,
+      },
+    });
   }
 
   async sendImageMessage(base64Image, mime_type = "image/jpeg") {

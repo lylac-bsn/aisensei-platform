@@ -2,6 +2,15 @@
  * Media Utilities - Audio and Video streaming helpers for Gemini Live API
  */
 
+const CAPTURE_WORKLET_URL = new URL(
+  "../audio-processors/capture.worklet.js",
+  import.meta.url
+).href;
+const PLAYBACK_WORKLET_URL = new URL(
+  "../audio-processors/playback.worklet.js",
+  import.meta.url
+).href;
+
 /**
  * Audio Streamer - Captures and streams microphone audio
  */
@@ -13,6 +22,9 @@ export class AudioStreamer {
     this.mediaStream = null;
     this.isStreaming = false;
     this.sampleRate = 16000; // Gemini requires 16kHz
+    this.muted = false;
+    /** When muted, still stream mic while true so the API can detect barge-in. */
+    this.bargeInStream = false;
   }
 
   /**
@@ -21,66 +33,61 @@ export class AudioStreamer {
    */
   async start(deviceId = null) {
     try {
-      // Build audio constraints
-      const audioConstraints = {
-        sampleRate: this.sampleRate,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
+      if (!this.mediaStream?.active) {
+        const audioConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        };
 
-      // Add device ID if specified
-      if (deviceId) {
-        audioConstraints.deviceId = { exact: deviceId };
+        if (deviceId) {
+          audioConstraints.deviceId = { exact: deviceId };
+        }
+
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+        });
       }
 
-      // Get microphone access
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-      });
-
-      // Create audio context at 16kHz
-      this.audioContext = new (window.AudioContext ||
-        window.webkitAudioContext)({
-        sampleRate: this.sampleRate,
-      });
+      if (!this.audioContext || this.audioContext.state === "closed") {
+        this.audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)({
+          sampleRate: this.sampleRate,
+        });
+      }
 
       if (this.audioContext.state === "suspended") {
         await this.audioContext.resume();
       }
 
-      // Load the audio worklet module
-      await this.audioContext.audioWorklet.addModule(
-        "/audio-processors/capture.worklet.js"
-      );
+      if (!this.audioWorklet) {
+        await this.audioContext.audioWorklet.addModule(CAPTURE_WORKLET_URL);
 
-      // Create the audio worklet node
-      this.audioWorklet = new AudioWorkletNode(
-        this.audioContext,
-        "audio-capture-processor"
-      );
+        this.audioWorklet = new AudioWorkletNode(
+          this.audioContext,
+          "audio-capture-processor"
+        );
 
-      // Set up message handling from the worklet
-      this.audioWorklet.port.onmessage = (event) => {
-        if (!this.isStreaming) return;
+        this.audioWorklet.port.onmessage = (event) => {
+          if (!this.isStreaming) return;
+          if (this.muted && !this.bargeInStream) return;
 
-        if (event.data.type === "audio") {
-          const inputData = event.data.data;
-          const pcmData = this.convertToPCM16(inputData);
-          const base64Audio = this.arrayBufferToBase64(pcmData);
+          if (event.data.type === "audio") {
+            const inputData = event.data.data;
+            const pcmData = this.convertToPCM16(inputData);
+            const base64Audio = this.arrayBufferToBase64(pcmData);
 
-          // Send to Gemini
-          if (this.client && this.client.connected) {
-            this.client.sendAudioMessage(base64Audio);
+            if (this.client && this.client.connected) {
+              this.client.sendAudioMessage(base64Audio);
+            }
           }
-        }
-      };
+        };
 
-      // Connect the audio graph
-      const source = this.audioContext.createMediaStreamSource(
-        this.mediaStream
-      );
-      source.connect(this.audioWorklet);
+        const source = this.audioContext.createMediaStreamSource(
+          this.mediaStream
+        );
+        source.connect(this.audioWorklet);
+      }
 
       this.isStreaming = true;
       return true;
@@ -94,6 +101,20 @@ export class AudioStreamer {
    */
   updateClient(newClient) {
     this.client = newClient;
+  }
+
+  setMuted(muted) {
+    this.muted = Boolean(muted);
+    if (this.mediaStream) {
+      this.mediaStream.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
+    }
+  }
+
+  /** While muted, optionally keep sending mic audio for server-side barge-in detection. */
+  setBargeInStream(enabled) {
+    this.bargeInStream = Boolean(enabled);
   }
 
   /** Pause sending to API without tearing down mic hardware (quest handoff). */
@@ -116,12 +137,20 @@ export class AudioStreamer {
   async ensureStreaming() {
     if (!this.audioContext) return false;
     if (this.audioContext.state === "suspended") {
-      await this.audioContext.resume();
+      try {
+        await this.audioContext.resume();
+      } catch {
+        return false;
+      }
     }
-    if (this.mediaStream && this.audioWorklet && !this.isStreaming) {
+    if (this.mediaStream?.active && this.audioWorklet && !this.isStreaming) {
       this.isStreaming = true;
     }
-    return this.isStreaming && this.audioContext.state === "running";
+    return Boolean(
+      this.isStreaming &&
+        this.mediaStream?.active &&
+        this.audioContext.state === "running"
+    );
   }
 
   /**
@@ -396,9 +425,7 @@ export class AudioPlayer {
       });
 
       // Load the audio worklet from external file
-      await this.audioContext.audioWorklet.addModule(
-        "/audio-processors/playback.worklet.js"
-      );
+      await this.audioContext.audioWorklet.addModule(PLAYBACK_WORKLET_URL);
 
       // Create worklet node
       this.workletNode = new AudioWorkletNode(
@@ -476,12 +503,15 @@ export class AudioPlayer {
     }
   }
 
-  /** Estimated ms until enqueued PCM finishes playing (24 kHz). */
-  getEstimatedPlaybackMsRemaining() {
+  /** Estimated ms of PCM still queued (24 kHz). */
+  getPlaybackMsRemaining() {
     const samples = this.pendingSamples || 0;
-    if (samples <= 0) return 0;
-    this.pendingSamples = Math.max(0, samples - this.sampleRate * 0.12);
-    return Math.ceil((samples / this.sampleRate) * 1000);
+    return samples <= 0 ? 0 : Math.ceil((samples / this.sampleRate) * 1000);
+  }
+
+  /** @deprecated prefer getPlaybackMsRemaining */
+  getEstimatedPlaybackMsRemaining() {
+    return this.getPlaybackMsRemaining();
   }
 
   /**

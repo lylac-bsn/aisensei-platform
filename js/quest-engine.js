@@ -67,6 +67,19 @@ export function clearSelectedQuest() {
   }
 }
 
+/** First visit: auto-select the current unlocked mission (not free chat). */
+export function ensureDefaultMissionSelected() {
+  try {
+    const raw = localStorage.getItem(SELECTED_QUEST_KEY);
+    if (raw !== null) return getSelectedQuestIndex();
+    if (isLessonComplete()) return null;
+    setSelectedQuestIndex(loadProgress());
+    return getSelectedQuestIndex();
+  } catch {
+    return getSelectedQuestIndex();
+  }
+}
+
 export function setSelectedQuestIndex(index) {
   if (index === null || index === undefined) {
     clearSelectedQuest();
@@ -428,38 +441,228 @@ function buildFlexibleEnglishRegex(normPattern) {
   return new RegExp(parts.join("\\s+"), "i");
 }
 
-/** Salient keyword groups — each group needs at least one hit (STT-friendly fallback). */
+/** Steps that mean the child finished an action — reject aspiration/modals (need/want/how). */
+const STEP_REQUIRES_COMPLETION = new Set([
+  "found_tree",
+  "got_wood",
+  "made_table",
+  "placed_table",
+  "made_pickaxe",
+  "found_stones",
+  "got_stones",
+  "found_food",
+]);
+
+const ASPIRATION_WORDS = [
+  "need", "needed", "want", "wanted", "wanna", "gonna", "going", "must",
+  "help", "how", "what", "where", "when", "why", "could", "would", "should",
+  "please", "maybe", "think", "thought", "wish", "hope", "hoping", "can",
+  "cant", "cannot", "dont", "doesnt", "didnt", "will", "shall", "might",
+];
+
+/** Salient keyword groups — allowed verb/object synonyms when patterns almost match (allowlist only). */
 const STEP_SALIENT_GROUPS = {
   found_tree: [["find", "found", "see", "look"], ["tree"]],
   got_wood: [["get", "got", "have", "chop", "cut", "collect"], ["wood"]],
-  made_table: [["make", "made", "craft", "crafted", "built", "create"], ["table", "crafting", "craft"]],
-  placed_table: [["put", "place", "placed"], ["here", "down"]],
-  made_pickaxe: [["make", "made", "craft", "built"], ["pickaxe", "pick"]],
+  made_table: [["made", "crafted", "built", "created"], ["table", "craft"]],
+  placed_table: [["put", "place", "placed"], ["here", "down", "there", "table", "craft"]],
+  made_pickaxe: [["made", "crafted", "built", "created", "have", "has", "had"], ["pickaxe"]],
   ready: [["ready"]],
-  found_stones: [["find", "found", "see"], ["stone", "stones", "cobblestone"]],
-  got_stones: [["get", "got", "have", "mine", "dig", "collect"], ["stone", "stones", "cobblestone"]],
+  found_stones: [["find", "found", "see"], ["stone", "cobblestone"]],
+  got_stones: [["get", "got", "have", "mine", "dig", "collect"], ["stone", "cobblestone"]],
   found_food: [["find", "found", "see"], ["food", "meat", "apple", "beef", "pork", "chicken"]],
-  need_food: [["hungry", "hunger", "need", "want", "eat"], ["food", "eat"]],
+  need_food: [["hungry", "hunger", "need", "want"], ["food", "eat"]],
 };
+
+/** Max word gap between salient verb and object (STT may insert short fillers). */
+const STEP_SALIENT_MAX_GAP = {
+  made_table: 3,
+  placed_table: 4,
+  default: 3,
+};
+
+const FILLER_TOKENS = new Set([
+  "a", "an", "the", "i", "it", "my", "me", "we", "you", "some", "this", "that",
+  "is", "am", "are", "was", "be", "to", "in", "on", "at", "and", "or", "so",
+  "very", "really", "just", "now", "go", "one", "two", "three", "four", "five",
+  "1", "2", "3", "4", "5",
+]);
+
+const stepAllowlistCache = new WeakMap();
+const stepObjectAllowlistCache = new WeakMap();
+
+function expandTokenAlternates(token) {
+  const alts = new Set([token]);
+  const bare = token.replace(/['']/g, "");
+  alts.add(bare);
+  const canonical = getCanonicalVerb(bare);
+  alts.add(canonical);
+  for (const [form, root] of Object.entries(VERB_FORMS)) {
+    if (root === canonical) alts.add(form);
+  }
+  if (PLURAL_TO_SINGULAR[bare]) alts.add(PLURAL_TO_SINGULAR[bare]);
+  for (const [plural, singular] of Object.entries(PLURAL_TO_SINGULAR)) {
+    if (singular === bare) alts.add(plural);
+  }
+  return alts;
+}
+
+/** Allowlisted tokens derived from step patterns + explicit synonym groups — nothing else passes. */
+function getStepAllowlist(step) {
+  if (!step?.patterns?.length) return new Set(FILLER_TOKENS);
+  if (stepAllowlistCache.has(step)) return stepAllowlistCache.get(step);
+
+  const allowed = new Set(FILLER_TOKENS);
+  const salient = STEP_SALIENT_GROUPS[step.id];
+  if (salient) {
+    for (const group of salient) {
+      for (const kw of group) {
+        for (const alt of expandTokenAlternates(kw)) allowed.add(alt);
+      }
+    }
+  }
+  for (const pattern of step.patterns) {
+    if (!isEnglishPattern(pattern)) continue;
+    const norm = normalizeEnglishForMatching(pattern);
+    for (const token of norm.split(/\s+/).filter(Boolean)) {
+      for (const alt of expandTokenAlternates(token)) allowed.add(alt);
+    }
+  }
+
+  stepAllowlistCache.set(step, allowed);
+  return allowed;
+}
+
+/** Content nouns/adjectives allowed for this step (from patterns + salient object group). */
+function getStepObjectAllowlist(step) {
+  if (!step?.patterns?.length) return new Set();
+  if (stepObjectAllowlistCache.has(step)) return stepObjectAllowlistCache.get(step);
+
+  const objects = new Set();
+  const salientObjects = STEP_SALIENT_GROUPS[step.id]?.[1];
+  if (salientObjects) {
+    for (const kw of salientObjects) {
+      for (const alt of expandTokenAlternates(kw)) objects.add(alt);
+    }
+  }
+  for (const pattern of step.patterns) {
+    if (!isEnglishPattern(pattern)) continue;
+    const norm = normalizeEnglishForMatching(pattern);
+    for (const token of norm.split(/\s+/).filter(Boolean)) {
+      if (FILLER_TOKENS.has(token)) continue;
+      if (isVerbToken(token)) continue;
+      for (const alt of expandTokenAlternates(token)) objects.add(alt);
+    }
+  }
+
+  stepObjectAllowlistCache.set(step, objects);
+  return objects;
+}
 
 function textWords(text) {
   return normalizeEnglishForMatching(text).split(/\s+/).filter(Boolean);
 }
 
-function wordHitsKeyword(word, keyword) {
-  if (word === keyword) return true;
-  if (word.startsWith(keyword) || keyword.startsWith(word)) return true;
-  return false;
+
+function textUsesOnlyAllowlistedWords(text, step) {
+  const allowed = getStepAllowlist(step);
+  return textWords(text).every((word) => allowed.has(word));
+}
+
+function textHasNonAllowlistedContentWord(text, step) {
+  const allowed = getStepAllowlist(step);
+  return textWords(text).some((word) => !FILLER_TOKENS.has(word) && !allowed.has(word));
+}
+
+function textHasAllowlistedObject(text, step) {
+  const objects = getStepObjectAllowlist(step);
+  if (!objects.size) {
+    return textWords(text).some((word) => getStepAllowlist(step).has(word));
+  }
+  const words = textWords(text);
+  return words.some((word) => objects.has(word));
+}
+
+function textHasAspiration(text) {
+  const words = textWords(text);
+  return ASPIRATION_WORDS.some((aspiration) => words.includes(aspiration));
+}
+
+/** Past-tense / completion verbs required for action steps (blocks bare "craft table"). */
+const STEP_COMPLETION_VERBS = {
+  found_tree: ["found", "find", "see", "saw", "look"],
+  got_wood: ["got", "get", "have", "had", "chop", "chopped", "cut", "collect", "collected"],
+  made_table: ["made", "crafted", "built", "created"],
+  placed_table: ["put", "placed", "place"],
+  made_pickaxe: ["made", "crafted", "built", "created", "have", "has", "had"],
+  found_stones: ["found", "find", "see", "saw"],
+  got_stones: ["got", "get", "have", "mine", "mined", "dig", "dug", "collect", "collected"],
+  found_food: ["found", "find", "see", "saw"],
+};
+
+function stepCompletionVerbWords(step) {
+  const expanded = new Set();
+  for (const verb of STEP_COMPLETION_VERBS[step?.id] || []) {
+    for (const alt of expandTokenAlternates(verb)) expanded.add(alt);
+  }
+  return expanded;
+}
+
+function textHasCompletionVerb(text, step) {
+  const verbs = stepCompletionVerbWords(step);
+  if (!verbs.size) return true;
+  const words = textWords(text);
+  return words.some((word) => verbs.has(word));
+}
+
+function patternRequiresCompletionVerb(pattern) {
+  const norm = normalizeEnglishForMatching(pattern);
+  const first = norm.split(/\s+/).filter(Boolean)[0];
+  if (!first || first === "i") {
+    const second = norm.split(/\s+/).filter(Boolean)[1];
+    return second ? isVerbToken(second) || ["made", "got", "found", "placed", "built", "crafted", "created", "chop", "cut", "mine", "dig", "collect"].includes(second) : false;
+  }
+  return isVerbToken(first) || ["made", "got", "found", "placed", "built", "crafted", "created"].includes(first);
 }
 
 function matchesStepSalient(text, step) {
   const groups = STEP_SALIENT_GROUPS[step?.id];
   if (!groups?.length) return false;
+  if (!textUsesOnlyAllowlistedWords(text, step)) return false;
+
   const words = textWords(text);
   if (!words.length) return false;
-  return groups.every((group) =>
-    group.some((keyword) => words.some((word) => wordHitsKeyword(word, keyword)))
-  );
+
+  if (groups.length === 1) {
+    return groups[0].some((keyword) => words.includes(keyword));
+  }
+
+  const verbKeywords = groups[0];
+  const objectAllow = getStepObjectAllowlist(step);
+  const completionVerbs = stepCompletionVerbWords(step);
+  const strictVerbGroup = STEP_REQUIRES_COMPLETION.has(step.id);
+
+  const verbPositions = [];
+  words.forEach((word, idx) => {
+    if (strictVerbGroup && completionVerbs.has(word)) verbPositions.push(idx);
+    else if (!strictVerbGroup && verbKeywords.includes(word)) verbPositions.push(idx);
+  });
+
+  const objectPositions = [];
+  words.forEach((word, idx) => {
+    if (objectAllow.has(word)) objectPositions.push(idx);
+  });
+
+  if (!verbPositions.length || !objectPositions.length) return false;
+
+  const maxGap = STEP_SALIENT_MAX_GAP[step.id] ?? STEP_SALIENT_MAX_GAP.default;
+  for (const p0 of verbPositions) {
+    for (const p1 of objectPositions) {
+      if (Math.abs(p0 - p1) <= maxGap) return true;
+    }
+  }
+
+  return false;
 }
 
 /** Flexible phrase match (not exact wording). */
@@ -476,9 +679,16 @@ export function matchesPhrase(text, pattern) {
   const normPattern = normalizeEnglishForMatching(pattern);
 
   if (p.includes(" ")) {
-    if (buildFlexibleEnglishRegex(normPattern).test(normText)) return true;
+    if (buildFlexibleEnglishRegex(normPattern).test(normText)) {
+      if (patternRequiresCompletionVerb(pattern) || !textHasAspiration(text)) {
+        return true;
+      }
+    }
     const regex = new RegExp(escapeRegex(p).replace(/\s+/g, "\\s+"), "i");
-    return regex.test(lower);
+    if (regex.test(lower)) {
+      return patternRequiresCompletionVerb(pattern) || !textHasAspiration(text);
+    }
+    return false;
   }
 
   if (new RegExp(`\\b${escapeRegex(normPattern)}\\b`, "i").test(normText)) return true;
@@ -489,8 +699,28 @@ function isEnglishPattern(pattern) {
   return !/[\u3040-\u30ff\u3400-\u9fff]/.test(pattern || "");
 }
 
+function stepRequiresEnglish(step) {
+  return Boolean(step?.patterns?.length && step.patterns.every(isEnglishPattern));
+}
+
 function userTextHasEnglish(text) {
   return /[a-zA-Z]/.test(text || "");
+}
+
+/** True when the utterance is mostly Japanese (not an English attempt). */
+export function isPrimarilyJapanese(text) {
+  const t = (text || "").trim();
+  if (!/[\u3040-\u30ff\u3400-\u9fff]/.test(t)) return false;
+  const ja = (t.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length;
+  const en = (t.match(/[a-zA-Z]/g) || []).length;
+  return ja > 0 && ja >= en;
+}
+
+function hasEnglishPatternMatch(text, step) {
+  if (!userTextHasEnglish(text)) return false;
+  return step.patterns.some(
+    (pattern) => isEnglishPattern(pattern) && matchesPhrase(text, pattern)
+  );
 }
 
 const VALID_SHORT_UTTERANCES = new Set([
@@ -524,30 +754,207 @@ export function isUnrecognizableUserInput(text) {
   return false;
 }
 
-/** Nudge Learny to ask the child to repeat after unclear/noise input. */
-export function buildUnclearInputRepeatNudge(userUtterance = "") {
-  const transcript = (userUtterance || "").trim();
-  const transcriptNote = transcript
-    ? `Speech transcript was unclear or may be background noise: "${transcript}". `
-    : "The user spoke but the transcript was empty or unclear (likely accidental noise). ";
+/** Compact mission snapshot with a single "you direct" line for Learny. */
+export function buildActiveMissionHeader(quest, questIndex = loadProgress()) {
+  if (!quest?.steps?.length) return "";
+
+  const idx =
+    Number.isFinite(questIndex) && questIndex >= 0 ? questIndex : getQuestIndex(quest);
+  const missionNum = idx >= 0 ? idx + 1 : "?";
+  const doneIds = getCompletedStepIds(idx);
+  const remaining = getRemainingSteps(quest, idx);
+
+  const progress = quest.steps
+    .map((s, i) => {
+      const mark = doneIds.includes(s.id) ? "✓" : "○";
+      return `${i + 1}${mark}`;
+    })
+    .join(" ");
+
+  if (!remaining.length) {
+    return (
+      `Mission ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
+      `All steps done (${progress}) → call complete_quest, then celebrate once.`
+    );
+  }
+
+  const next = remaining[0];
+  const phrase = next.patterns?.[0] || "";
   return (
-    `[Response required — speak aloud in AUDIO now. Do NOT stay silent.] ${transcriptNote}` +
-    `Do NOT guess what they meant. Do NOT advance any quest step. ` +
-    `Warmly tell the child in Japanese (1–2 short sentences) that you could not quite catch it, ` +
-    `it might have been background noise, and ask them to say it again. ` +
-    `Example tone: 「ごめんね、ちょっと聞き取れなかったよ！もう一回言ってくれる？」`
+    `Mission ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
+    `Progress ${progress} | NEXT: ${next.label} → guide Minecraft action, then have them say "${phrase}"`
+  );
+}
+
+/** Bilingual rule for all spoken Learny replies (beginner). */
+export const BILINGUAL_RESPONSE_RULE =
+  "Every spoken reply in ONE turn: English first, then the same meaning in Japanese right after. Never English-only or Japanese-only.";
+
+/** Warm, kid-friendly tone — primary students, fun Minecraft buddy (not a stiff teacher). */
+export const LEARNY_FRIENDLY_TONE =
+  "Sound like a fun Minecraft buddy for Japanese elementary kids — warm, casual, upbeat. " +
+  "Use simple words. EN: Cool! Awesome! Nice one! Let's go! You got this! " +
+  "JP: だよ・だね・しよう・ね（友だちっぽく）。すごい！やったー！いいね！ " +
+  "Never stiff, lecture-y, or overly polite (です・ますだらけ・堅い敬語は避ける). " +
+  "Short sentences. Smile in your voice. Make English feel fun, not like homework.";
+
+/** What Learny should do this turn — one clear instruction. */
+function buildStepDirective(
+  quest,
+  nextStep,
+  { stepJustCompleted = false, japaneseOnly = false, alreadyAudible = false, wrongAttempt = false } = {}
+) {
+  if (!nextStep) {
+    return "All steps done → call complete_quest once, then one short celebration (EN then JP).";
+  }
+
+  const phrase = nextStep.patterns?.[0] || "";
+  const coachHint = nextStep.coachNote
+    ? " (Give quick pronunciation tips only — do not say the English phrase twice.)"
+    : "";
+
+  if (wrongAttempt) {
+    return (
+      `Wrong phrase — step NOT recorded. Do NOT celebrate, praise, or say they said "${phrase}" correctly. ` +
+      `Gently encourage (EN then JP), teach "${phrase}" once${coachHint}, invite them to try again.`
+    );
+  }
+
+  if (stepJustCompleted) {
+    if (!nextStep) {
+      return "All steps done → call complete_quest once, then one short fun celebration (EN then JP).";
+    }
+    if (alreadyAudible) {
+      return (
+        `Step already recorded — do NOT repeat praise or quote the child again. ` +
+        `Briefly guide ONLY the next Minecraft step and English phrase: "${phrase}". ` +
+        `Do NOT say mission complete yet.`
+      );
+    }
+    return (
+      `Step done — hype them up briefly (EN then JP, friendly!), then guide the next step: ` +
+      `"${nextStep.label}" in Minecraft, then say "${phrase}". Do NOT say mission complete yet.`
+    );
+  }
+
+  if (japaneseOnly) {
+    if (alreadyAudible) {
+      return (
+        `They reported success in Japanese only — do NOT repeat your earlier reply. ` +
+        `Teach "${phrase}" once${coachHint}, invite them to try it in English. ` +
+        `Do not mark step done until English is spoken.`
+      );
+    }
+    return (
+      `They reported success in Japanese only — cheer them on (EN then JP), teach "${phrase}" once${coachHint}, ` +
+      `invite them to try it in English. Do not mark step done until English is spoken.`
+    );
+  }
+
+  return (
+    `Reply warmly to what they said (EN then JP), then guide the next Minecraft move ` +
+    `and the English to say: "${phrase}". Keep it 1–3 short fun sentences, EN then JP. ` +
+    `Do NOT celebrate or say they got the phrase right unless the app recorded the step.`
+  );
+}
+
+/** Appended to quest tracker nudges so Learny speaks instead of going silent. */
+export const QUEST_TRACKER_SPEAK_IF_SILENT =
+  "If you have not replied yet this turn, speak once aloud (audio). If you already spoke, stay silent.";
+
+export const QUEST_TRACKER_NO_REPEAT =
+  "Say each idea once this turn — do not repeat sentences, praise, or the English phrase.";
+
+/** @deprecated use QUEST_TRACKER_SPEAK_IF_SILENT */
+export const QUEST_TRACKER_SPEAK_NOW = QUEST_TRACKER_SPEAK_IF_SILENT;
+
+/** Nudge when the child spoke clearly but Learny produced no audible reply. */
+export function buildNoAudioRecoveryNudge(userUtterance = "", quest = null, questIndex = null) {
+  const transcript = (userUtterance || "").trim();
+  const mission = quest ? `${buildActiveMissionHeader(quest, questIndex ?? loadProgress())}. ` : "";
+  return (
+    `[Speak now] ${mission}` +
+    (transcript ? `Child said: "${transcript}". ` : "") +
+    `Reply in 1–2 short friendly sentences (EN then JP). Guide them to the NEXT step above.`
+  );
+}
+
+/** Nudge Learny to ask the child to repeat after unclear/noise input. */
+export function buildUnclearInputRepeatNudge(userUtterance = "", quest = null, questIndex = null) {
+  const mission = quest ? `${buildActiveMissionHeader(quest, questIndex ?? loadProgress())}. ` : "";
+  return (
+    `[Speak now] ${mission}Could not hear clearly — ask them to say it again, gently and casually (1–2 sentences, EN then JP). ` +
+    `Do not advance steps or guess what they meant.`
   );
 }
 
 export function matchesStep(text, step) {
   if (!step?.patterns?.length) return false;
+  if (!textUsesOnlyAllowlistedWords(text, step)) return false;
+  if (STEP_REQUIRES_COMPLETION.has(step.id) && textHasAspiration(text)) return false;
   const patternMatched = step.patterns.some((pattern) => matchesPhrase(text, pattern));
   const salientMatched = !patternMatched && matchesStepSalient(text, step);
   if (!patternMatched && !salientMatched) return false;
-  if (step.patterns.every(isEnglishPattern) && !userTextHasEnglish(text)) {
+  if (STEP_REQUIRES_COMPLETION.has(step.id) && !textHasCompletionVerb(text, step)) return false;
+  if (
+    STEP_REQUIRES_COMPLETION.has(step.id) &&
+    getStepObjectAllowlist(step).size &&
+    !textHasAllowlistedObject(text, step)
+  ) {
+    return false;
+  }
+  if (stepRequiresEnglish(step) && !userTextHasEnglish(text)) {
+    return false;
+  }
+  if (stepRequiresEnglish(step) && isPrimarilyJapanese(text) && !hasEnglishPatternMatch(text, step)) {
     return false;
   }
   return true;
+}
+
+/** User tried the step phrase in English but wording did not match (wrong word, typo, etc.). */
+export function userMissedEnglishStepPhrase(text, step) {
+  if (!step?.patterns?.length) return false;
+  if (!stepRequiresEnglish(step)) return false;
+  if (!userTextHasEnglish(text)) return false;
+  if (matchesStep(text, step)) return false;
+  if (STEP_REQUIRES_COMPLETION.has(step.id) && textHasAspiration(text)) return false;
+  if (!textHasCompletionVerb(text, step)) return false;
+  if (textHasNonAllowlistedContentWord(text, step)) return true;
+  if (STEP_REQUIRES_COMPLETION.has(step.id) && !textHasAllowlistedObject(text, step)) return true;
+  return false;
+}
+
+/** Drop English-only steps that lack an English utterance in this session. */
+export function reconcileEnglishStepProof(
+  quest,
+  questIndex = loadProgress(),
+  sessionUtterances = []
+) {
+  if (!quest?.steps?.length) return [];
+
+  const utterances = (sessionUtterances || []).map((u) => (u || "").trim()).filter(Boolean);
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
+  const removed = [];
+
+  for (const step of quest.steps) {
+    if (!done.has(step.id) || !stepRequiresEnglish(step)) continue;
+    const proved = utterances.some(
+      (u) =>
+        matchesStep(u, step) &&
+        userTextHasEnglish(u) &&
+        (!isPrimarilyJapanese(u) || hasEnglishPatternMatch(u, step))
+    );
+    if (!proved) {
+      done.delete(step.id);
+      removed.push(step.id);
+    }
+  }
+
+  if (removed.length) {
+    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
+  }
+  return removed;
 }
 
 function loadAllStepProgress() {
@@ -715,21 +1122,34 @@ export function getLearnedPhrases() {
 
 /** In-memory step progress for replay sessions (does not touch localStorage). */
 let questSessionSteps = null;
+/** Step IDs already complete when the current call began (resume / partial progress). */
+let questSessionBaselineStepIds = null;
 
 export function isQuestReplay(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) return false;
   return questIndex < loadProgress();
 }
 
+/** Step IDs that were already done before this call (for session phrase verification). */
+export function getSessionBaselineStepIds(questIndex) {
+  if (questSessionSteps?.questIndex === questIndex && questSessionBaselineStepIds) {
+    return [...questSessionBaselineStepIds];
+  }
+  return [];
+}
+
 /** Start a call session — step progress is tracked in memory for the active call. */
 export function beginQuestSession(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) {
     questSessionSteps = null;
+    questSessionBaselineStepIds = null;
     return;
   }
+  const stepIds = isQuestReplay(questIndex) ? [] : [...loadCompletedStepIds(questIndex)];
+  questSessionBaselineStepIds = [...stepIds];
   questSessionSteps = {
     questIndex,
-    stepIds: isQuestReplay(questIndex) ? [] : [...loadCompletedStepIds(questIndex)],
+    stepIds,
   };
 }
 
@@ -738,6 +1158,7 @@ export function endQuestSession() {
     saveCompletedStepIds(questSessionSteps.questIndex, questSessionSteps.stepIds);
   }
   questSessionSteps = null;
+  questSessionBaselineStepIds = null;
 }
 
 export function resetQuestSessionSteps(questIndex) {
@@ -778,7 +1199,17 @@ function splitSessionChunks(sessionUserText) {
     .filter(Boolean);
 }
 
-/** Apply one utterance; if it matches a later step, fill earlier steps too. */
+/** Texts to scan for step phrases — prefer per-utterance list over one joined string. */
+function sessionTextsForMatching(sessionUserText, sessionUtterances = null) {
+  if (Array.isArray(sessionUtterances) && sessionUtterances.length) {
+    return sessionUtterances.map((t) => (t || "").trim()).filter(Boolean);
+  }
+  const joined = (sessionUserText || "").trim();
+  if (!joined) return [];
+  return [joined, ...splitSessionChunks(joined)];
+}
+
+/** Apply one utterance — marks only the highest matched remaining step. */
 function applyUtteranceToSteps(quest, userText, doneSet) {
   const newly = [];
   if (!userText?.trim()) return newly;
@@ -788,15 +1219,23 @@ function applyUtteranceToSteps(quest, userText, doneSet) {
 
   let highestMatch = -1;
   for (let i = 0; i < remaining.length; i++) {
-    if (matchesStep(userText, remaining[i])) highestMatch = i;
+    const step = remaining[i];
+    if (!matchesStep(userText, step)) continue;
+    if (
+      stepRequiresEnglish(step) &&
+      isPrimarilyJapanese(userText) &&
+      !hasEnglishPatternMatch(userText, step)
+    ) {
+      continue;
+    }
+    highestMatch = i;
   }
   if (highestMatch < 0) return newly;
 
-  for (let i = 0; i <= highestMatch; i++) {
-    if (!doneSet.has(remaining[i].id)) {
-      doneSet.add(remaining[i].id);
-      newly.push(remaining[i].id);
-    }
+  const matchedStep = remaining[highestMatch];
+  if (!doneSet.has(matchedStep.id)) {
+    doneSet.add(matchedStep.id);
+    newly.push(matchedStep.id);
   }
   return newly;
 }
@@ -816,14 +1255,19 @@ export function syncQuestStepsFromText(quest, userText, questIndex = loadProgres
 }
 
 /** Reconcile step progress from full session text and individual phrases. */
-export function syncQuestStepsFromSessionText(quest, sessionUserText, questIndex = loadProgress()) {
+export function syncQuestStepsFromSessionText(
+  quest,
+  sessionUserText,
+  questIndex = loadProgress(),
+  sessionUtterances = null
+) {
   if (!quest?.steps?.length) return [];
 
   const prevDone = new Set(getEffectiveCompletedStepIds(questIndex));
   const done = new Set(prevDone);
   const allNewly = [];
 
-  const texts = [sessionUserText, ...splitSessionChunks(sessionUserText)];
+  const texts = sessionTextsForMatching(sessionUserText, sessionUtterances);
   for (const text of texts) {
     allNewly.push(...applyUtteranceToSteps(quest, text, done));
   }
@@ -833,6 +1277,7 @@ export function syncQuestStepsFromSessionText(quest, sessionUserText, questIndex
     saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
     if (newly.length) recordLearnedSteps(quest, questIndex, newly);
   }
+  reconcileEnglishStepProof(quest, questIndex, sessionUtterances);
   return newly;
 }
 
@@ -865,18 +1310,210 @@ export function matchesQuest(text, quest) {
   return false;
 }
 
+const HOSTILE_OFF_TOPIC_RE = [
+  /\bi\s+hate\b/i,
+  /\bhate\s+you\b/i,
+  /\bstupid\b/i,
+  /\bidiot\b/i,
+  /\bshut\s+up\b/i,
+  /\bdon'?t\s+want\s+to\s+talk\b/i,
+  /\bleave\s+me\s+alone\b/i,
+  /\bgo\s+away\b/i,
+  /\byou\s+suck\b/i,
+  /\bboring\b/i,
+  /\bdumb\b/i,
+  /\bkill\s+you\b/i,
+  /^いやだ$/,
+  /^やだ$/,
+  /^いや$/,
+  /^だめ$/,
+];
+
+/** Upset, hostile, or refusal — not a quest step; must not trigger completion. */
+export function isHostileOrOffTopicUtterance(text) {
+  const t = (text || "").trim();
+  if (!t) return false;
+  return HOSTILE_OFF_TOPIC_RE.some((re) => re.test(t));
+}
+
+const PREMATURE_COMPLETE_RE = [
+  /mission\s+complete/i,
+  /completed\s+the\s+mission/i,
+  /quest\s+complete/i,
+  /you'?ve\s+completed/i,
+  /you\s+completed\s+the/i,
+  /ミッションクリア/,
+  /クエストクリア/,
+  /ミッションをクリア/,
+  /クエストをクリア/,
+];
+
+/** Learny claimed the mission is done (may be a hallucination). */
+export function assistantClaimsQuestComplete(text) {
+  const t = (text || "").trim();
+  if (!t) return false;
+  return PREMATURE_COMPLETE_RE.some((re) => re.test(t));
+}
+
+/** Step phrases that must be spoken this call (skips steps done before the call started). */
+export function verifyAllStepsHeardInSession(
+  quest,
+  sessionUserText,
+  questIndex = null,
+  sessionUtterances = null
+) {
+  if (!quest?.steps?.length) return false;
+
+  const baseline =
+    Number.isFinite(questIndex) && questIndex >= 0
+      ? new Set(getSessionBaselineStepIds(questIndex))
+      : new Set();
+  const stepsToVerify = quest.steps.filter((step) => !baseline.has(step.id));
+  if (!stepsToVerify.length) return true;
+
+  const chunks = sessionTextsForMatching(sessionUserText, sessionUtterances);
+  if (!chunks.length) return false;
+
+  return stepsToVerify.every((step) =>
+    chunks.some((chunk) => {
+      if (!matchesStep(chunk, step)) return false;
+      if (!stepRequiresEnglish(step)) return true;
+      return (
+        userTextHasEnglish(chunk) &&
+        (!isPrimarilyJapanese(chunk) || hasEnglishPatternMatch(chunk, step))
+      );
+    })
+  );
+}
+
+export function buildHostileRedirectNudge(quest, userUtterance = "", questIndex = loadProgress()) {
+  const next = getRemainingSteps(quest, questIndex)[0];
+  const directive = buildStepDirective(quest, next);
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const transcript = (userUtterance || "").trim();
+  return (
+    `[Speak now] ${mission} Child sounded upset or off-topic` +
+    (transcript ? ` ("${transcript}")` : "") +
+    `. Respond kindly and casually (EN then JP) — no lecturing — then gently bring them back to the Minecraft step. ` +
+    `${directive} Do NOT say mission complete or call complete_quest.`
+  );
+}
+
+/** Learny credited a step when the child did not say the correct English phrase. */
+export function assistantFalselyCreditsEnglishStep(
+  assistantText,
+  quest,
+  latestUserText,
+  questIndex = loadProgress()
+) {
+  const assistant = (assistantText || "").trim();
+  const latest = (latestUserText || "").trim();
+  if (!assistant || !latest || !quest?.steps?.length) return null;
+
+  const remaining = getRemainingSteps(quest, questIndex);
+  const next = remaining[0];
+  const praiseOrCredit =
+    /great job|awesome|well done|good job|nice one|perfect|you said|you got it|mission complete|ミッションクリア|すごい|おめでとう|言えた|言ってくれ|って言って/i.test(
+      assistant
+    );
+
+  if (next && stepRequiresEnglish(next) && !matchesStep(latest, next)) {
+    const quotesExpected = next.patterns.some((pattern) => {
+      if (!isEnglishPattern(pattern)) return false;
+      const salientObjects = STEP_SALIENT_GROUPS[next.id]?.[1];
+      if (salientObjects?.length) {
+        return salientObjects.some(
+          (kw) => kw.length >= 4 && assistant.toLowerCase().includes(kw)
+        );
+      }
+      const tail = normalizeEnglishForMatching(pattern).split(/\s+/).slice(-1)[0];
+      return tail.length >= 4 && assistant.toLowerCase().includes(tail);
+    });
+    if (userMissedEnglishStepPhrase(latest, next) && (praiseOrCredit || quotesExpected)) {
+      return next;
+    }
+  }
+
+  if (!isPrimarilyJapanese(latest) || userTextHasEnglish(latest)) return null;
+  if (!praiseOrCredit) return null;
+
+  for (const step of quest.steps) {
+    if (!stepRequiresEnglish(step)) continue;
+    const quoted = step.patterns.some((pattern) =>
+      assistant.toLowerCase().includes(pattern.toLowerCase())
+    );
+    if (!quoted) continue;
+    if (userHintsStepSuccessInJapanese(latest, step)) return step;
+  }
+  return null;
+}
+
+export const assistantFalselyCreditsStep = assistantFalselyCreditsEnglishStep;
+
+export function buildWrongStepPhraseCorrectionNudge(
+  quest,
+  step,
+  userUtterance = "",
+  questIndex = loadProgress()
+) {
+  const phrase = step?.patterns?.[0] || "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const transcript = (userUtterance || "").trim();
+  return (
+    `[Correction] ${mission} Step NOT recorded — child did NOT say the correct phrase` +
+    (transcript ? ` (said "${transcript}")` : "") +
+    `. Do NOT celebrate or say they got "${phrase}" right. ` +
+    `Warmly encourage (EN then JP), teach "${phrase}" once with quick pronunciation help, invite retry. ` +
+    `Do NOT say mission complete / ミッションクリア. ${QUEST_TRACKER_NO_REPEAT}`
+  );
+}
+
+export function buildJapaneseOnlyStepCorrectionNudge(
+  quest,
+  step,
+  userUtterance = "",
+  questIndex = loadProgress()
+) {
+  const phrase = step?.patterns?.[0] || "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const transcript = (userUtterance || "").trim();
+  return (
+    `[Correction] ${mission} Child spoke Japanese only` +
+    (transcript ? ` ("${transcript}")` : "") +
+    `. Do NOT say they said the English phrase or mark the step done. ` +
+    `Cheer what they did in Minecraft (EN then JP), teach "${phrase}" once, invite them to try it in English. ` +
+    `Do NOT say mission complete / ミッションクリア.`
+  );
+}
+
+export function buildPrematureCompleteCorrectionNudge(quest, questIndex = loadProgress()) {
+  const remaining = getRemainingSteps(quest, questIndex);
+  const next = remaining[0];
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const directive = buildStepDirective(quest, next);
+  return (
+    `[Correction] ${mission} NOT complete — ${remaining.length} step(s) remain. ` +
+    `Do NOT say mission complete / ミッションクリア. ` +
+    `If you already gave an audible reply, do not repeat it. ` +
+    `Otherwise guide the next step once (EN then JP): ${directive}`
+  );
+}
+
 export function validateQuestCompletion(
   quest,
   userQuote,
   latestUtterance,
   sessionUserText = "",
-  questIndex = loadProgress()
+  questIndex = loadProgress(),
+  sessionUtterances = null
 ) {
   const quote = (userQuote || "").trim();
   const latest = (latestUtterance || quote).trim();
   const session = sessionUserText || latest;
 
-  syncQuestStepsFromSessionText(quest, session, questIndex);
+  syncQuestStepsFromSessionText(quest, session, questIndex, sessionUtterances);
+  reconcileEnglishStepProof(quest, questIndex, sessionUtterances);
+  syncQuestStepsFromText(quest, latest, questIndex);
 
   if (!latest && !normalizeText(session)) {
     return { ok: false, reason: "no_speech" };
@@ -886,7 +1523,21 @@ export function validateQuestCompletion(
     const remaining = getRemainingSteps(quest, questIndex)
       .map((s) => s.label)
       .join(", ");
+    if (isHostileOrOffTopicUtterance(latest)) {
+      return { ok: false, reason: "hostile_or_off_topic", remaining };
+    }
     return { ok: false, reason: "steps_incomplete", remaining };
+  }
+
+  if (!verifyAllStepsHeardInSession(quest, session, questIndex, sessionUtterances)) {
+    const remaining = getRemainingSteps(quest, questIndex)
+      .map((s) => s.label)
+      .join(", ");
+    return { ok: false, reason: "steps_not_in_session", remaining };
+  }
+
+  if (isHostileOrOffTopicUtterance(latest)) {
+    return { ok: false, reason: "hostile_or_off_topic" };
   }
 
   if (!userTextHasEnglish(latest) && !userTextHasEnglish(quote)) {
@@ -907,51 +1558,59 @@ export function validateQuestCompletion(
   return { ok: true, userQuote: quote || latest };
 }
 
-export function buildQuestRejectedToolMessage(quest, userUtterance = "", questIndex = loadProgress()) {
+export function buildQuestRejectedToolMessage(
+  quest,
+  userUtterance = "",
+  questIndex = loadProgress(),
+  reason = ""
+) {
   const remaining = getRemainingSteps(quest, questIndex);
   const next = remaining[0];
-  const remainText = remaining.length
-    ? `Still need: ${remaining.map((s) => s.label).join(", ")}.`
-    : "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const directive = buildStepDirective(quest, next);
   const transcript = (userUtterance || "").trim();
-  const transcriptNote = transcript
-    ? `Latest transcript: "${transcript}". Do NOT claim they said English that is not in this transcript. `
-    : "";
-  const nextPhrase = next?.patterns?.[0]
-    ? `Pending English (do not repeat unless they ask or just succeeded): "${next.patterns[0]}". `
-    : "";
+  let prefix = `${mission} Not complete yet — ${remaining.length} step(s) left. `;
+  if (reason === "hostile_or_off_topic") {
+    prefix += "Child was upset/off-topic — empathize and redirect, do NOT celebrate completion. ";
+  } else if (reason === "steps_not_in_session") {
+    prefix += "Required English step phrases were not all spoken this session. ";
+  }
   return (
-    `Quest NOT complete yet. Goal: "${quest?.goal || ""}". ${remainText} ${transcriptNote}${nextPhrase}` +
-    `Steps only count when English appears in the speech transcript. ` +
-    `Do NOT call complete_quest until all steps are done. ` +
-    `Reply naturally — do not drill the same phrase again. ${buildNaturalFlowReminder(next)}`
+    prefix +
+    (transcript ? `Transcript: "${transcript}". ` : "") +
+    `${directive} Do NOT call complete_quest yet. Do NOT say mission complete. ` +
+    `If you already gave an audible reply this turn, do not repeat it — wait for the child.`
   );
 }
 
-export function buildQuestRecordedToolMessage(quest, userQuote) {
+export function buildQuestRecordedToolMessage(quest, userQuote, alreadySpoke = false) {
+  if (alreadySpoke) {
+    return (
+      "Quest recorded. You already replied audibly this turn — do NOT speak again or repeat congratulations. " +
+      "End your turn silently now."
+    );
+  }
   const quote = userQuote ? `The user said: "${userQuote}". ` : "";
   return (
-    `${quote}Quest recorded. Say ONE short spoken congratulations (1–2 sentences only): ` +
-    `tie back to what THEY did in Minecraft for "${quest?.goal || ""}", ` +
-    `celebrate in Japanese first, then repeat the same message briefly in English. ` +
-    `Then END your turn. Do NOT repeat or give a second congratulations.`
+    `${quote}Quest recorded. Give ONE brief celebration (1–2 sentences, EN then JP) for "${quest?.goal || ""}", ` +
+    `then END your turn. Do not repeat or add a second congratulations.`
   );
 }
 
 export function buildQuestFarewellNudge(quest, userQuote) {
   const quote = userQuote ? `They said: "${userQuote}". ` : "";
   return (
-    `${quote}Quest complete! Say ONE short spoken congratulations (1–2 sentences only): ` +
-    `connect back to their Minecraft progress ("${quest?.goal || ""}"), ` +
-    `celebrate in Japanese first, then repeat the same message briefly in English. ` +
+    `${quote}Quest complete! Say ONE short fun celebration (1–2 sentences, buddy hype): ` +
+    `connect to their Minecraft win ("${quest?.goal || ""}"), ` +
+    `English first, then casual Japanese. ` +
     `Then END your turn. Do NOT repeat or give a second congratulations.`
   );
 }
 
 export function buildQuestCompleteTrackerNudge() {
   return (
-    `[Quest tracker] All steps complete. Call complete_quest once with the latest English transcript. ` +
-    `Do NOT congratulate yet — wait for the tool response. One celebration only, then end turn.`
+    `All steps done → call complete_quest once with latest English transcript. ` +
+    `Celebrate only after tool confirms. ${QUEST_TRACKER_SPEAK_NOW}`
   );
 }
 
@@ -959,95 +1618,66 @@ export function buildQuestAlreadyRecordedToolMessage() {
   return "Quest already recorded. Do not repeat congratulations or mention completion again.";
 }
 
-export const BEGINNER_FREE_CHAT_PROMPT = `あなたは「ゲームカレッジの先生：ラーニー先生（初級モード）」です。対象は日本の小学生（英語初心者）。Minecraftを遊びながら英語を楽しく学べるようにサポートします。あなたは"先生"というより、子どもの「やりたい！」を応援する相棒です。最優先は安心感とモチベーション。
-■言語バランス（初級・重要）
-・基本パターン：日本語で伝える → 直後に同じ意味を短い英語でもう一度言う（毎ターン意識する）
-・目安 日本語40％／英語60％（英語を増やす方向）
-・英語は短く（単語〜短文）。長い英語だけで話し続けない
-・例：「木を探そう！ Let's find a tree!」「やったね！ I got wood!」
-・日本語だけでターンを終わらせない（必ず英語の繰り返しを1つ以上入れる）
-■英語を教える頻度
-・ほぼ毎ターン：日本語のあとに英語の繰り返しを入れる（会話の2回に1回以上）
-・観察・雑談・共感でも同じパターン（日本語 → 同じ意味の英語）
-・テストっぽい聞き方をしない（Whyで詰めない）
-■教え方（発音・説明）
-・英語の発音は必ずネイティブ風に示す（モデルとして提示）
-・フレーズ練習のあと、必要なら短く分解して説明してよい
-・発音は大きく間違っていなければ過度に訂正しない
-・言えたらすぐ英語で短く称賛＋日本語でも褒める（例：Perfect!／Great! など）
-■間違いへの対応
-・間違えたら必ず最初に「Nice try!」と言ってから修正する
-・1回目はゆっくりモデル発音で言い直しを示す
-・同じミスが2回続いたら、単語ごとに区切って練習→最後につなげる
-・失敗は必ず成功体験に戻す（言えた部分を拾って褒める）
-■ユーザーが英単語だけ言ったとき
-・英語で短く褒める＋日本語でも褒める
-・会話をつなぐ短い質問を1つだけ
-・文脈が確実でない場合は、文脈不要の質問にする
-■沈黙時（ユーザー無言）の対応（重要：推察しない／豆知識固定）
-・実況はしない（状況を当てる実況も禁止）
-・推察しない（「集中してるのかな？」「何か見つかった？」など、ユーザーの状態や状況を推測する発言は禁止）
-・無言時は質問しない（質問0）
-・無言時は毎回「マイクラ豆知識」を1つだけ話す
-・豆知識は短く、明るく、安心感があるトーン（しつこくしない）
-・無言時も日本語 → 英語の繰り返しパターン（豆知識を日本語で → キーフレーズを英語で）
-・同じ豆知識テーマの連続を避ける
-・同じ英語キーワードを2回連続で使わない
-・無言時は英語を"教える"モードにしすぎない（練習強制・言わせるの禁止）
-■キャラ（ガードレール）
-・明るく元気、でもしつこくしない
-・否定しない／責めない／無理に英語を言わせない
-・子どもの「やりたい！」を最優先で応援する
-■最重要：連続フレーズ禁止
-・直前の自分の発話と、同じフレーズ／同じ意味の言い回しを2回連続で言わない
-■安全・マナー（先生としての対応）
-・下ネタ、性的な内容、体のことをからかう話題には先生として乗らない／詳しく答えない
-・そういう話題が出たら、短く「その話はしないよ」と伝えて、別の安全な話題（Minecraftや英語学習）に戻す
-・暴言、いじめ、差別につながる言い方はしない／肯定しない
-・危険行為や自傷につながる話題には協力しない
-■音声入力の言語認識（最重要）
-・ユーザーの音声入力は必ず日本語または英語として解釈すること
-・日本語と英語以外の言語として認識しないこと
-・ユーザーが話している言語が不明な場合は日本語として扱うこと
-■聞き取れなかったとき（雑音・わけのわからない入力）
-・文字起こしが空、意味不明、雑音だけのときは内容を推測しない
-・必ず音声で返事する（沈黙禁止）
-・「ごめんね、ちょっと聞き取れなかった！もう一回言ってくれる？」のように、やさしく聞き返す
-・1〜2文で短く。クエストを進めたり、英語フレーズを教えたりしない
-■自由会話モード
-・今はミッションなし。子どもが英語やMinecraftについてなんでも聞いてくる自由会話モード。
-・「英語で〇〇ってなんて言うの？」「次は何をすればいい？」など、気軽に答える。`;
+export const BEGINNER_FREE_CHAT_PROMPT = `あなたはゲームカレッジの「ラーニー先生」— 日本の小学生とマイクラを一緒に楽しむ、やさしくて元気な相棒。堅い先生じゃなく、ゲーム仲間のお兄さん・お姉さんみたいに話す。
 
-export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの「ラーニー先生」（初級・日本の小学生）。Minecraftサバイバルワールドの中で一緒に成長する相棒。安心感と楽しさが最優先。
+■キャラ: 明るい・フレンドリー・ちょっとおどけてOK。「やったー！」「すごい！」「いいね！」をよく使う。英語は宿題じゃなくて、ゲームの楽しいパート。
+■話し方（必須）: 毎ターン「英語→日本語」。先に英語で1〜3文（かんたんな言葉）、すぐ同じ意味を日本語で（だよ・だね・しよう）。英語だけ・日本語だけ禁止。間違いは「Nice try!」からやさしく。
+■一緒に遊ぶ: 迷ったら「次はこれやってみよう！」と具体的に（EN→JP）。質問攻めにしない。
+■無言時: マイクラの豆知識を1つ、楽しそうに（EN→JP）。
+■聞き取れず: 「もう一回言ってみて！」くらいカジュアルに（EN→JP）。
+■安全: 不適切な話はやんわり断って、ゲームに戻す。
 
-■話し方（重要）: 日本語で伝える → 直後に同じ意味を短い英語でもう一度。目安 日本語40％／英語60％。詰めない。Nice try! から直す。言えたら英語＋日本語で短く褒める。日本語だけでターンを終わらせない。
-■会話の流れ:
-- 子どもの今の話・マイクラの状況に自然に返す。
-- 同じ英文コーチングを連続で繰り返さない。探している・困っている最中はゲームの助言優先。
-- 話題がそれてもOK。自然なタイミングでやさしくクエストに戻す。
-■マイクラ成功→英語（重要）:
-- 日本語だけで「できた」「手に入れた」「見つけた」と報告されたら → まずマイクラを一緒に喜ぶ → その場で英文フレーズを1回教える（スキップ禁止）。
-- 例: 「手に入れたよ」→「やったね！木材ゲット！ I got wood! gotは手に入れた、woodは木材だよ。」
-- 英文を言うまでクエストステップは未達成。達成したことにしないが、英語は必ず促す。
-- 探し物・失敗・雑談のときだけ英文繰り返しを控える。
-■初級コーチング（必要なときだけ）:
-- 否定しない。まず日本語で共感 → 同じ内容を短い英語でもう一度。
-- 英語は短く1回。単語説明も1回きり（日本語で）。何度も同じ説明をしない。
-- クエスト達成は文字起こしに英語が出るまで待つ。練習と達成は別。
-■Minecraft: 木→作業台→ツルハシ→石→食料。ゲーム内の体験を一緒に楽しむ。正確より伝わる英語を褒める。
-■クエスト開始: マイクラで「まずやること」をワクワク短く → できたら英語。プレイ優先。
-■無言時: 推察・質問禁止。マイクラ豆知識1つ（日本語で → キーフレーズを英語で繰り返し）。同テーマ連続NG。
-■聞き取れなかったとき: 文字起こしが空・雑音・意味不明なら推測しない。必ず音声で「聞き取れなかった、もう一回言って」とやさしく聞き返す（沈黙禁止）。
-■安全: 明るく否定しない。不適切話題は短く断りMinecraft/英語へ。`;
+■自由会話モード — 英語やマイクラの質問に、友だちみたいに気軽に答える。`;
 
-function buildNaturalFlowReminder(nextStep) {
-  const phrase = nextStep?.patterns?.[0] || "";
+export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの「ラーニー先生」— 日本の小学生とマイクラ英語ミッションを一緒にクリアする、やさしくて元気な相棒。堅い先生・講義口調はNG。ゲーム仲間として楽しくリードする。
+
+■キャラ: 明るい・フレンドリー・テンポよく。「やったー！」「すごい！」「いいね！」「Let's go!」を自然に。子どもが話しかけやすい雰囲気。
+■話し方（必須）: 毎ターン「英語→日本語」。先に英語（かんたん・短く）、すぐ日本語（だよ・だね・しよう）。英語だけ・日本語だけ禁止。褒めるときはテンション高め（EN→JP）。**同じターンで同じ文・お祝いを2回言わない。**
+■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「マイクラで次に何する？」「できたら何て言う？」を楽しそうに案内（EN→JP）。迷ったらすぐ具体例。雑談→フレンドリーに返して（EN→JP）すぐステップへ。
+■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく訂正。日本語だけ→喜んで（EN→JP）→英文を1回教えて一緒に言ってみよう。
+■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（EN→JP、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■怒った・しぶるとき: やさしく受け止めて（EN→JP）、責めずにゲームに戻す。完了とは言わない。
+■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド（EN→JP）。
+■安全: 不適切な話はやんわり断って、ミッションに戻す。`;
+
+export function buildQuestOpeningNudge(quest, questIndex = loadProgress()) {
+  if (!quest) return "";
+  const firstStep = quest.steps?.[0];
+  const firstPhrase = firstStep?.patterns?.[0] || "";
+  const playLead = quest.openingPlay || `まずは${quest.goal}をマイクラでやってみよう！`;
+  const mission = buildActiveMissionHeader(quest, questIndex);
   return (
-    `CONVERSATION: Respond naturally to what the child just said. ` +
-    `Do NOT repeat the same English coaching (${phrase ? `"${phrase}"` : "example phrase"}) if you already said it recently. ` +
-    `Help with gameplay first if they are still searching or frustrated. ` +
-    `Do not force the quest — follow their flow.`
+    `${mission}\n` +
+    `You open the call — speak first (2–3 short fun sentences, audio). Warm buddy energy. English first, then Japanese.\n` +
+    `1) Hype the Minecraft action NOW: ${playLead}\n` +
+    (firstPhrase ? `2) Tell them the English when done: "${firstPhrase}"\n` : "") +
+    `3) End cheerfully — e.g. 「やってみよう！」 / "Let's go!" — and listen.`
   );
+}
+
+export function buildQuestInstructions(basePrompt, quest, questIndex = null) {
+  if (!quest) return basePrompt;
+
+  const idx =
+    Number.isFinite(questIndex) && questIndex >= 0 ? questIndex : getQuestIndex(quest);
+  const missionNum = idx >= 0 ? idx + 1 : "?";
+
+  const stepLines = (quest.steps || []).map(
+    (step, i) => `  ${i + 1}. ${step.label} — "${step.patterns[0]}"`
+  );
+
+  const block = [
+    "",
+    `■ミッション ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title}`,
+    `■ゴール: ${quest.goal}`,
+    "■ステップ（全部必要）:",
+    ...stepLines,
+    "■進め方: 楽しくナビ→マイクラの行動→成功時の英文→待つ。各ターン→フレンドリーに次のステップへ。全完了→complete_quest→お祝い1回。",
+    "■話し方: 英語→日本語。かんたん・元気・友だち口調。堅い敬語・講義口調は避ける。",
+    "■禁止: ステップ残りでクリア宣言。complete_quest前のお祝い。次ミッションの話。同じ英文の連続リピート。子どもの怒り・拒否を完了とみなすこと。",
+  ].join("\n");
+
+  return `${basePrompt}\n${block}`;
 }
 
 const STEP_JAPANESE_SUCCESS_HINTS = {
@@ -1055,7 +1685,7 @@ const STEP_JAPANESE_SUCCESS_HINTS = {
   got_wood: ["手に入", "切っ", "伐採", "木材", "ウッド", "取っ", "ゲット", "集め"],
   made_table: ["作っ", "作業台", "クラフト", "できた"],
   placed_table: ["置い", "置き", "置く", "ここに"],
-  made_pickaxe: ["ツルハシ", "ピッケ", "pick", "作っ"],
+  made_pickaxe: ["ツルハシ", "ピッケ", "作っ", "作れた", "つくれた", "できた", "デキタ"],
   ready: ["準備", "できた", "行くよ", "行こう", "レディ"],
   found_stones: ["石", "見つけ", "丸石", "ストーン"],
   got_stones: ["集め", "手に入", "掘っ", "取っ", "石を"],
@@ -1072,145 +1702,71 @@ export function userHintsStepSuccessInJapanese(text, step) {
   return hints.some((hint) => text.includes(hint));
 }
 
-function buildEnglishBridgeNudge(step) {
-  const phrase = step.patterns?.[0] || "";
-  const coach = step.coachNote || "";
-  return (
-    `ENGLISH TEACHING MOMENT: Child reported "${step.label}" in Japanese only — step NOT recorded (no English in transcript). ` +
-    `1) Celebrate their Minecraft success warmly in Japanese first. ` +
-    `2) Then repeat the same celebration in English and teach the phrase ONCE: "${phrase}". ${coach ? `Hint: ${coach}` : ""} One short sentence for word meanings in Japanese. ` +
-    `3) Do NOT skip English here. Do NOT claim they said the English. Do NOT jump to the next quest topic yet. ` +
-    `4) Invite them to try saying the English phrase now.`
-  );
+export function buildSessionInstructions(selectedQuest, questIndex = null) {
+  const tone = `\n■トーン: ${LEARNY_FRIENDLY_TONE}`;
+  if (!selectedQuest) return `${BEGINNER_FREE_CHAT_PROMPT}${tone}`;
+  const idx =
+    Number.isFinite(questIndex) && questIndex >= 0
+      ? questIndex
+      : getQuestIndex(selectedQuest);
+  return buildQuestInstructions(`${BEGINNER_VOICE_BASE_PROMPT}${tone}`, selectedQuest, idx);
 }
 
-export function buildQuestOpeningNudge(quest) {
-  if (!quest) return "";
-  const firstStep = quest.steps?.[0];
-  const firstPhrase = firstStep?.patterns?.[0] || "";
-  const firstCoach = firstStep?.coachNote || "";
-  const playLead = quest.openingPlay || `まずは${quest.goal}をマイクラでやってみよう！`;
-  return (
-    `New Minecraft quest session — microphone is live. Speak first, out loud (2–4 short sentences max).\n` +
-    `OPENING — gameplay FIRST, English SECOND. Do NOT lead with "次のクエストは…" or phrase drilling.\n` +
-    `1) Excited Minecraft action (what to do in-game NOW): ${playLead}\n` +
-    (firstPhrase
-      ? `2) THEN tie the first English phrase for when they succeed: "${firstPhrase}" — only after the in-game action.\n`
-      : "") +
-    (firstCoach
-      ? `3) One brief Japanese word hint if natural (from: ${firstCoach}) — one short sentence, not a lecture.\n`
-      : "") +
-    `4) End with brief encouragement ("やってみよう！" / "できたら教えてね！") and STOP to listen.\n` +
-    `Example tone (quest 1): 「まずは木を探そう！ Let's find a tree! 見つかったら「I found a tree!」って言ってみよう！foundは見つけた、treeは木だよ。一緒にやってみよう！ Let's go!」`
-  );
-}
-
-export function buildQuestInstructions(basePrompt, quest) {
-  if (!quest) return basePrompt;
-
-  const stepLines = (quest.steps || []).map(
-    (step, i) =>
-      `  ${i + 1}. ${step.label} — e.g. "${step.patterns[0]}" (similar wording OK)` +
-      (step.coachNote ? `\n     コーチ用: ${step.coachNote}` : "")
-  );
-
-  const block = [
-    "",
-    "■Minecraftクエスト（画面表示済み・初級）",
-    `- 目標: ${quest.goal}`,
-    quest.hint ? `- ヒント: ${quest.hint}` : "",
-    "- 達成条件（すべて必要・この通話の中で）:",
-    ...stepLines,
-    "- 開始時（必ず最初・音声）: マイクラで「まずやること」を日本語でワクワク短く → 同じ内容を英語でもう一度 → できたら最初の英語フレーズ → 単語ヒントは1文だけ → 聞く。",
-    "- 開始時に「次のクエストは…」だけ言ったり、英語フレーズの説明から始めない。",
-    "- 会話中: 子どもの話に自然に返す。各ターンは日本語 → 同じ意味の英語の順。同じ英文・単語説明を連続で繰り返さない。",
-    "- 探し物・失敗・雑談: ゲームのヒントや共感を先に。",
-    "- マイクラ成功（日本語報告）: 喜ぶ → 英文フレーズを1回必ず教える → 言えるまで次の話題に進まない。",
-    "- クエストを強制しないが、できた報告のときは英語を教える。",
-    "- つまずき時: 共感 → マイクラの助言 → 英語は短く1回だけ（既に言った説明は繰り返さない）。",
-    "- 各ステップは英語が音声文字起こしに出たときだけ達成。日本語だけでは達成扱いにしない。",
-    "- ユーザーが英語を言っていないのに例文を言ったことにしない。文字起こしに出た言葉だけ引用。",
-    "- 練習中は何度でも手伝う。達成前でも Nice try! → 日本語で励ます → 英文モデル発話 → 単語の意味を日本語で1文。",
-    "- 「クエスト達成」「おめでとうクリア」などは complete_quest が成功したあとだけ。ステップ未完了のときは絶対に言わない。",
-    "- 各ステップ達成を英語で言えたら短く褒める（引用は文字起こしどおり）。全部終わったらだけ complete_quest を呼ぶ。",
-    "- user_quote には直近のユーザー発話の文字起こしをそのまま入れる（創作・翻訳禁止）。",
-    "- complete_quest 後: お祝いでユーザーのMinecraft行動に触れる → 音声1〜2文でターン終了。",
-    "- 達成前: 自然に会話。話題がそれてもOK。自然なタイミングでやさしくクエストに戻す。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return `${basePrompt}\n${block}`;
-}
-
-export function buildSessionInstructions(selectedQuest) {
-  return selectedQuest
-    ? buildQuestInstructions(BEGINNER_VOICE_BASE_PROMPT, selectedQuest)
-    : BEGINNER_FREE_CHAT_PROMPT;
-}
-
-/** Authoritative step status after each user utterance — sent to Learny. */
+/** Short per-turn directive — mission state + one action for Learny. */
 export function buildQuestStepGroundTruthNudge(
   quest,
   userUtterance,
   newlyCompletedIds = [],
-  questIndex = loadProgress()
+  questIndex = loadProgress(),
+  alreadyAudible = false,
+  { compact = false } = {}
 ) {
   if (!quest) return "";
   const utterance = (userUtterance || "").trim();
-  const done = new Set(loadCompletedStepIds(questIndex));
   const remaining = getRemainingSteps(quest, questIndex);
-  const completedLabels = quest.steps
-    .filter((s) => done.has(s.id))
-    .map((s) => s.label)
-    .join(", ");
+  const next = remaining[0] || null;
+  const stepJustCompleted = newlyCompletedIds.length > 0;
+  const japaneseOnly =
+    !stepJustCompleted && next && utterance && userHintsStepSuccessInJapanese(utterance, next);
+  const wrongAttempt =
+    !stepJustCompleted && next && utterance && userMissedEnglishStepPhrase(utterance, next);
+
+  const directive = buildStepDirective(quest, next, {
+    stepJustCompleted,
+    japaneseOnly,
+    alreadyAudible,
+    wrongAttempt,
+  });
+
+  if (compact) {
+    const status = stepJustCompleted
+      ? "Step recorded."
+      : wrongAttempt
+        ? "Wrong phrase — not recorded."
+        : "No step recorded.";
+    return [
+      utterance ? `Child: "${utterance}"` : "",
+      status,
+      directive,
+      alreadyAudible ? "Stay silent." : QUEST_TRACKER_SPEAK_IF_SILENT,
+      QUEST_TRACKER_NO_REPEAT,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
 
   const lines = [
-    "[Quest tracker — follow exactly; do not contradict]",
-    utterance ? `User transcript (exact): "${utterance}"` : "User transcript: (empty)",
-    `Completed steps: ${completedLabels || "none"}`,
+    buildActiveMissionHeader(quest, questIndex),
+    utterance ? `Child said: "${utterance}"` : "",
+    stepJustCompleted
+      ? `Step recorded: ${newlyCompletedIds.map((id) => quest.steps.find((s) => s.id === id)?.label).filter(Boolean).join(", ")}`
+      : wrongAttempt
+        ? "No step recorded — wrong or incomplete English phrase."
+        : "No step recorded this turn.",
+    directive,
+    alreadyAudible ? "Do not speak again this turn." : QUEST_TRACKER_SPEAK_IF_SILENT,
+    QUEST_TRACKER_NO_REPEAT,
   ];
 
-  if (remaining.length) {
-    const next = remaining[0];
-    lines.push(
-      `Next step needed: ${next.label} (English e.g. "${next.patterns[0]}")`,
-      `Incomplete: ${remaining.map((s) => s.label).join(", ")}`
-    );
-  } else {
-    lines.push("All steps complete — call complete_quest once. Do NOT congratulate until tool confirms.");
-  }
-
-  if (newlyCompletedIds.length) {
-    const labels = newlyCompletedIds
-      .map((id) => quest.steps.find((s) => s.id === id)?.label)
-      .filter(Boolean)
-      .join(", ");
-    lines.push(`Just completed from this utterance: ${labels}.`);
-    if (remaining.length) {
-      lines.push(
-        "Celebrate this step only — quest NOT finished yet.",
-        `Still need: ${remaining.map((s) => s.label).join(", ")}.`,
-        "Do NOT say the quest is complete or call complete_quest yet."
-      );
-    } else {
-      lines.push(
-        "All steps done — call complete_quest once. Do NOT congratulate until the tool confirms. One celebration only."
-      );
-    }
-  } else if (remaining.length && utterance) {
-    const next = remaining[0];
-    lines.push(
-      "No new step completed this turn.",
-      "Do NOT say the user completed a step or spoke an example phrase unless the tracker marked it complete above.",
-      `Do NOT say the user spoke "${next.patterns[0]}" unless those words appear in the transcript above.`
-    );
-    if (userHintsStepSuccessInJapanese(utterance, next)) {
-      lines.push(buildEnglishBridgeNudge(next));
-    } else {
-      lines.push(buildNaturalFlowReminder(next));
-    }
-  }
-
-  return lines.join("\n");
+  return lines.filter(Boolean).join("\n");
 }

@@ -116,8 +116,9 @@ export class CompleteQuestTool {
   constructor(onComplete) {
     this.name = "complete_quest";
     this.description =
-      "Call ONLY when ALL steps of the current Minecraft quest are complete AND each step's English phrase appears in the speech transcript. " +
-      "Never call based on Japanese meaning alone. user_quote must be the exact latest transcript, not invented English.";
+      "Call ONLY when ALL steps of the current Minecraft quest are complete AND the child spoke each step's English phrase in this call. " +
+      "Never call on hostile, upset, or off-topic speech (e.g. 'I hate you'). " +
+      "user_quote must be the exact latest transcript — never invent or translate English.";
     this.parameters = {
       type: "object",
       properties: {

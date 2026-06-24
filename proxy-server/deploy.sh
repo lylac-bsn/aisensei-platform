@@ -71,7 +71,7 @@ case $choice in
             echo "Deploying to Cloud Run..."
             gcloud run deploy gemini-proxy \
                 --image gcr.io/$PROJECT_ID/gemini-proxy \
-                --region us-central1 \
+                --region asia-northeast1 \
                 --platform managed \
                 --allow-unauthenticated \
                 --port 8080 \
@@ -83,7 +83,7 @@ case $choice in
         
         echo ""
         echo "✅ Backend deployed successfully!"
-        SERVICE_URL=$(gcloud run services describe gemini-proxy --region us-central1 --format 'value(status.url)' --project $PROJECT_ID)
+        SERVICE_URL=$(gcloud run services describe gemini-proxy --region asia-northeast1 --format 'value(status.url)' --project $PROJECT_ID)
         echo "🔗 Backend URL: $SERVICE_URL"
         echo "⚠️  Remember to enable session affinity in Cloud Run console for WebSocket support"
         ;;
@@ -106,7 +106,7 @@ case $choice in
             docker push gcr.io/$PROJECT_ID/gemini-proxy
             gcloud run deploy gemini-proxy \
                 --image gcr.io/$PROJECT_ID/gemini-proxy \
-                --region us-central1 \
+                --region asia-northeast1 \
                 --platform managed \
                 --allow-unauthenticated \
                 --port 8080 \
@@ -118,7 +118,7 @@ case $choice in
         
         echo ""
         echo "✅ Deployment complete!"
-        SERVICE_URL=$(gcloud run services describe gemini-proxy --region us-central1 --format 'value(status.url)' --project $PROJECT_ID)
+        SERVICE_URL=$(gcloud run services describe gemini-proxy --region asia-northeast1 --format 'value(status.url)' --project $PROJECT_ID)
         echo "🌐 Frontend: https://$PROJECT_ID.web.app"
         echo "🔗 Backend: $SERVICE_URL"
         echo ""

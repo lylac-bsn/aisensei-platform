@@ -74,7 +74,17 @@
             </main>
 
             <aside class="user-dashboard" aria-label="ダッシュボード">
-                <div class="dashboard-buttons">
+                <div class="dashboard-sidebar-stack">
+                    <div class="dashboard-tips-note" aria-label="先生と楽しく喋るコツ">
+                        <p class="dashboard-tips-note__title">先生と楽しく喋るコツ：</p>
+                        <ul class="dashboard-tips-note__list">
+                            <li>わからないときは、「ゆっくり喋って！」とか「もう一回！」って言ってみよう！</li>
+                            <li>ラーニー先生に冗談を言ったらなんて返ってくるかな？</li>
+                            <li>返事がない時は、「hello!」って話しかけてみよう！</li>
+                        </ul>
+                    </div>
+
+                    <div class="dashboard-buttons">
                     <button type="button" class="dashboard-btn" data-panel="missions" aria-label="ミッション" aria-expanded="false" title="ミッション">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
                         <span class="dashboard-btn-label">ミッション</span>
@@ -100,6 +110,7 @@
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>
                         <span class="dashboard-btn-label">最初から</span>
                     </button>
+                </div>
                 </div>
 
                 <div id="dashboard-panel" class="dashboard-panel" role="dialog" aria-labelledby="dashboard-panel-title" hidden>
@@ -155,7 +166,7 @@
         </div>
 
         <!-- 時間切れの時に表示するオーバーレイ -->
-        <div id="time-up-overlay">
+        <div id="time-up-overlay" style="display:none">
             <div class="overlay-content">
                 <h2>利用時間が終了しました</h2>
                 <p>本日のご利用ありがとうございました。</p>

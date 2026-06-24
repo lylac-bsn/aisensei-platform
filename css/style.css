@@ -784,12 +784,98 @@ body.page-dashboard .user-dashboard {
 
 .user-dashboard {
     min-width: 0;
-    display: grid;
-    place-items: center;
-    align-content: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     position: relative;
     padding: 0.5rem;
     align-self: stretch;
+}
+
+.dashboard-sidebar-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(1rem, 2.5vh, 1.65rem);
+    width: 100%;
+    max-width: min(280px, 100%);
+    margin: 0 auto;
+}
+
+.dashboard-tips-note {
+    position: relative;
+    width: 100%;
+    padding: 1.15rem 1.1rem 1rem 1.2rem;
+    background:
+        linear-gradient(165deg, #FFFDE7 0%, #FFF9C4 55%, #FFF59D 100%);
+    border-radius: 3px 16px 14px 12px;
+    border: 1px solid rgba(255, 213, 79, 0.55);
+    box-shadow:
+        1px 2px 0 rgba(62, 39, 35, 0.06),
+        0 10px 28px rgba(67, 160, 71, 0.11);
+    transform: rotate(-1.25deg);
+}
+
+.dashboard-tips-note::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-3deg);
+    width: 54px;
+    height: 17px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    border-radius: 2px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-tips-note::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 22px;
+    height: 22px;
+    background: linear-gradient(135deg, transparent 50%, rgba(245, 237, 227, 0.95) 50%);
+    border-bottom-right-radius: 12px;
+    pointer-events: none;
+}
+
+.dashboard-tips-note__title {
+    margin: 0 0 0.6rem;
+    font-size: var(--text-sm);
+    font-weight: 800;
+    color: var(--accent-green);
+    line-height: 1.45;
+}
+
+.dashboard-tips-note__list {
+    margin: 0;
+    padding: 0 0 0 1.05rem;
+    list-style: none;
+}
+
+.dashboard-tips-note__list li {
+    position: relative;
+    font-size: var(--text-xs);
+    line-height: 1.58;
+    color: var(--text-dark);
+}
+
+.dashboard-tips-note__list li + li {
+    margin-top: 0.5rem;
+}
+
+.dashboard-tips-note__list li::before {
+    content: "✦";
+    position: absolute;
+    left: -1.05rem;
+    top: 0.12em;
+    font-size: 0.62rem;
+    color: #FFB300;
+    line-height: 1;
 }
 
 .dashboard-buttons {
@@ -797,9 +883,8 @@ body.page-dashboard .user-dashboard {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: clamp(0.55rem, 1vw, 0.85rem);
     width: 100%;
-    max-width: min(280px, 100%);
     place-items: center;
-    margin: 0 auto;
+    margin: 0;
 }
 
 .dashboard-btn {
@@ -1856,6 +1941,14 @@ body.page-dashboard .user-dashboard {
     .dashboard-buttons {
         max-width: min(300px, 100%);
         gap: 0.65rem;
+    }
+    .dashboard-sidebar-stack {
+        max-width: min(300px, 100%);
+        gap: 1rem;
+    }
+    .dashboard-tips-note {
+        transform: rotate(-0.75deg);
+        padding: 1rem 0.95rem 0.9rem 1.05rem;
     }
     .dashboard-btn {
         width: min(100%, 88px);

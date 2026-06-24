@@ -5,6 +5,7 @@ import {
   getSelectedQuestIndex,
   setSelectedQuestIndex,
   clearSelectedQuest,
+  ensureDefaultMissionSelected,
   isQuestUnlocked,
   isLessonComplete,
   resetProgress,
@@ -436,6 +437,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
   setInterval(updateStarBadge, 3000);
   updateStarBadge();
+  ensureDefaultMissionSelected();
 
   const voiceIframe = getVoiceIframe();
   voiceIframe?.addEventListener("load", () => {
