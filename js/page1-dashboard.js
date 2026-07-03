@@ -205,9 +205,8 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   const panelTitle = document.getElementById("dashboard-panel-title");
   const panelBody = document.getElementById("dashboard-panel-body");
   const panelClose = document.getElementById("dashboard-panel-close");
-  const starCountEl = document.getElementById("dashboard-star-count");
   const startOverBtn = document.getElementById("dashboard-startover-btn");
-  const buttons = document.querySelectorAll(".dashboard-btn[data-panel]");
+  const buttons = document.querySelectorAll("[data-panel]");
 
   if (!panel || !panelBody) return;
 
@@ -215,10 +214,41 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   let callState = "idle";
   let pendingMissionSelect = null;
 
-  function updateStarBadge() {
-    if (starCountEl) {
-      starCountEl.textContent = String(getCompletedQuestCount());
+  /** Always-visible trophy shelf: mini badge slots + star row. */
+  function renderTrophyShelf() {
+    const slotsEl = document.getElementById("trophy-badge-slots");
+    const badgeCountEl = document.getElementById("trophy-badge-count");
+    const starRowEl = document.getElementById("trophy-star-row");
+    const starCountEl = document.getElementById("trophy-star-count");
+
+    const slots = getLessonBadgeSlots();
+    const earnedBadges = slots.filter((s) => s.earned).length;
+    if (badgeCountEl) {
+      badgeCountEl.textContent = `${earnedBadges}/${slots.length}`;
     }
+    if (slotsEl) {
+      slotsEl.innerHTML = slots
+        .map((slot) =>
+          slot.earned
+            ? `<span class="trophy-slot earned" title="${slot.label}"><img src="images/mission-complete-badge.png" alt="" decoding="async"></span>`
+            : `<span class="trophy-slot${slot.upcoming ? " upcoming" : ""}" title="${slot.label}">${slot.upcoming ? "?" : ""}</span>`
+        )
+        .join("");
+    }
+
+    const earned = getCompletedQuestCount();
+    const total = getTotalQuests();
+    if (starCountEl) starCountEl.textContent = String(earned);
+    if (starRowEl) {
+      starRowEl.innerHTML = Array.from(
+        { length: total },
+        (_, i) => `<span class="trophy-star${i < earned ? " filled" : ""}">★</span>`
+      ).join("");
+    }
+  }
+
+  function updateStarBadge() {
+    renderTrophyShelf();
     updateStartOverButton();
   }
 
@@ -371,7 +401,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
   document.addEventListener("click", (e) => {
     if (panel.hidden) return;
-    if (panel.contains(e.target) || e.target.closest(".dashboard-btn")) {
+    if (panel.contains(e.target) || e.target.closest("[data-panel]")) {
       return;
     }
     closePanel();

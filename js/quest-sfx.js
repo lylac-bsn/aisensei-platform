@@ -75,6 +75,19 @@ export class QuestSfx {
     }
   }
 
+  /** Short bright two-note ding — a single challenge step ticked. */
+  async playStepComplete() {
+    try {
+      const ctx = await this.ensureContext();
+      const t = ctx.currentTime;
+      const vol = this.volume;
+      this._tone(ctx, 987.77, t, 0.14, vol, "triangle");
+      this._tone(ctx, 1318.51, t + 0.09, 0.22, vol * 0.9, "sine");
+    } catch {
+      // ignore autoplay / audio errors
+    }
+  }
+
   /** Quick bright ping — next quest loading (plays on handoff disconnect, not reconnect). */
   async playQuestReady() {
     try {

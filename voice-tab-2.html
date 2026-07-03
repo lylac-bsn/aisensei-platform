@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Voice &amp; Transcription</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #43A047;
             --primary-dark: #2E7D32;
             --primary-light: #E8F5E9;
             --accent: #FF6B6B;
-            --bg: #F0F2F5;
+            --bg: #FBF6EE;
             --surface: #FFFFFF;
             --text-primary: #1A1A2E;
             --text-secondary: #6B7280;
@@ -34,7 +34,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: 'M PLUS Rounded 1c', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background-color: var(--bg);
             color: var(--text-primary);
             overflow: hidden;
@@ -52,13 +52,13 @@
 
         /* ===== Header ===== */
         .header {
-            background: var(--primary);
+            background: linear-gradient(150deg, #4CAF50 0%, var(--primary) 55%, #388E3C 100%);
             padding: 12px 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             flex-shrink: 0;
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 4px 18px rgba(46, 125, 50, 0.25);
             z-index: 100;
         }
 
@@ -563,6 +563,7 @@
         let silenceTimer = null;
         let isAutoReconnecting = false;
         let justReconnected = false;
+        let sessionResumeHandle = null; // Live API resumption handle for the current session
         let chatMessages = [];
         const MAX_MESSAGES = 20;
         const TURN_THRESHOLD = 4;
@@ -630,8 +631,9 @@
             // Mute button visibility
             if (actionState === 'active') {
                 btnMute.classList.add('visible');
+                // Re-apply mute to new tracks after auto-reconnect
                 if (isMuted && audioStreamer && audioStreamer.mediaStream) {
-                    audioStreamer.mediaStream.getAudioTracks().forEach(t => { t.enabled = false; });
+                    audioStreamer.setMuted(true);
                 }
             } else if (actionState === 'idle') {
                 btnMute.classList.remove('visible');
@@ -647,8 +649,7 @@
         function toggleMute() {
             if (!audioStreamer || !audioStreamer.mediaStream) return;
             isMuted = !isMuted;
-            const tracks = audioStreamer.mediaStream.getAudioTracks();
-            tracks.forEach(track => { track.enabled = !isMuted; });
+            audioStreamer.setMuted(isMuted);
             if (isMuted) {
                 btnMute.classList.add('muted');
                 btnMute.textContent = '🔇';
@@ -922,6 +923,14 @@
                     if (enableCssStyleTool) client.addFunction(new AddCSSStyleTool());
                 }
 
+                client.onSessionResumptionUpdate = (handle) => {
+                    sessionResumeHandle = handle;
+                };
+                // Auto-reconnects continue the same session with context intact.
+                if (isAutoReconnecting && sessionResumeHandle) {
+                    client.setResumptionHandle(sessionResumeHandle);
+                }
+
                 client.onReceiveResponse = handleMessage;
                 client.onErrorMessage = (error) => {};
                 client.onConnectionStarted = () => {
@@ -930,6 +939,11 @@
                 };
                 client.onClose = (event) => {
                     connected = false;
+                    // Server resets the socket every ~10 min; resume seamlessly if possible.
+                    if (!isAutoReconnecting && actionState === 'active' && sessionResumeHandle) {
+                        autoReconnect();
+                        return;
+                    }
                     if (!isAutoReconnecting && event && event.code !== 1000) {
                         const reason = (event.reason && String(event.reason).trim()) || `コード ${event.code}`;
                         if (event.code === 1008) {
@@ -990,6 +1004,7 @@
             }
 
             if (!isAutoReconnect) {
+                sessionResumeHandle = null;
                 if (audioStreamer) { audioStreamer.stop(); audioStreamer = null; }
                 if (videoStreamer) { videoStreamer.stop(); videoStreamer = null; }
                 if (audioPlayer) { audioPlayer.destroy(); audioPlayer = null; }
@@ -1052,6 +1067,7 @@
 
             // Idle → connect + auto-start mic
             actionState = 'connecting';
+            sessionResumeHandle = null;
             updateActionUI();
 
             try {

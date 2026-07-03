@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamecollege - Beginner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="images/tab-logo.png" type="image/png">
 </head>
@@ -75,6 +78,22 @@
 
             <aside class="user-dashboard" aria-label="ダッシュボード">
                 <div class="dashboard-sidebar-stack">
+                    <!-- Always-visible trophy shelf: badges + stars -->
+                    <section class="trophy-shelf" aria-label="バッジとスター">
+                        <button type="button" class="trophy-shelf__badges" id="trophy-shelf-badges" data-panel="badges" aria-label="バッジを見る">
+                            <span class="trophy-shelf__title">
+                                <svg class="trophy-shelf__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg>
+                                バッジコレクション
+                                <span class="trophy-shelf__count" id="trophy-badge-count">0/6</span>
+                            </span>
+                            <span class="trophy-shelf__slots" id="trophy-badge-slots" aria-hidden="true"></span>
+                        </button>
+                        <button type="button" class="trophy-shelf__stars" id="trophy-shelf-stars" data-panel="stars" aria-label="スターを見る">
+                            <span class="trophy-shelf__stars-row" id="trophy-star-row" aria-hidden="true"></span>
+                            <span class="trophy-shelf__stars-label"><span id="trophy-star-count">0</span> スターゲット！</span>
+                        </button>
+                    </section>
+
                     <div class="dashboard-tips-note" aria-label="先生と楽しく喋るコツ">
                         <p class="dashboard-tips-note__title">先生と楽しく喋るコツ：</p>
                         <ul class="dashboard-tips-note__list">
@@ -96,15 +115,6 @@
                     <button type="button" class="dashboard-btn" data-panel="instructions" aria-label="使い方" aria-expanded="false" title="使い方">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg>
                         <span class="dashboard-btn-label">使い方</span>
-                    </button>
-                    <button type="button" class="dashboard-btn dashboard-btn--stars" data-panel="stars" aria-label="スター" aria-expanded="false" title="スター">
-                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg>
-                        <span class="dashboard-btn-count" id="dashboard-star-count">0</span>
-                        <span class="dashboard-btn-label">スター</span>
-                    </button>
-                    <button type="button" class="dashboard-btn" data-panel="badges" aria-label="バッジ" aria-expanded="false" title="バッジ">
-                        <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg>
-                        <span class="dashboard-btn-label">バッジ</span>
                     </button>
                     <button type="button" class="dashboard-btn dashboard-btn--startover" id="dashboard-startover-btn" aria-label="最初から" title="最初から" hidden>
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>
@@ -138,8 +148,8 @@
                             <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg></span><strong>最初から</strong> — レッスンクリア後に進捗をリセット（使い方の下）</li>
                             <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg></span><strong>使い方</strong> — この説明を見る</li>
                             <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><strong>フレーズ</strong> — 覚えた英語フレーズ</li>
-                            <li><span class="instr-icon instr-icon--star" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg></span><strong>スター</strong> — クリアしたクエスト数</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg></span><strong>バッジ</strong> — レッスンを全部クリアするともらえる</li>
+                            <li><span class="instr-icon instr-icon--star" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg></span><strong>スター</strong> — クリアしたクエスト数（右上に表示）</li>
+                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg></span><strong>バッジコレクション</strong> — レッスンを全部クリアするとバッジがもらえる（右上に表示）</li>
                         </ul>
                         <h2>ヒント</h2>
                         <p class="hint-text">ラーニー先生は日本語もわかるけど、英語で話すともっと上手に教えてくれるよ。</p>

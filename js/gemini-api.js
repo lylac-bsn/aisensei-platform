@@ -85,6 +85,11 @@ export class MultimodalLiveResponseMessage {
     } catch (e) {
       // parsing error handled silently
     }
+
+    // Keep unparsed frames (goAway, errors, etc.) for debug logging
+    if (!this.type) {
+      this.raw = data;
+    }
   }
 }
 
@@ -149,6 +154,24 @@ export class GeminiLiveAPI {
       end_of_speech_sensitivity: "END_SENSITIVITY_UNSPECIFIED",
       start_of_speech_sensitivity: "START_SENSITIVITY_UNSPECIFIED",
     };
+
+    // Long-session cost/stability controls.
+    // Live API re-bills the whole accumulated context every turn; a sliding
+    // window caps that so cost per turn stays flat in long sessions. It also
+    // removes the 15-minute audio session limit.
+    this.contextWindowCompression = {
+      enabled: true,
+      triggerTokens: 16000,
+      targetTokens: 4000,
+    };
+    // The server resets the WebSocket every ~10 minutes (goAway → close).
+    // With resumption enabled we receive handles that let a new connection
+    // continue the same session with context intact.
+    this.sessionResumptionEnabled = true;
+    this.resumeHandle = null; // set before connect() to resume a previous session
+    this.latestResumptionHandle = null; // most recent handle received from the server
+    this.onSessionResumptionUpdate = (handle) => {};
+    this.onGoAway = (timeLeft) => {};
 
     this.apiHost = `${GEMINI_REGION}-aiplatform.googleapis.com`;
     this.serviceUrl = `wss://${this.apiHost}/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
@@ -229,6 +252,11 @@ export class GeminiLiveAPI {
     this.enableFunctionCalls = enabled;
   }
 
+  /** Resume a previous session on the next connect() (handle from onSessionResumptionUpdate). */
+  setResumptionHandle(handle) {
+    this.resumeHandle = handle || null;
+  }
+
   addFunction(newFunction) {
     this.functions.push(newFunction);
     this.functionsMap[newFunction.name] = newFunction;
@@ -296,6 +324,23 @@ export class GeminiLiveAPI {
         this._setupTimeout = null;
       }
     }
+
+    // Session resumption handles arrive periodically; store the latest so the
+    // app can reconnect with context intact. Not forwarded (would spam logs).
+    if (messageData?.sessionResumptionUpdate) {
+      const update = messageData.sessionResumptionUpdate;
+      if (update.resumable && update.newHandle) {
+        this.latestResumptionHandle = update.newHandle;
+        this.onSessionResumptionUpdate(update.newHandle);
+      }
+      return;
+    }
+
+    // Server warns before it resets the connection (~10 min lifetime).
+    if (messageData?.goAway) {
+      this.onGoAway(messageData.goAway.timeLeft || null);
+    }
+
     const message = new MultimodalLiveResponseMessage(messageData);
     this.onReceiveResponse(message);
   }
@@ -380,6 +425,21 @@ export class GeminiLiveAPI {
         },
       },
     };
+
+    if (this.contextWindowCompression?.enabled) {
+      sessionSetupMessage.setup.context_window_compression = {
+        trigger_tokens: this.contextWindowCompression.triggerTokens,
+        sliding_window: {
+          target_tokens: this.contextWindowCompression.targetTokens,
+        },
+      };
+    }
+
+    if (this.sessionResumptionEnabled) {
+      sessionSetupMessage.setup.session_resumption = this.resumeHandle
+        ? { handle: this.resumeHandle }
+        : {};
+    }
 
     // Add transcription config if enabled
     if (this.inputAudioTranscription) {

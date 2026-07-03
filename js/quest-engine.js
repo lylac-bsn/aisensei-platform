@@ -564,11 +564,6 @@ function textWords(text) {
 }
 
 
-function textUsesOnlyAllowlistedWords(text, step) {
-  const allowed = getStepAllowlist(step);
-  return textWords(text).every((word) => allowed.has(word));
-}
-
 function textHasNonAllowlistedContentWord(text, step) {
   const allowed = getStepAllowlist(step);
   return textWords(text).some((word) => !FILLER_TOKENS.has(word) && !allowed.has(word));
@@ -583,14 +578,38 @@ function textHasAllowlistedObject(text, step) {
   return words.some((word) => objects.has(word));
 }
 
+/** Words that negate an action — the child is saying it did NOT happen. */
+const NEGATION_WORDS = [
+  "not", "never", "nothing", "havent", "hasnt", "wont",
+  "couldnt", "wouldnt", "shouldnt", "aint",
+];
+
 function textHasAspiration(text) {
-  const words = textWords(text);
-  return ASPIRATION_WORDS.some((aspiration) => words.includes(aspiration));
+  // Strip apostrophes so "didn't"/"can't" match the bare forms in the word lists.
+  const words = textWords(text).map((w) => w.replace(/['']/g, ""));
+  return (
+    ASPIRATION_WORDS.some((aspiration) => words.includes(aspiration)) ||
+    NEGATION_WORDS.some((negation) => words.includes(negation))
+  );
+}
+
+/**
+ * Split an utterance into independent clauses (on punctuation and
+ * conjunctions) so each claim is judged on its own. Lets kids say step
+ * phrases mid-sentence — "I found food and I need food" ticks both steps
+ * instead of each step's guards rejecting the other half of the sentence.
+ */
+function splitIntoClauses(text) {
+  return (text || "")
+    .split(/[,.!?;:。、．！？；]+|\b(?:and\s+then|and|then|but|so|because|also|next|after\s+that)\b/gi)
+    .map((clause) => (clause || "").trim())
+    .filter(Boolean);
 }
 
 /** Past-tense / completion verbs required for action steps (blocks bare "craft table"). */
 const STEP_COMPLETION_VERBS = {
-  found_tree: ["found", "find", "see", "saw", "look"],
+  // chop/cut included: the quest patterns accept "chopping the tree" as proof
+  found_tree: ["found", "find", "see", "saw", "look", "chop", "chopped", "cut"],
   got_wood: ["got", "get", "have", "had", "chop", "chopped", "cut", "collect", "collected"],
   made_table: ["made", "crafted", "built", "created"],
   placed_table: ["put", "placed", "place"],
@@ -628,7 +647,6 @@ function patternRequiresCompletionVerb(pattern) {
 function matchesStepSalient(text, step) {
   const groups = STEP_SALIENT_GROUPS[step?.id];
   if (!groups?.length) return false;
-  if (!textUsesOnlyAllowlistedWords(text, step)) return false;
 
   const words = textWords(text);
   if (!words.length) return false;
@@ -728,10 +746,21 @@ const VALID_SHORT_UTTERANCES = new Set([
   "うん", "はい", "え", "ね", "あ", "う", "ん", "そう", "えっ", "わ", "や", "よ", "お",
 ]);
 
+/**
+ * Scripts a Japanese child never produces (Hangul, Cyrillic, Thai, Arabic,
+ * Devanagari, Hebrew). The native-audio ASR auto-detects language and sometimes
+ * mislabels a kid's mumbled Japanese/English as one of these — always treat as
+ * misrecognition, never as intentional speech.
+ */
+const FOREIGN_SCRIPT_RE =
+  /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0400-\u04ff\u0e00-\u0e7f\u0600-\u06ff\u0900-\u097f\u0590-\u05ff]/;
+
 /** True when transcript is empty, noise, or too garbled to treat as intentional speech. */
 export function isUnrecognizableUserInput(text) {
   const t = (text || "").trim();
   if (!t) return true;
+
+  if (FOREIGN_SCRIPT_RE.test(t)) return true;
 
   const normalized = t.toLowerCase().replace(/\s+/g, " ").trim();
   if (VALID_SHORT_UTTERANCES.has(normalized)) return false;
@@ -739,12 +768,21 @@ export function isUnrecognizableUserInput(text) {
   if (/[\u3040-\u30ff\u3400-\u9fff]/.test(t)) {
     if (t.length === 1 && /[\u3040-\u30ff]/.test(t)) return false;
     if (/^(.)\1{3,}$/.test(normalized)) return true;
+    // Kanji-only runs with no kana are almost always the ASR mislabeling speech
+    // as Chinese — real Japanese transcripts of kids contain kana.
+    const hasKana = /[\u3040-\u30ff]/.test(t);
+    if (!hasKana && !userTextHasEnglish(t)) {
+      const hanCount = (t.match(/[\u3400-\u9fff]/g) || []).length;
+      if (hanCount >= 4) return true;
+    }
     return false;
   }
 
-  if (userTextHasEnglish(t)) return false;
-
+  // Filler noises must be checked before the general English-letters test,
+  // otherwise "hmm"/"umm" are treated as clear speech.
   if (/^(um+|uh+|ah+|hm+|mhm+|mmm+|hmm+|eh+|oh+)$/i.test(normalized)) return true;
+
+  if (userTextHasEnglish(t)) return false;
   if (/^[\*#\.\-_\?\!\,\:\;\"\'\(\)\[\]\s\d]+$/.test(t)) return true;
 
   const letters = (t.match(/[\p{L}\p{N}]/gu) || []).length;
@@ -888,9 +926,20 @@ export function buildUnclearInputRepeatNudge(userUtterance = "", quest = null, q
   );
 }
 
+/**
+ * Lenient step matching: the utterance passes if ANY clause of it contains the
+ * step phrase (flexible wording) or the step's verb+object keywords. Guards
+ * (aspiration, negation, completion verb) are scoped to the matching clause so
+ * words elsewhere in the sentence can't block a genuine claim.
+ */
 export function matchesStep(text, step) {
   if (!step?.patterns?.length) return false;
-  if (!textUsesOnlyAllowlistedWords(text, step)) return false;
+  const candidates = [text, ...splitIntoClauses(text)];
+  return candidates.some((chunk) => matchesStepChunk(chunk, step));
+}
+
+function matchesStepChunk(text, step) {
+  if (!text?.trim()) return false;
   if (STEP_REQUIRES_COMPLETION.has(step.id) && textHasAspiration(text)) return false;
   const patternMatched = step.patterns.some((pattern) => matchesPhrase(text, pattern));
   const salientMatched = !patternMatched && matchesStepSalient(text, step);
@@ -1214,12 +1263,10 @@ function applyUtteranceToSteps(quest, userText, doneSet) {
   const newly = [];
   if (!userText?.trim()) return newly;
 
+  // One utterance may prove several steps ("I found food and I need food")
+  // — tick every step it matches, not just one.
   const remaining = quest.steps.filter((s) => !doneSet.has(s.id));
-  if (!remaining.length) return newly;
-
-  let highestMatch = -1;
-  for (let i = 0; i < remaining.length; i++) {
-    const step = remaining[i];
+  for (const step of remaining) {
     if (!matchesStep(userText, step)) continue;
     if (
       stepRequiresEnglish(step) &&
@@ -1228,14 +1275,81 @@ function applyUtteranceToSteps(quest, userText, doneSet) {
     ) {
       continue;
     }
-    highestMatch = i;
+    doneSet.add(step.id);
+    newly.push(step.id);
   }
-  if (highestMatch < 0) return newly;
+  return newly;
+}
 
-  const matchedStep = remaining[highestMatch];
-  if (!doneSet.has(matchedStep.id)) {
-    doneSet.add(matchedStep.id);
-    newly.push(matchedStep.id);
+/**
+ * Echo-coach acceptance: after Learny has modeled the phrase (2+ missed
+ * attempts), a close attempt passes — right object word + right verb anywhere
+ * in the sentence, no word-gap limit. Never accepts negation/aspiration,
+ * hostile input, or non-English.
+ */
+export function matchesStepLenient(text, step) {
+  if (!text?.trim() || !step?.patterns?.length) return false;
+  if (!userTextHasEnglish(text)) return false;
+  if (textHasAspiration(text)) return false;
+  if (isHostileOrOffTopicUtterance(text)) return false;
+
+  const words = new Set(textWords(text));
+
+  const objects = getStepObjectAllowlist(step);
+  const hasObject = !objects.size || [...words].some((w) => objects.has(w));
+
+  const verbs = new Set(stepCompletionVerbWords(step));
+  for (const kw of STEP_SALIENT_GROUPS[step.id]?.[0] || []) {
+    for (const alt of expandTokenAlternates(kw)) verbs.add(alt);
+  }
+  const hasVerb = !verbs.size || [...words].some((w) => verbs.has(w));
+
+  return hasObject && hasVerb;
+}
+
+/**
+ * Challenge matching for one utterance: a correct phrase passes ANYTIME,
+ * regardless of which step Learny is currently directing — kids can say
+ * step phrases in any order. The lenient (echo-coach) pass applies only to
+ * the current step, i.e. the one whose attempts have been missed twice.
+ */
+export function applyUtteranceToChallenge(
+  quest,
+  userText,
+  questIndex = loadProgress(),
+  { lenient = false } = {}
+) {
+  if (!quest?.steps?.length || !userText?.trim()) return [];
+  // Upset/hostile speech is never step proof, even if it contains step words.
+  if (isHostileOrOffTopicUtterance(userText)) return [];
+
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
+  const current = quest.steps.find((s) => !done.has(s.id)) || null;
+  const newly = [];
+
+  for (const step of quest.steps) {
+    if (done.has(step.id)) continue;
+
+    let matched = matchesStep(userText, step);
+    if (!matched && lenient && current && step.id === current.id) {
+      matched = matchesStepLenient(userText, step);
+    }
+    if (!matched) continue;
+    if (
+      stepRequiresEnglish(step) &&
+      isPrimarilyJapanese(userText) &&
+      !hasEnglishPatternMatch(userText, step)
+    ) {
+      continue;
+    }
+
+    done.add(step.id);
+    newly.push(step.id);
+  }
+
+  if (newly.length) {
+    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
+    recordLearnedSteps(quest, questIndex, newly);
   }
   return newly;
 }
@@ -1625,6 +1739,7 @@ export const BEGINNER_FREE_CHAT_PROMPT = `あなたはゲームカレッジの�
 ■一緒に遊ぶ: 迷ったら「次はこれやってみよう！」と具体的に（EN→JP）。質問攻めにしない。
 ■無言時: マイクラの豆知識を1つ、楽しそうに（EN→JP）。
 ■聞き取れず: 「もう一回言ってみて！」くらいカジュアルに（EN→JP）。
+■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
 ■安全: 不適切な話はやんわり断って、ゲームに戻す。
 
 ■自由会話モード — 英語やマイクラの質問に、友だちみたいに気軽に答える。`;
@@ -1638,6 +1753,7 @@ export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（EN→JP、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
 ■怒った・しぶるとき: やさしく受け止めて（EN→JP）、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド（EN→JP）。
+■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
 ■安全: 不適切な話はやんわり断って、ミッションに戻す。`;
 
 export function buildQuestOpeningNudge(quest, questIndex = loadProgress()) {
@@ -1670,10 +1786,11 @@ export function buildQuestInstructions(basePrompt, quest, questIndex = null) {
     "",
     `■ミッション ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title}`,
     `■ゴール: ${quest.goal}`,
-    "■ステップ（全部必要）:",
+    "■ステップ（この順番で1つずつチャレンジ）:",
     ...stepLines,
-    "■進め方: 楽しくナビ→マイクラの行動→成功時の英文→待つ。各ターン→フレンドリーに次のステップへ。全完了→complete_quest→お祝い1回。",
-    "■話し方: 英語→日本語。かんたん・元気・友だち口調。堅い敬語・講義口調は避ける。",
+    "■進め方: 1つずつ。楽しくナビ→マイクラの行動→成功時の英文を言わせる→アプリの判定を待つ。判定が来たらお祝い→次のチャレンジを声で案内。",
+    "■判定（絶対）: ステップの達成判定はアプリが行う。[App verdict] STEP COMPLETE が来たステップだけが完了。自分でステップ完了・クリアを判断しない。判定が来ていないのに「できたね」「ステップクリア」と言わない。",
+    "■話し方: 英語→日本語。かんたん・元気・友だち口調。1回の返事は短く（ひと息で言える長さ）。堅い敬語・講義口調は避ける。",
     "■禁止: ステップ残りでクリア宣言。complete_quest前のお祝い。次ミッションの話。同じ英文の連続リピート。子どもの怒り・拒否を完了とみなすこと。",
   ].join("\n");
 
@@ -1769,4 +1886,60 @@ export function buildQuestStepGroundTruthNudge(
   ];
 
   return lines.filter(Boolean).join("\n");
+}
+
+/**
+ * App verdict after the app itself recorded challenge step(s): tell Learny
+ * exactly what was completed and what the next challenge is, so it never has
+ * to guess (and can never falsely congratulate).
+ */
+export function buildChallengeResultNudge(
+  quest,
+  questIndex = loadProgress(),
+  newlyCompletedIds = [],
+  utterance = ""
+) {
+  if (!quest) return "";
+  const completed = newlyCompletedIds
+    .map((id) => quest.steps.find((s) => s.id === id))
+    .filter(Boolean)
+    .map((s) => `${s.label}「${s.patterns?.[0] || ""}」`)
+    .join(", ");
+  const next = getRemainingSteps(quest, questIndex)[0] || null;
+  const mission = buildActiveMissionHeader(quest, questIndex);
+
+  return [
+    `[App verdict] ${mission}`,
+    `STEP COMPLETE — recorded: ${completed}.` +
+      (utterance ? ` Child said: "${utterance}"` : ""),
+    next
+      ? `Next challenge: ${next.label} — "${next.patterns?.[0] || ""}". ` +
+        `If you have not reacted yet: cheer once (1 short sentence) and introduce the next challenge by voice (EN then JP). ` +
+        `If you already cheered, only introduce the next challenge once.`
+      : `All steps recorded — call complete_quest now, then celebrate once.`,
+    QUEST_TRACKER_NO_REPEAT,
+  ].join("\n");
+}
+
+/**
+ * After 2+ missed attempts at the same challenge: no error loop — Learny
+ * models the phrase slowly and invites an echo. The app then accepts a close
+ * attempt (matchesStepLenient).
+ */
+export function buildChallengeEchoCoachNudge(
+  quest,
+  step,
+  utterance = "",
+  questIndex = loadProgress()
+) {
+  if (!quest || !step) return "";
+  const phrase = step.patterns?.[0] || "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  return (
+    `[App verdict] ${mission} The child has tried this challenge twice without the phrase being caught` +
+    (utterance ? ` (last try: "${utterance}")` : "") +
+    `. Do NOT say they failed and do NOT mark anything done. ` +
+    `Say the phrase slowly ONCE, word by word: "${phrase}" — then warmly invite them to repeat after you (「まねして言ってみて！」). ` +
+    `1–2 short sentences, EN then JP. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
+  );
 }

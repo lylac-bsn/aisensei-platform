@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Voice &amp; Transcription</title>
     <link rel="icon" href="images/tab-logo.png" type="image/png">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #43A047;
             --primary-dark: #2E7D32;
             --primary-light: #E8F5E9;
             --accent: #FF6B6B;
-            --bg: #F0F2F5;
+            --bg: #FBF6EE;
             --surface: #FFFFFF;
             --text-primary: #1A1A2E;
             --text-secondary: #6B7280;
@@ -46,7 +46,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: 'M PLUS Rounded 1c', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background-color: var(--bg);
             color: var(--text-primary);
             font-size: var(--text-base);
@@ -65,14 +65,31 @@
 
         /* ===== Header ===== */
         .header {
-            background: var(--primary);
+            position: relative;
+            background: linear-gradient(150deg, #4CAF50 0%, var(--primary) 55%, #388E3C 100%);
             padding: 16px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             flex-shrink: 0;
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 4px 18px rgba(46, 125, 50, 0.25);
             z-index: 100;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle 8px at 38% 28%, rgba(255, 255, 255, 0.14), transparent),
+                radial-gradient(circle 5px at 55% 70%, rgba(255, 241, 118, 0.28), transparent),
+                radial-gradient(circle 7px at 70% 24%, rgba(255, 255, 255, 0.12), transparent),
+                radial-gradient(circle 90px at 0% 130%, rgba(255, 255, 255, 0.10), transparent 70%);
+            pointer-events: none;
+        }
+
+        .header > * {
+            position: relative;
         }
 
         .header-left {
@@ -215,7 +232,13 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 8px 24px rgba(67, 160, 71, 0.22), 0 0 0 6px rgba(255, 255, 255, 0.9), 0 0 0 8px rgba(67, 160, 71, 0.18);
+            animation: empty-float 3.2s ease-in-out infinite;
+        }
+
+        @keyframes empty-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-7px); }
         }
 
         .empty-state-icon img {
@@ -537,11 +560,11 @@
             display: flex;
             align-items: stretch;
             background: #fff;
-            border: 1px solid #DDE3E8;
-            border-radius: 14px;
+            border: 2px solid #C8E6C9;
+            border-radius: 18px;
             overflow: hidden;
             min-height: 120px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            box-shadow: 0 6px 18px rgba(46, 125, 50, 0.10);
         }
         .quest-banner.lesson-complete {
             border-color: #FFD54F;
@@ -555,7 +578,7 @@
             justify-content: center;
             min-width: 76px;
             padding: 12px 12px 18px;
-            background: linear-gradient(180deg, #4CAF50 0%, #43A047 100%);
+            background: linear-gradient(165deg, #66BB6A 0%, #4CAF50 45%, #43A047 100%);
             color: #fff;
             border-right: 1px solid #DDE3E8;
             clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
@@ -686,8 +709,8 @@
             width: fit-content;
             min-width: 148px;
             padding: 14px 14px 14px 12px;
-            border-left: 1px solid #ECEFF1;
-            background: linear-gradient(180deg, #FAFBFC 0%, #F5F7F9 100%);
+            border-left: 1px solid #F0E6D2;
+            background: linear-gradient(180deg, #FFFBF2 0%, #FFF6E5 100%);
         }
         .quest-stars {
             display: flex;
@@ -1196,12 +1219,43 @@
 
     <!-- Import utilities as ES modules -->
     <script type="module">
-        // Silence all console output for this iframe
-        console.log = () => {};
-        console.warn = () => {};
-        console.error = () => {};
-        console.info = () => {};
-        console.debug = () => {};
+        // Debug mode: add ?debug=1 to the iframe URL, or run
+        // localStorage.setItem('learny_debug', '1') in the console and reload.
+        const DEBUG_MODE =
+            new URLSearchParams(window.location.search).has('debug') ||
+            (() => { try { return localStorage.getItem('learny_debug') === '1'; } catch { return false; } })();
+
+        const nativeConsole = {
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
+        };
+
+        // Always-on ring buffer of recent events for post-incident diagnosis:
+        // inspect window.__learnyLog in devtools even without debug mode.
+        const LOG_BUFFER_MAX = 400;
+        const logBuffer = [];
+        window.__learnyLog = logBuffer;
+
+        function dbg(event, detail) {
+            const entry = {
+                t: new Date().toISOString().slice(11, 23),
+                event,
+                ...(detail !== undefined ? { detail } : {}),
+            };
+            logBuffer.push(entry);
+            if (logBuffer.length > LOG_BUFFER_MAX) logBuffer.shift();
+            if (DEBUG_MODE) nativeConsole.log(`[learny ${entry.t}] ${event}`, detail ?? '');
+        }
+
+        if (!DEBUG_MODE) {
+            // Silence all console output for this iframe in production
+            console.log = () => {};
+            console.warn = () => {};
+            console.error = () => {};
+            console.info = () => {};
+            console.debug = () => {};
+        }
 
         import { GeminiLiveAPI, MultimodalLiveResponseType } from './js/gemini-api.js';
         import { AudioStreamer, VideoStreamer, AudioPlayer } from './js/media-utils.js';
@@ -1241,8 +1295,10 @@
             buildQuestRecordedToolMessage,
             buildQuestRejectedToolMessage,
             buildQuestStepGroundTruthNudge,
-            buildQuestCompleteTrackerNudge,
             buildQuestAlreadyRecordedToolMessage,
+            applyUtteranceToChallenge,
+            buildChallengeResultNudge,
+            buildChallengeEchoCoachNudge,
             isUnrecognizableUserInput,
             buildUnclearInputRepeatNudge,
             buildNoAudioRecoveryNudge,
@@ -1307,17 +1363,18 @@
         let lastSilencePromptAt = 0;
         const SILENCE_WATCH_INTERVAL_MS = 3000;
         let isAutoReconnecting = false;
-        let justReconnected = false;
+        // Live API session-resumption handle for the CURRENT session; lets us
+        // reconnect with full context when the server drops the socket (~10 min).
+        let sessionResumeHandle = null;
+        // Escape hatch while field-testing the mic voice gate: ?micgate=0
+        const MIC_GATE_DISABLED =
+            new URLSearchParams(window.location.search).get('micgate') === '0';
         let chatMessages = [];
         let assistantThinkingRow = null;
         const MAX_MESSAGES = 20;
-        const TURN_THRESHOLD = 4;
         const NO_AUDIO_RECOVERY_FIRST_MS = 1600;
         const NO_AUDIO_RECOVERY_RETRY_MS = 2800;
         const MAX_NO_AUDIO_RECOVERY_ATTEMPTS = 2;
-        const QUEST_TRACKER_DELAY_MS = 2000;
-        const QUEST_TRACKER_DELAY_WRONG_MS = 1400;
-        const QUEST_TRACKER_DELAY_STEP_MS = 900;
         const POST_BARGE_IN_WATCHDOG_MS = 1800;
         const POST_BARGE_IN_RECOVERY_MS = 900;
         const STALE_ASSISTANT_OUTPUT_MS = 400;
@@ -1332,13 +1389,6 @@
             audioInputTokens: 0,
             textOutputTokens: 0,
             audioOutputTokens: 0,
-        };
-
-        let savedMediaStates = {
-            audioStreaming: false,
-            videoStreaming: false,
-            selectedMic: "",
-            selectedCamera: "",
         };
 
         // ============================================
@@ -1407,10 +1457,8 @@
         let farewellSessionClient = null;
         let questOpeningRetryTimer = null;
         let questSessionAssistantSeen = false;
-        let questCompleteFallbackTimer = null;
         let missionAdvanceTimer = null;
         let noAudioRecoveryTimer = null;
-        let questTrackerTimer = null;
         let assistantRespondedSinceLastUserTurn = true;
         let assistantAudibleThisTurn = false;
         let awaitingAssistantReply = false;
@@ -1418,7 +1466,10 @@
         let noAudioRecoveryAttempts = 0;
         let lastFinishedUserTranscriptAt = 0;
         let lastUserTurnSeq = 0;
-        let pendingQuestTracker = null;
+        // Challenge-window retry tracking: after 2 misses on the same step,
+        // Learny models the phrase and the app accepts a close attempt.
+        let challengeMissStepId = null;
+        let challengeMissCount = 0;
         let lastRecoveryNudgeKey = "";
         let lastRecoveryNudgeAt = 0;
         let lastPrematureCompleteCorrectionAt = 0;
@@ -1762,7 +1813,7 @@
             noAudioRecoveryAttempts = 0;
             lastFinishedUserTranscriptAt = 0;
             lastUserTurnSeq = 0;
-            pendingQuestTracker = null;
+            resetChallengeMissTracking();
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
             assistantTurnOpen = false;
@@ -1772,13 +1823,11 @@
             lastRecoveryNudgeAt = 0;
             clearDeferredSteeringFlushTimer();
             clearNoAudioRecoveryTimer();
-            clearQuestTrackerTimer();
             renderChat();
         }
 
         function resetIdleCallState() {
             isAutoReconnecting = false;
-            justReconnected = false;
             clearQuestAdvanceTimer();
             clearMissionAdvanceTimer();
             clearQuestTeardownTimers();
@@ -1803,10 +1852,17 @@
             await new Promise((r) => setTimeout(r, 200));
         }
 
+        function createAudioStreamer() {
+            const streamer = new AudioStreamer(client);
+            streamer.setVoiceGateEnabled(!MIC_GATE_DISABLED);
+            streamer.onVoiceGateChange = (open) => dbg('voice gate', { open });
+            return streamer;
+        }
+
         /** Lock mic + audio hardware while the はじめる click is still a valid user gesture. */
         async function preflightMicAccess() {
             if (!audioStreamer) {
-                audioStreamer = new AudioStreamer(client);
+                audioStreamer = createAudioStreamer();
             }
             if (audioStreamer.mediaStream?.active && audioStreamer.audioWorklet) {
                 return;
@@ -1961,16 +2017,11 @@
             }
         }
 
-        function clearQuestTrackerTimer() {
-            if (questTrackerTimer) {
-                clearTimeout(questTrackerTimer);
-                questTrackerTimer = null;
-            }
-        }
 
         function sendClientText(text, { steering = false } = {}) {
             if (!client?.connected) return false;
             const sent = client.sendTextMessage(text);
+            if (sent) dbg(steering ? 'steering nudge sent' : 'client text sent', text.slice(0, 100));
             if (sent && steering) lastAppSteeringInjectAt = Date.now();
             return sent;
         }
@@ -2053,17 +2104,19 @@
 
         function assistantOutputActive() {
             if (assistantTurnOpen) return true;
-            if (lastAssistantAudioAt && Date.now() - lastAssistantAudioAt < 8000) return true;
+            // getPlaybackMsRemaining now tracks real playback time, so only a
+            // short receive-side guard is needed (was 8s, which caused false
+            // barge-in detection on normal replies).
+            if (lastAssistantAudioAt && Date.now() - lastAssistantAudioAt < 2500) return true;
             return Boolean(audioPlayer?.getPlaybackMsRemaining?.() > 80);
-        }
-
-        function updateBargeInMicStreaming() {
-            if (!audioStreamer) return;
-            audioStreamer.setBargeInStream(assistantOutputActive());
         }
 
         function handleUserBargeIn() {
             if (!assistantOutputActive()) return;
+            dbg('barge-in detected', {
+                playbackMsRemaining: audioPlayer?.getPlaybackMsRemaining?.() ?? 0,
+                assistantTurnOpen,
+            });
             userBargeInThisTurn = true;
             armPostBargeInWatchdog();
             bumpStaleAssistantOutputWindow();
@@ -2073,47 +2126,22 @@
             assistantAudibleThisTurn = false;
             lastAssistantAudioAt = 0;
             pendingFalseCreditAssistantText = '';
-            pendingQuestTracker = null;
-            clearQuestTrackerTimer();
             deferredSteeringNudges = [];
             clearDeferredSteeringFlushTimer();
             clearNoAudioRecoveryTimer();
-            updateBargeInMicStreaming();
         }
 
         function markAssistantTurnStarted() {
             hideAssistantThinking();
             if (assistantTurnOpen) return;
             assistantTurnOpen = true;
-            updateBargeInMicStreaming();
-            if (pendingQuestTracker) {
-                const { utterance, newly } = pendingQuestTracker;
-                if (!questTrackerNeedsFollowUp(utterance, newly)) {
-                    pendingQuestTracker = null;
-                    clearQuestTrackerTimer();
-                }
-            }
         }
 
         function markAssistantTurnEnded({ skipDeferred = false } = {}) {
             assistantTurnOpen = false;
-            updateBargeInMicStreaming();
             if (!skipDeferred) {
                 scheduleDeferredSteeringFlush(450);
             }
-        }
-
-        function markSteeringNudgeSent() {
-            lastSteeringNudgeTurnSeq = lastUserTurnSeq;
-            steeringNudgeSentThisTurn = true;
-            pendingQuestTracker = null;
-            clearQuestTrackerTimer();
-        }
-
-        function assistantAlreadyHandledTurn(utterance, newly) {
-            if (!assistantAudibleThisTurn) return false;
-            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return false;
-            return !questTrackerNeedsFollowUp(utterance, newly);
         }
 
         function markAssistantAudible() {
@@ -2124,7 +2152,6 @@
             awaitingAssistantSince = 0;
             noAudioRecoveryAttempts = 0;
             clearNoAudioRecoveryTimer();
-            updateBargeInMicStreaming();
         }
 
         function markAssistantResponded() {
@@ -2151,7 +2178,6 @@
             clearNoAudioRecoveryTimer();
             userBargeInThisTurn = false;
             lastAssistantAudioAt = 0;
-            updateBargeInMicStreaming();
         }
 
         function ensureNoAudioRecoveryScheduled({
@@ -2226,56 +2252,101 @@
             return sendSteeringNudgeNow(nudge, { recoveryRetry });
         }
 
-        /** Send quest tracker only when the app needs to steer Learny (not every turn). */
-        function shouldSendQuestTracker(utterance, newly) {
-            if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return false;
-            if (isHostileOrOffTopicUtterance(utterance)) return true;
-            if (newly?.length) return true;
-            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) return true;
-            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-            if (next && userMissedEnglishStepPhrase(utterance, next)) return true;
-            return Boolean(next && userHintsStepSuccessInJapanese(utterance, next));
+        function resetChallengeMissTracking() {
+            challengeMissStepId = null;
+            challengeMissCount = 0;
         }
 
-        function buildTypedUserTurnPayload(text, newly) {
-            if (!activeQuest || questCompleting || activeQuestSessionIndex === null) return text;
-            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-            if (next && userMissedEnglishStepPhrase(text, next)) {
-                return buildQuestStepGroundTruthNudge(
-                    activeQuest,
-                    text,
-                    newly,
-                    activeQuestSessionIndex,
-                    false,
-                    { compact: true }
-                );
-            }
-            return text;
-        }
-
-        function syncQuestFromUserText(text) {
-            if (!activeQuest || questCompleting || activeQuestSessionIndex === null || !text?.trim()) {
+        /**
+         * Challenge-window handler — one deterministic path for every user
+         * utterance during a mission (voice or typed). The app is the referee:
+         * only the current step is armed, and Learny is told the verdict
+         * explicitly instead of having to guess what happened.
+         */
+        function handleQuestUtterance(utterance) {
+            if (!activeQuest || questCompleting || activeQuestSessionIndex === null || !utterance?.trim()) {
                 return [];
             }
-            const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
-            syncQuestStepsAndBanner(text);
-            const after = getCompletedStepIds(activeQuestSessionIndex);
-            const newly = after.filter((id) => !before.has(id));
+
+            const current = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0] || null;
+            const lenient = Boolean(
+                current && challengeMissStepId === current.id && challengeMissCount >= 2
+            );
+            const newly = applyUtteranceToChallenge(activeQuest, utterance, activeQuestSessionIndex, {
+                lenient,
+            });
+
             if (newly.length) {
+                resetChallengeMissTracking();
+                questSfx.playStepComplete();
                 updateQuestBanner();
+                notifyParentProgress();
+                dbg('challenge step complete', { newly, lenient });
             }
+
             if (
                 questSessionActive &&
                 !questCompleting &&
                 !awaitingQuestFarewell &&
                 isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
             ) {
-                tryAcceptQuestComplete("auto", text);
+                tryAcceptQuestComplete('auto', utterance);
                 return newly;
             }
-            if (client?.connected && shouldSendQuestTracker(text, newly)) {
-                scheduleQuestTrackerFromTranscript(text, newly);
+
+            if (!client?.connected) return newly;
+
+            if (newly.length) {
+                sendSteeringNudge(
+                    buildChallengeResultNudge(activeQuest, activeQuestSessionIndex, newly, utterance)
+                );
+                return newly;
             }
+
+            if (isHostileOrOffTopicUtterance(utterance)) {
+                sendSteeringNudge(
+                    buildHostileRedirectNudge(activeQuest, utterance, activeQuestSessionIndex)
+                );
+                return newly;
+            }
+
+            if (current && userMissedEnglishStepPhrase(utterance, current)) {
+                if (challengeMissStepId === current.id) {
+                    challengeMissCount += 1;
+                } else {
+                    challengeMissStepId = current.id;
+                    challengeMissCount = 1;
+                }
+                dbg('challenge miss', { step: current.id, count: challengeMissCount });
+                sendSteeringNudge(
+                    challengeMissCount >= 2
+                        ? buildChallengeEchoCoachNudge(activeQuest, current, utterance, activeQuestSessionIndex)
+                        : buildQuestStepGroundTruthNudge(
+                              activeQuest,
+                              utterance,
+                              [],
+                              activeQuestSessionIndex,
+                              assistantAudibleThisTurn,
+                              { compact: true }
+                          )
+                );
+                return newly;
+            }
+
+            if (current && userHintsStepSuccessInJapanese(utterance, current)) {
+                sendSteeringNudge(
+                    buildQuestStepGroundTruthNudge(
+                        activeQuest,
+                        utterance,
+                        [],
+                        activeQuestSessionIndex,
+                        assistantAudibleThisTurn,
+                        { compact: true }
+                    )
+                );
+            }
+
+            // Anything else is free banter — not judged, not nudged.
             return newly;
         }
 
@@ -2286,122 +2357,20 @@
             ensureNoAudioRecoveryScheduled({ unclear, postBargeIn, stepCompleted });
         }
 
-        function questTrackerNeedsFollowUp(utterance, newly) {
-            if (newly?.length) return true;
-            if (!activeQuest || activeQuestSessionIndex === null) return false;
-            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-            if (next && userMissedEnglishStepPhrase(utterance, next)) return true;
-            return Boolean(next && userHintsStepSuccessInJapanese(utterance, next));
-        }
-
-        function sendPendingQuestTracker() {
-            if (!pendingQuestTracker || !client?.connected || !activeQuest || questCompleting) {
-                pendingQuestTracker = null;
-                return;
-            }
-            const { utterance, newly, turnSeq } = pendingQuestTracker;
-            pendingQuestTracker = null;
-            if (turnSeq !== lastUserTurnSeq) return;
-            if (!utterance?.trim()) return;
-            if (steeringNudgeSentThisTurn || falseCreditCorrectionSentThisTurn) return;
-
-            if (assistantAlreadyHandledTurn(utterance, newly)) return;
-
-            if (newly?.length && assistantAudibleThisTurn) return;
-
-            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-            const wrongAttempt = next && userMissedEnglishStepPhrase(utterance, next);
-            if (wrongAttempt && assistantAudibleThisTurn) return;
-
-            const allComplete = isQuestStepsComplete(activeQuest, activeQuestSessionIndex);
-            if (allComplete) {
-                if (!assistantAudibleThisTurn) {
-                    sendSteeringNudge(buildQuestCompleteTrackerNudge());
-                    scheduleQuestCompleteFallback(utterance);
-                }
-                return;
-            }
-            if (isHostileOrOffTopicUtterance(utterance)) {
-                sendSteeringNudge(
-                    buildHostileRedirectNudge(activeQuest, utterance, activeQuestSessionIndex)
-                );
-                return;
-            }
-            sendSteeringNudge(
-                buildQuestStepGroundTruthNudge(
-                    activeQuest,
-                    utterance,
-                    newly,
-                    activeQuestSessionIndex,
-                    assistantAudibleThisTurn,
-                    { compact: true }
-                )
-            );
-        }
-
-        function getQuestTrackerDelayMs(utterance, newly) {
-            if (newly?.length) return QUEST_TRACKER_DELAY_STEP_MS;
-            if (!activeQuest || activeQuestSessionIndex === null) return QUEST_TRACKER_DELAY_MS;
-            const next = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0];
-            if (next && userMissedEnglishStepPhrase(utterance, next)) {
-                return QUEST_TRACKER_DELAY_WRONG_MS;
-            }
-            if (next && userHintsStepSuccessInJapanese(utterance, next)) {
-                return QUEST_TRACKER_DELAY_STEP_MS;
-            }
-            if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) {
-                return QUEST_TRACKER_DELAY_STEP_MS;
-            }
-            return QUEST_TRACKER_DELAY_MS;
-        }
-
-        function scheduleQuestTrackerFromTranscript(utterance, newly) {
-            pendingQuestTracker = {
-                utterance,
-                newly,
-                turnSeq: lastUserTurnSeq,
-            };
-            queueQuestTrackerFire(getQuestTrackerDelayMs(utterance, newly));
-        }
-
-        function queueQuestTrackerFire(delayMs) {
-            clearQuestTrackerTimer();
-            questTrackerTimer = setTimeout(() => {
-                questTrackerTimer = null;
-                if (!pendingQuestTracker || pendingQuestTracker.turnSeq !== lastUserTurnSeq) {
-                    return;
-                }
-                const { utterance, newly } = pendingQuestTracker;
-
-                if (assistantAudibleThisTurn) {
-                    if (!questTrackerNeedsFollowUp(utterance, newly)) {
-                        pendingQuestTracker = null;
-                    }
-                    return;
-                }
-
-                if (assistantTurnOpen) {
-                    queueQuestTrackerFire(350);
-                    return;
-                }
-
-                if (assistantAlreadyHandledTurn(utterance, newly)) {
-                    pendingQuestTracker = null;
-                    return;
-                }
-
-                sendPendingQuestTracker();
-            }, delayMs);
-        }
-
         function handleFinishedUserTranscript() {
             const utterance = getLatestFinishedUserUtterance();
-            const afterBargeIn = postBargeInPending;
+            const afterBargeIn = postBargeInPending || userBargeInThisTurn;
             markUserTurnStarted();
             lastFinishedUserTranscriptAt = Date.now();
             const unclear = isUnrecognizableUserInput(utterance);
+            dbg('user turn finished', { utterance, unclear, afterBargeIn });
 
-            if (client?.connected) {
+            // Only hand the turn back manually after a real barge-in — server VAD
+            // often misses end-of-speech there. On normal turns the extra
+            // activity_end/turn_complete conflicts with automatic VAD and can
+            // make the model skip its reply.
+            if (afterBargeIn && client?.connected) {
+                dbg('signalUserTurnComplete (post barge-in)');
                 client.signalUserTurnComplete();
             }
             resolvePostBargeIn();
@@ -2455,10 +2424,6 @@
                 if (newly.length) notifyParentProgress();
             }
             return newly;
-        }
-
-        function syncQuestStepsAndBanner(latestUtterance = "") {
-            return syncQuestStepsFromSession(latestUtterance);
         }
 
         function launchQuestConfetti() {
@@ -2611,29 +2576,6 @@
             }, 1200);
         }
 
-        function clearQuestCompleteFallbackTimer() {
-            if (questCompleteFallbackTimer) {
-                clearTimeout(questCompleteFallbackTimer);
-                questCompleteFallbackTimer = null;
-            }
-        }
-
-        function scheduleQuestCompleteFallback(utterance) {
-            clearQuestCompleteFallbackTimer();
-            questCompleteFallbackTimer = setTimeout(() => {
-                questCompleteFallbackTimer = null;
-                if (
-                    questCompleting ||
-                    awaitingQuestFarewell ||
-                    !activeQuest ||
-                    !isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
-                ) {
-                    return;
-                }
-                tryAcceptQuestComplete('keyword', utterance);
-            }, 8000);
-        }
-
         function clearQuestTeardownTimers() {
             if (questTeardownTimer) {
                 clearTimeout(questTeardownTimer);
@@ -2647,7 +2589,6 @@
                 clearTimeout(farewellNudgeTimer);
                 farewellNudgeTimer = null;
             }
-            clearQuestCompleteFallbackTimer();
         }
 
         function markFarewellAssistantActivity(sourceClient) {
@@ -2792,6 +2733,9 @@
             pendingNextClient = null;
             pendingNextClientReadyAt = 0;
             attachClientHandlers(client);
+            // The preconnected session may have received resumption handles
+            // before adoption; pick up the latest one.
+            sessionResumeHandle = client.latestResumptionHandle || null;
             connected = true;
             return true;
         }
@@ -2836,6 +2780,15 @@
             geminiClient.onErrorMessage = () => {};
             const sessionClient = geminiClient;
 
+            geminiClient.onSessionResumptionUpdate = (handle) => {
+                if (preconnect || client !== sessionClient) return;
+                sessionResumeHandle = handle;
+            };
+            geminiClient.onGoAway = (timeLeft) => {
+                if (preconnect || client !== sessionClient) return;
+                dbg('goAway received', { timeLeft });
+            };
+
             geminiClient.onConnectionStarted = () => {
                 if (preconnect) return;
                 if (client !== sessionClient) return;
@@ -2855,6 +2808,20 @@
                 connected = false;
                 const wasIntentional = intentionalDisconnect;
                 intentionalDisconnect = false;
+                dbg('connection closed', {
+                    code: event?.code,
+                    reason: event?.reason || '',
+                    wasIntentional,
+                    isAutoReconnecting,
+                });
+
+                // Server resets the socket every ~10 min. If we have a
+                // resumption handle, reconnect seamlessly with context intact
+                // instead of ending the kid's session.
+                if (!isAutoReconnecting && !wasIntentional && sessionResumeHandle && actionState === 'active') {
+                    resumeSessionAfterDrop();
+                    return;
+                }
 
                 if (!isAutoReconnecting && !wasIntentional && event && event.code !== 1000) {
                     const reason = (event.reason && String(event.reason).trim()) || `コード ${event.code}`;
@@ -2979,6 +2946,7 @@
             actionState = 'connecting';
             questSessionActive = true;
             questOpeningSent = false;
+            sessionResumeHandle = null;
             activeQuest = getSelectedQuest();
             activeQuestSessionIndex = getSelectedQuestIndex();
             resetQuestSessionState();
@@ -3011,7 +2979,7 @@
                     if (audioStreamer) {
                         audioStreamer.updateClient(client);
                     } else {
-                        audioStreamer = new AudioStreamer(client);
+                        audioStreamer = createAudioStreamer();
                     }
                     if (!videoStreamer) {
                         videoStreamer = new VideoStreamer(client);
@@ -3058,7 +3026,7 @@
             if (!client?.connected) return false;
 
             if (!audioStreamer) {
-                audioStreamer = new AudioStreamer(client);
+                audioStreamer = createAudioStreamer();
             } else {
                 audioStreamer.updateClient(client);
             }
@@ -3092,7 +3060,7 @@
             awaitingAssistantSince = 0;
             noAudioRecoveryAttempts = 0;
             lastFinishedUserTranscriptAt = 0;
-            pendingQuestTracker = null;
+            resetChallengeMissTracking();
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
             assistantTurnOpen = false;
@@ -3100,7 +3068,6 @@
             pendingFalseCreditAssistantText = '';
             clearDeferredSteeringFlushTimer();
             clearNoAudioRecoveryTimer();
-            clearQuestTrackerTimer();
             clearQuestTeardownTimers();
             clearQuestOpeningRetry();
             resolvePostBargeIn();
@@ -3276,7 +3243,6 @@
             pendingQuestTeardown = { completed, lessonDone, userQuote, isNewClear };
             resetSilenceWatchState();
             stopSilenceWatch();
-            clearQuestCompleteFallbackTimer();
 
             if (lessonDone) {
                 questSfx.playLessonComplete();
@@ -3324,28 +3290,7 @@
         function maybeMatchQuestFromTranscript(finished) {
             if (!finished || !activeQuest || questCompleting || activeQuestSessionIndex === null) return;
             const utterance = getLatestFinishedUserUtterance();
-            const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
-            syncQuestStepsAndBanner(utterance);
-            const after = getCompletedStepIds(activeQuestSessionIndex);
-            const newly = after.filter((id) => !before.has(id));
-            if (newly.length) {
-                updateQuestBanner();
-            }
-
-            if (
-                questSessionActive &&
-                !questCompleting &&
-                !awaitingQuestFarewell &&
-                isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
-            ) {
-                tryAcceptQuestComplete("auto", utterance);
-                return;
-            }
-
-            if (!client?.connected || !utterance) return;
-
-            if (!shouldSendQuestTracker(utterance, newly)) return;
-            scheduleQuestTrackerFromTranscript(utterance, newly);
+            const newly = handleQuestUtterance(utterance);
             if (newly.length) {
                 scheduleNoAudioRecovery(utterance, {
                     stepCompleted: true,
@@ -3443,7 +3388,7 @@
             if (!audioStreamer || !audioStreamer.mediaStream) return;
             isMuted = !isMuted;
             audioStreamer.setMuted(isMuted);
-            updateBargeInMicStreaming();
+            dbg('mute toggled', { isMuted });
             if (isMuted) {
                 btnMute.classList.add('muted');
                 btnMute.textContent = '🔇';
@@ -3656,7 +3601,7 @@
 
         async function ensureMicActive() {
             if (!audioStreamer || !audioStreaming) return;
-            if (isMuted && !audioStreamer.bargeInStream) return;
+            if (isMuted) return;
             try {
                 await audioStreamer.ensureStreaming();
             } catch {
@@ -3667,10 +3612,21 @@
         // ============================================
         // Message Handler
         // ============================================
+        let lastDiscardLogAt = 0;
+        function dbgDiscarded(kind) {
+            const now = Date.now();
+            if (now - lastDiscardLogAt < 1000) return;
+            lastDiscardLogAt = now;
+            dbg('assistant output discarded (stale window)', {
+                kind,
+                windowMsLeft: Math.max(0, staleAssistantOutputUntil - now),
+            });
+        }
+
         function handleMessage(message, sourceClient = client) {
             switch (message.type) {
                 case MultimodalLiveResponseType.TEXT:
-                    if (shouldDiscardAssistantOutput()) break;
+                    if (shouldDiscardAssistantOutput()) { dbgDiscarded('text'); break; }
                     resolvePostBargeIn();
                     markAssistantTurnStarted();
                     markAssistantResponded();
@@ -3679,13 +3635,12 @@
                     break;
 
                 case MultimodalLiveResponseType.AUDIO:
-                    if (shouldDiscardAssistantOutput()) break;
+                    if (shouldDiscardAssistantOutput()) { dbgDiscarded('audio'); break; }
                     resolvePostBargeIn();
                     lastAssistantAudioAt = Date.now();
                     markAssistantAudioReceived();
                     markFarewellAssistantActivity(sourceClient);
                     markQuestSessionActivity(sourceClient);
-                    updateBargeInMicStreaming();
                     if (audioPlayer) audioPlayer.play(message.data);
                     break;
 
@@ -3714,12 +3669,11 @@
                             }
                         }
                         userBargeInThisTurn = false;
-                        updateBargeInMicStreaming();
                     }
                     break;
 
                 case MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION:
-                    if (shouldDiscardAssistantOutput()) break;
+                    if (shouldDiscardAssistantOutput()) { dbgDiscarded('output-transcription'); break; }
                     if (message.data.text?.trim()) {
                         resolvePostBargeIn();
                         markAssistantTurnStarted();
@@ -3738,6 +3692,7 @@
                     break;
 
                 case MultimodalLiveResponseType.SETUP_COMPLETE:
+                    dbg('setup complete');
                     if (
                         questSessionActive &&
                         activeQuest &&
@@ -3745,16 +3700,6 @@
                         actionState !== "idle"
                     ) {
                         announceQuestStart();
-                    }
-                    if (justReconnected && client) {
-                        const recentMessages = chatMessages
-                            .filter(msg => msg.type === 'user' || msg.type === 'assistant' || msg.type === 'user-transcript')
-                            .slice(-10);
-                        if (recentMessages.length > 0) {
-                            const reconnectionPrompt = "Session reconnected. Above is our recent conversation. Continue the conversation naturally. Do not speak until the user speaks.";
-                            client.sendTextMessageWithHistory(recentMessages, reconnectionPrompt);
-                        }
-                        justReconnected = false;
                     }
                     ensureSilenceWatch();
                     break;
@@ -3830,6 +3775,11 @@
 
                 case MultimodalLiveResponseType.TURN_COMPLETE:
                     if (sourceClient !== client) break;
+                    dbg('turn complete', {
+                        assistantAudibleThisTurn,
+                        awaitingAssistantReply,
+                        postBargeInPending,
+                    });
                     if (postBargeInPending) {
                         pendingFalseCreditAssistantText = '';
                         markAssistantTurnEnded({ skipDeferred: true });
@@ -3866,12 +3816,6 @@
                             if (d.modality === "TEXT") tokenUsage.textOutputTokens += d.tokenCount;
                             if (d.modality === "AUDIO") tokenUsage.audioOutputTokens += d.tokenCount;
                         });
-
-                        if (tokenUsage.turnCount >= TURN_THRESHOLD && !isAutoReconnecting && !questSessionActive) {
-                            setTimeout(() => {
-                                if (!isAutoReconnecting && !questSessionActive) autoReconnect();
-                            }, 1000);
-                        }
                     }
                     if (
                         !assistantAudibleThisTurn &&
@@ -3890,8 +3834,8 @@
 
                 case MultimodalLiveResponseType.INTERRUPTED:
                     assistantTurnOpen = false;
-                    updateBargeInMicStreaming();
                     const appCausedInterrupt = Date.now() - lastAppSteeringInjectAt < 900;
+                    dbg('interrupted', { appCausedInterrupt });
                     if (!appCausedInterrupt) {
                         userBargeInThisTurn = true;
                         armPostBargeInWatchdog();
@@ -3900,14 +3844,19 @@
                         assistantAudibleThisTurn = false;
                         lastAssistantAudioAt = 0;
                         pendingFalseCreditAssistantText = '';
-                        pendingQuestTracker = null;
-                        clearQuestTrackerTimer();
                         deferredSteeringNudges = [];
                         clearDeferredSteeringFlushTimer();
                         clearNoAudioRecoveryTimer();
                         if (audioPlayer) audioPlayer.interrupt();
                     } else {
                         scheduleDeferredSteeringFlush(700);
+                    }
+                    break;
+
+                default:
+                    // Unparsed server frames: goAway (session ending), errors, etc.
+                    if (message.raw) {
+                        dbg('unhandled server frame', JSON.stringify(message.raw).slice(0, 300));
                     }
                     break;
             }
@@ -3930,17 +3879,17 @@
             }
 
             try {
-                if (!isAutoReconnecting) justReconnected = false;
-
                 client = new GeminiLiveAPI(activeProxyUrl, projectId, model);
                 const questForSession = activeQuest ?? getSelectedQuest();
                 configureGeminiClient(client, questForSession);
                 attachClientHandlers(client);
 
+                dbg('connecting', { proxy: activeProxyUrl, quest: questForSession?.titleEn || null });
                 await client.connect();
+                dbg('connected');
 
                 if (!audioStreamer) {
-                    audioStreamer = new AudioStreamer(client);
+                    audioStreamer = createAudioStreamer();
                 } else {
                     audioStreamer.updateClient(client);
                 }
@@ -3966,8 +3915,7 @@
             resolvePostBargeIn();
             staleAssistantOutputUntil = 0;
             clearNoAudioRecoveryTimer();
-            clearQuestTrackerTimer();
-            pendingQuestTracker = null;
+            resetChallengeMissTracking();
             if (!isAutoReconnect) {
                 endQuestSession();
             }
@@ -3993,6 +3941,7 @@
             }
 
             if (!isAutoReconnect) {
+                sessionResumeHandle = null;
                 if (audioStreamer) {
                     if (keepMicStreamer) {
                         audioStreamer.pauseStreaming();
@@ -4027,35 +3976,46 @@
         // ============================================
         // Auto-Reconnect
         // ============================================
-        async function autoReconnect() {
-            if (isAutoReconnecting || questSessionActive) return;
+        /**
+         * Seamless reconnect after the server drops the socket mid-session.
+         * Uses the Live API session-resumption handle so the conversation
+         * continues with full context — the kid just hears a short pause.
+         */
+        async function resumeSessionAfterDrop() {
+            if (isAutoReconnecting) return;
             isAutoReconnecting = true;
-            stopSilenceWatch();
-
-            savedMediaStates = {
-                audioStreaming: audioStreaming,
-                selectedMic: "",
-                selectedCamera: "",
-            };
-
-            disconnectAPI(true);
-            await new Promise(r => setTimeout(r, 1000));
-            tokenUsage.turnCount = 0;
-
+            const handle = sessionResumeHandle;
+            dbg('session resume start');
             try {
-                await connectAPI();
+                disconnectAPI(true);
+                intentionalDisconnect = false;
+                await new Promise((r) => setTimeout(r, 300));
 
-                if (savedMediaStates.audioStreaming && audioStreamer) {
-                    audioStreamer.updateClient(client);
-                }
+                client = new GeminiLiveAPI(activeProxyUrl, projectId, model);
+                const questForSession = activeQuest ?? getSelectedQuest();
+                configureGeminiClient(client, questForSession);
+                attachClientHandlers(client);
+                client.setResumptionHandle(handle);
+                await client.connect();
 
+                if (audioStreamer) audioStreamer.updateClient(client);
+                if (videoStreamer) videoStreamer.updateClient(client);
+                connected = true;
                 actionState = 'active';
                 updateActionUI();
-                justReconnected = true;
+                resetSilenceWatchState();
+                ensureSilenceWatch();
+                dbg('session resumed');
             } catch (error) {
-            } finally {
+                dbg('session resume failed', { error: String(error?.message || error) });
                 isAutoReconnecting = false;
+                sessionResumeHandle = null;
+                addMessage('接続が切れちゃった。もう一度スタートしてね。', 'system');
+                disconnectAPI();
+                updateActionUI();
+                return;
             }
+            isAutoReconnecting = false;
         }
 
         // ============================================
@@ -4084,6 +4044,7 @@
 
             actionState = 'connecting';
             questOpeningSent = false;
+            sessionResumeHandle = null;
             resetQuestSessionState();
             updateActionUI();
 
@@ -4144,39 +4105,18 @@
                 addMessage(text, 'user');
                 showAssistantThinking();
 
-                let newly = [];
-                if (activeQuest && !questCompleting && activeQuestSessionIndex !== null) {
-                    const before = new Set(getCompletedStepIds(activeQuestSessionIndex));
-                    syncQuestStepsAndBanner(text);
-                    const after = getCompletedStepIds(activeQuestSessionIndex);
-                    newly = after.filter((id) => !before.has(id));
-                    if (newly.length) updateQuestBanner();
-                }
-
-                const payload = buildTypedUserTurnPayload(text, newly);
-                const usedGroundTruth = payload !== text;
-                if (!sendClientText(payload)) {
+                if (!sendClientText(text)) {
                     hideAssistantThinking();
                     awaitingAssistantReply = false;
                     addMessage('接続の準備中です。少し待ってからもう一度送ってね。', 'system');
                     return;
                 }
-                if (usedGroundTruth) markSteeringNudgeSent();
 
                 chatInput.value = '';
                 lastFinishedUserTranscriptAt = Date.now();
 
-                if (
-                    questSessionActive &&
-                    !questCompleting &&
-                    !awaitingQuestFarewell &&
-                    activeQuest &&
-                    isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
-                ) {
-                    tryAcceptQuestComplete('auto', text);
-                } else if (!usedGroundTruth) {
-                    syncQuestFromUserText(text);
-                }
+                // Same challenge-window referee as the voice path.
+                const newly = handleQuestUtterance(text);
 
                 scheduleNoAudioRecovery(text, {
                     unclear: isUnrecognizableUserInput(text),

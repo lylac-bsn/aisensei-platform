@@ -23,8 +23,23 @@ export class AudioStreamer {
     this.isStreaming = false;
     this.sampleRate = 16000; // Gemini requires 16kHz
     this.muted = false;
-    /** When muted, still stream mic while true so the API can detect barge-in. */
-    this.bargeInStream = false;
+
+    // Voice gate: only stream to the API while someone is actually speaking.
+    // The Live API bills all received audio (25 tokens/sec, re-billed every
+    // turn), so streaming silence/game noise during long quiet stretches is
+    // the biggest cost driver. Chunks are 4096 samples = 256ms each.
+    this.voiceGateEnabled = true;
+    // Must exceed the server VAD silence_duration_ms (2000) so the server
+    // still receives the trailing silence it needs to close the user's turn.
+    this.voiceGateHangoverMs = 2600;
+    this.voiceGatePreRollChunks = 2; // ~512ms replayed on speech onset
+    this.voiceGateMinThreshold = 0.01;
+    this.voiceGateFloorFactor = 3;
+    this._gateNoiseFloor = 0.004;
+    this._gateLastVoiceAt = 0;
+    this._gateOpen = false;
+    this._gatePreRoll = [];
+    this.onVoiceGateChange = (open) => {};
   }
 
   /**
@@ -70,16 +85,12 @@ export class AudioStreamer {
 
         this.audioWorklet.port.onmessage = (event) => {
           if (!this.isStreaming) return;
-          if (this.muted && !this.bargeInStream) return;
+          if (this.muted) return;
+          if (event.data.type !== "audio") return;
 
-          if (event.data.type === "audio") {
-            const inputData = event.data.data;
-            const pcmData = this.convertToPCM16(inputData);
-            const base64Audio = this.arrayBufferToBase64(pcmData);
-
-            if (this.client && this.client.connected) {
-              this.client.sendAudioMessage(base64Audio);
-            }
+          const inputData = event.data.data;
+          if (this._passesVoiceGate(inputData)) {
+            this._sendChunk(inputData);
           }
         };
 
@@ -96,6 +107,75 @@ export class AudioStreamer {
     }
   }
 
+  _sendChunk(inputData) {
+    if (!this.client || !this.client.connected) return;
+    const pcmData = this.convertToPCM16(inputData);
+    const base64Audio = this.arrayBufferToBase64(pcmData);
+    this.client.sendAudioMessage(base64Audio);
+  }
+
+  /**
+   * Decide whether this chunk should be streamed. While quiet, chunks feed a
+   * short pre-roll buffer that is flushed when speech starts so word onsets
+   * aren't clipped. After speech stops, keep streaming for a hangover period
+   * long enough for the server VAD to detect end-of-turn.
+   */
+  _passesVoiceGate(inputData) {
+    if (!this.voiceGateEnabled) return true;
+
+    let sumSquares = 0;
+    for (let i = 0; i < inputData.length; i++) {
+      sumSquares += inputData[i] * inputData[i];
+    }
+    const rms = Math.sqrt(sumSquares / inputData.length);
+    const threshold = Math.max(
+      this.voiceGateMinThreshold,
+      this._gateNoiseFloor * this.voiceGateFloorFactor
+    );
+
+    const now = Date.now();
+    if (rms >= threshold) {
+      this._gateLastVoiceAt = now;
+    } else {
+      // Track ambient loudness (mic hiss, game audio) so the threshold adapts.
+      this._gateNoiseFloor = this._gateNoiseFloor * 0.95 + rms * 0.05;
+    }
+
+    const open =
+      this._gateLastVoiceAt > 0 &&
+      now - this._gateLastVoiceAt <= this.voiceGateHangoverMs;
+
+    if (open && !this._gateOpen) {
+      for (const buffered of this._gatePreRoll) {
+        this._sendChunk(buffered);
+      }
+      this._gatePreRoll = [];
+    } else if (!open) {
+      this._gatePreRoll.push(inputData);
+      if (this._gatePreRoll.length > this.voiceGatePreRollChunks) {
+        this._gatePreRoll.shift();
+      }
+    }
+
+    if (open !== this._gateOpen) {
+      this._gateOpen = open;
+      try {
+        this.onVoiceGateChange(open);
+      } catch {
+        // listener errors must not break capture
+      }
+    }
+
+    return open;
+  }
+
+  setVoiceGateEnabled(enabled) {
+    this.voiceGateEnabled = Boolean(enabled);
+    if (!this.voiceGateEnabled) {
+      this._gatePreRoll = [];
+    }
+  }
+
   /**
    * Update the Gemini client reference (useful for reconnection)
    */
@@ -103,18 +183,14 @@ export class AudioStreamer {
     this.client = newClient;
   }
 
+  /** Mute is absolute: stop sending to the API AND disable the hardware tracks. */
   setMuted(muted) {
     this.muted = Boolean(muted);
     if (this.mediaStream) {
       this.mediaStream.getAudioTracks().forEach((track) => {
-        track.enabled = true;
+        track.enabled = !this.muted;
       });
     }
-  }
-
-  /** While muted, optionally keep sending mic audio for server-side barge-in detection. */
-  setBargeInStream(enabled) {
-    this.bargeInStream = Boolean(enabled);
   }
 
   /** Pause sending to API without tearing down mic hardware (quest handoff). */
@@ -158,6 +234,9 @@ export class AudioStreamer {
    */
   stop() {
     this.isStreaming = false;
+    this._gateOpen = false;
+    this._gateLastVoiceAt = 0;
+    this._gatePreRoll = [];
 
     if (this.audioWorklet) {
       this.audioWorklet.disconnect();
@@ -409,6 +488,8 @@ export class AudioPlayer {
     this.isInitialized = false;
     this.volume = 1.0;
     this.sampleRate = 24000; // Gemini outputs at 24kHz
+    /** Wall-clock time (ms) when queued playback is expected to finish. */
+    this.playbackEndAt = 0;
   }
 
   /**
@@ -477,7 +558,12 @@ export class AudioPlayer {
 
       // Send to worklet for playback
       this.workletNode.port.postMessage(float32Data);
-      this.pendingSamples = (this.pendingSamples || 0) + float32Data.length;
+
+      // Audio arrives in a burst (faster than realtime), so track when playback
+      // will actually finish instead of counting queued samples.
+      const chunkMs = (float32Data.length / this.sampleRate) * 1000;
+      const now = Date.now();
+      this.playbackEndAt = Math.max(this.playbackEndAt, now) + chunkMs;
     } catch (error) {
       throw error;
     }
@@ -490,7 +576,7 @@ export class AudioPlayer {
     if (this.workletNode) {
       this.workletNode.port.postMessage("interrupt");
     }
-    this.pendingSamples = 0;
+    this.playbackEndAt = 0;
   }
 
   /**
@@ -503,10 +589,9 @@ export class AudioPlayer {
     }
   }
 
-  /** Estimated ms of PCM still queued (24 kHz). */
+  /** Estimated ms of audio still playing (0 when playback has finished). */
   getPlaybackMsRemaining() {
-    const samples = this.pendingSamples || 0;
-    return samples <= 0 ? 0 : Math.ceil((samples / this.sampleRate) * 1000);
+    return Math.max(0, Math.ceil(this.playbackEndAt - Date.now()));
   }
 
   /** @deprecated prefer getPlaybackMsRemaining */
@@ -522,6 +607,7 @@ export class AudioPlayer {
       this.audioContext.close();
       this.audioContext = null;
     }
+    this.playbackEndAt = 0;
     this.isInitialized = false;
   }
 }

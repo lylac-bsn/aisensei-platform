@@ -68,7 +68,7 @@ export const LESSON_1_QUESTS = [
     goal: "作業台を作って、置こう",
     hint: "例：「I made a crafting table!」→「I put it here!」",
     openingPlay:
-      "木材があるね！作業台をクラフトして、好きな場所に置いてみよう！作れたら・置けたら教えてね。",
+      "木材があるね！次は作業台をクラフトして、好きな場所に置いてみよう！作れたら「I made a crafting table!」って言ってみよう！",
     steps: [
       {
         id: "made_table",
@@ -127,7 +127,7 @@ export const LESSON_1_QUESTS = [
     goal: "木のツルハシを作ろう",
     hint: "例：「I made a pickaxe!」→「I'm ready!」",
     openingPlay:
-      "作業台の前で木のツルハシを作ってみよう！サバイバルに超大事なアイテムだよ。できたら教えてね。",
+      "作業台の前で木のツルハシを作ってみよう！サバイバルに超大事なアイテムだよ。できたら「I made a pickaxe!」って言ってみよう！",
     steps: [
       {
         id: "made_pickaxe",
@@ -170,7 +170,7 @@ export const LESSON_1_QUESTS = [
     goal: "石（丸石）を5個掘ろう",
     hint: "例：「I found stones!」→「I got stones!」",
     openingPlay:
-      "ツルハシを持って石を探そう！掘って集めてみて。見つけたら・集まったら教えてね。",
+      "ツルハシを持って石を探そう！掘って集めてみて。見つけたら「I found stones!」って言ってみよう！",
     steps: [
       {
         id: "found_stones",
@@ -223,7 +223,7 @@ export const LESSON_1_QUESTS = [
     goal: "食べ物を見つけてサバイバルしよう",
     hint: "例：「I found food!」（お肉・フルーツなど）→「I need food!」",
     openingPlay:
-      "お腹空いてきたね！ワールドで食べ物を探してみよう。羊や牛、木の実…見つけたら教えてね。",
+      "お腹空いてきたね！ワールドで食べ物を探してみよう。羊や牛、木の実…見つけたら「I found food!」って言ってみよう！",
     steps: [
       {
         id: "found_food",
