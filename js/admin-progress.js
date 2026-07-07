@@ -1,8 +1,8 @@
 import { LESSON_1_QUESTS } from "./quests/beginner-lesson1.js";
-import { BEGINNER_LESSON_SLOTS } from "./quest-engine.js";
+import { MAIN_BADGE_SLOTS, HIDDEN_BADGE_SLOT_COUNT } from "./quest-engine.js";
 
 const TOTAL_MISSIONS = LESSON_1_QUESTS.length;
-const TOTAL_BADGE_SLOTS = BEGINNER_LESSON_SLOTS.length;
+const TOTAL_BADGE_SLOTS = MAIN_BADGE_SLOTS.length + HIDDEN_BADGE_SLOT_COUNT;
 
 export function escapeHtml(text) {
   return String(text ?? "")

@@ -15,6 +15,7 @@ export const LESSON_1_QUESTS = [
         id: "found_tree",
         label: "木を見つけた",
         patterns: [
+          "I found a tree",
           "found a tree",
           "find a tree",
           "found tree",
@@ -24,7 +25,6 @@ export const LESSON_1_QUESTS = [
           "there's a tree",
           "there is a tree",
           "i see a tree",
-          "i found a tree",
           "chopping the tree",
           "chopping tree",
           "chop the tree",
@@ -39,6 +39,7 @@ export const LESSON_1_QUESTS = [
         id: "got_wood",
         label: "木材を手に入れた",
         patterns: [
+          "I got wood",
           "got wood",
           "get wood",
           "got the wood",
@@ -53,7 +54,6 @@ export const LESSON_1_QUESTS = [
           "cut the tree",
           "collected wood",
           "i have wood",
-          "i got wood",
           "i got the wood",
         ],
         coachNote:
@@ -74,6 +74,7 @@ export const LESSON_1_QUESTS = [
         id: "made_table",
         label: "作業台を作った",
         patterns: [
+          "I made a crafting table",
           "made a crafting table",
           "make a crafting table",
           "made crafting table",
@@ -89,7 +90,6 @@ export const LESSON_1_QUESTS = [
           "crafted a crafting table",
           "built a crafting table",
           "created a crafting table",
-          "i made a crafting table",
           "i made a table",
           "i crafted a table",
         ],
@@ -100,9 +100,9 @@ export const LESSON_1_QUESTS = [
         id: "placed_table",
         label: "作業台を置いた",
         patterns: [
+          "I put it here",
           "put it here",
           "put here",
-          "i put it here",
           "i put here",
           "placed it here",
           "place it here",
@@ -133,6 +133,7 @@ export const LESSON_1_QUESTS = [
         id: "made_pickaxe",
         label: "ツルハシを作った",
         patterns: [
+          "I made a pickaxe",
           "made a pickaxe",
           "make a pickaxe",
           "made pickaxe",
@@ -141,7 +142,6 @@ export const LESSON_1_QUESTS = [
           "make a wooden pickaxe",
           "crafted a pickaxe",
           "built a pickaxe",
-          "i made a pickaxe",
           "i have a pickaxe",
         ],
         coachNote:
@@ -151,7 +151,7 @@ export const LESSON_1_QUESTS = [
         id: "ready",
         label: "準備OK",
         patterns: [
-          "i'm ready",
+          "I'm ready",
           "im ready",
           "i am ready",
           "ready to go",
@@ -176,6 +176,7 @@ export const LESSON_1_QUESTS = [
         id: "found_stones",
         label: "石を見つけた",
         patterns: [
+          "I found stones",
           "found stones",
           "find stones",
           "found stone",
@@ -188,7 +189,6 @@ export const LESSON_1_QUESTS = [
           "find cobblestone",
           "mine cobblestone",
           "see cobblestone",
-          "i found stones",
         ],
         coachNote:
           "「I found stones」= 石を見つけた。found（ファウンド）= 見つけた、stones（ストーンズ）= 石",
@@ -197,6 +197,7 @@ export const LESSON_1_QUESTS = [
         id: "got_stones",
         label: "石を集めた",
         patterns: [
+          "I got stones",
           "got stones",
           "get stones",
           "got stone",
@@ -229,6 +230,7 @@ export const LESSON_1_QUESTS = [
         id: "found_food",
         label: "食べ物を見つけた",
         patterns: [
+          "I found food",
           "found food",
           "find food",
           "found some food",
@@ -242,7 +244,6 @@ export const LESSON_1_QUESTS = [
           "found lamb",
           "found a sheep",
           "found a cow",
-          "i found food",
         ],
         coachNote:
           "「I found food」= 食べ物を見つけた。found（ファウンド）= 見つけた、food（フード）= 食べ物",
@@ -251,8 +252,8 @@ export const LESSON_1_QUESTS = [
         id: "need_food",
         label: "お腹が空いた",
         patterns: [
+          "I need food",
           "need food",
-          "i need food",
           "i'm hungry",
           "im hungry",
           "i am hungry",
@@ -264,6 +265,257 @@ export const LESSON_1_QUESTS = [
         ],
         coachNote:
           "「I need food」= 食べ物が必要・お腹が空いた。need（ニード）= 必要、food（フード）= 食べ物",
+      },
+    ],
+  },
+  {
+    id: 6,
+    title: "クエスト6",
+    titleEn: "Make a stone tool",
+    goal: "石の道具を作ろう（剣・シャベル・ツルハシなんでもOK）",
+    hint: "例：「I made a stone tool!」→「It's strong!」",
+    openingPlay:
+      "石が集まったね！次はその石で好きな道具を作ってみよう。剣でもシャベルでもツルハシでもOK！できたら「I made a stone tool!」って言ってみよう！",
+    steps: [
+      {
+        id: "made_stone_tool",
+        label: "石の道具を作った",
+        patterns: [
+          "I made a stone tool",
+          "made a stone tool",
+          "made stone tools",
+          "made the stone tool",
+          "crafted a stone tool",
+          "built a stone tool",
+        ],
+        coachNote:
+          "「I made a stone tool」= 石の道具を作った。made（メイド）= 作った、stone（ストーン）= 石、tool（トゥール）= 道具。剣でもシャベルでもツルハシでもOK！",
+        japaneseHints: ["石の剣", "剣", "シャベル", "ツルハシ", "道具", "作っ", "作れた", "できた", "ソード"],
+      },
+      {
+        id: "its_strong",
+        label: "強いぞ！",
+        patterns: [
+          "It's strong",
+          "it is strong",
+          "its strong",
+          "so strong",
+          "very strong",
+          "strong",
+        ],
+        coachNote:
+          "「It's strong!」= これ強い！strong（ストロング）= 強い。作った道具を自慢しちゃおう！",
+        japaneseHints: ["強い", "つよい", "ストロング", "最強"],
+      },
+    ],
+  },
+  {
+    id: 7,
+    title: "クエスト7",
+    titleEn: "Make a furnace",
+    goal: "かまどを作って、置こう",
+    hint: "例：「I made a furnace!」→「I put it here!」",
+    // Quiz-first: Learny asks the phrase as a quiz before teaching it.
+    // Answering with no hints earns the hidden badge.
+    quizFirst: true,
+    hiddenBadge: { id: "hidden_furnace" },
+    openingPlay:
+      "次はかまど（furnace）を作ってみよう！その前にクイズ！かまどが作れたとき、英語でなんて言うと思う？知ってたら言ってみて！",
+    steps: [
+      {
+        id: "made_furnace",
+        label: "かまどを作った",
+        patterns: [
+          "I made a furnace",
+          "made a furnace",
+          "made furnace",
+          "make a furnace",
+          "crafted a furnace",
+          "built a furnace",
+          "created a furnace",
+          "i have a furnace",
+        ],
+        coachNote:
+          "「I made a furnace」= かまどを作った。made（メイド）= 作った、furnace（ファーネス）= かまど",
+        japaneseHints: ["かまど", "カマド", "ファーネス", "作っ", "作れた", "できた"],
+      },
+      {
+        id: "placed_furnace",
+        label: "かまどを置いた",
+        patterns: [
+          "I put it here",
+          "put it here",
+          "put here",
+          "i put here",
+          "placed it here",
+          "place it here",
+          "put it down",
+          "put down",
+          "placed the furnace",
+          "put the furnace",
+          "put it there",
+          "place here",
+        ],
+        coachNote:
+          "「I put it here」= ここに置いた。put（プット）= 置く、here（ヒア）= ここ",
+        japaneseHints: ["置い", "置き", "置く", "ここに"],
+      },
+    ],
+  },
+  {
+    id: 8,
+    title: "クエスト8",
+    titleEn: "Find iron",
+    goal: "鉄（アイアン）を見つけて掘ろう",
+    hint: "例：「I found iron!」→「I got iron!」",
+    sideChallenge: {
+      id: "hidden_iron",
+      label: "シークレットチャレンジ",
+      desc: "鉄を2個以上あつめる（例:「I got two irons!」）か、鉄の道具を作る（例:「I made an iron sword!」）",
+    },
+    openingPlay:
+      "かまどの次は鉄探し！鉄は石より深いところにあるよ。ツルハシを持って探してみよう。見つけたら「I found iron!」って言ってみよう！",
+    steps: [
+      {
+        id: "found_iron",
+        label: "鉄を見つけた",
+        patterns: [
+          "I found iron",
+          "found iron",
+          "found irons",
+          "find iron",
+          "found an iron",
+          "found iron ore",
+          "i see iron",
+          "see iron",
+          "there is iron",
+        ],
+        coachNote:
+          "「I found iron」= 鉄を見つけた。found（ファウンド）= 見つけた、iron（アイアン）= 鉄",
+        japaneseHints: ["鉄", "アイアン", "見つけ", "あった", "発見"],
+      },
+      {
+        id: "got_iron",
+        label: "鉄を手に入れた",
+        patterns: [
+          "I got iron",
+          "got iron",
+          "got irons",
+          "get iron",
+          "got the iron",
+          "have iron",
+          "mined iron",
+          "mine iron",
+          "dug iron",
+          "collected iron",
+          "got iron ore",
+        ],
+        coachNote:
+          "「I got iron」= 鉄を手に入れた。got（ガット）= 手に入れた、iron（アイアン）= 鉄",
+        japaneseHints: ["鉄", "掘っ", "取っ", "手に入", "ゲット", "集め"],
+      },
+    ],
+  },
+  {
+    id: 9,
+    title: "クエスト9",
+    titleEn: "Find a cave and decide what to do",
+    goal: "洞窟を見つけて、次にやることを自分で決めよう",
+    hint: "例：「I found a cave!」→「I want to explore!」",
+    openingPlay:
+      "探検の時間だ！洞窟（cave）を探してみよう。見つけたら「I found a cave!」って言ってね。そのあと、次に何をしたいか英語で教えて！",
+    steps: [
+      {
+        id: "found_cave",
+        label: "洞窟を見つけた",
+        patterns: [
+          "I found a cave",
+          "found a cave",
+          "found cave",
+          "find a cave",
+          "i see a cave",
+          "see a cave",
+          "there is a cave",
+          "there's a cave",
+        ],
+        coachNote:
+          "「I found a cave」= 洞窟を見つけた。found（ファウンド）= 見つけた、cave（ケイブ）= 洞窟",
+        japaneseHints: ["洞窟", "どうくつ", "ケイブ", "穴", "見つけ", "あった"],
+      },
+      {
+        id: "decide_action",
+        label: "やることを決めた",
+        display: "I want to 〇〇!",
+        spokenPhrase:
+          'I want to explore! (an example — the child says whatever THEY want to do: "I want to fight!", "I will build a house!"... anything counts. In Japanese, say the blank as「まるまる」— NEVER pronounce the symbol 〇〇)',
+        patterns: [
+          "I want to ...",
+          "i want to",
+          "i will",
+          "i'll",
+          "i'm going to",
+          "i am going to",
+          "let's go",
+          "lets go",
+          "i decided to",
+          "i choose",
+          "we should",
+        ],
+        coachNote:
+          "「I want to explore!」= 探検したい！want to（ウォント・トゥ）= 〜したい。洞窟でやりたいことを自分で決めて英語で言ってみよう。なんでもOK！",
+        japaneseHints: ["したい", "やりたい", "行きたい", "行く", "探検", "決めた"],
+      },
+    ],
+  },
+  {
+    id: 10,
+    title: "クエスト10",
+    titleEn: "Review: say what you did!",
+    goal: "今日の冒険を英語でふりかえろう",
+    hint: "例：「I found iron!」「I made a furnace!」「I want to build a house!」「I did it!」",
+    openingPlay:
+      "ラストミッション！今日の冒険をふりかえるよ。今日「見つけたもの」を英語で1つ言ってもらおう。具体例で教える — 「I found iron!」「I found a cave!」みたいに。日本語で穴あきを言うときは「I found まるまる」と言う（「〇〇」という記号は絶対に読み上げない）",
+    steps: [
+      {
+        id: "review_found",
+        label: "見つけたものを言う",
+        display: "I found 〇〇!",
+        spokenPhrase:
+          'I found iron! (an example — the child names anything THEY found today: tree, stone, iron, cave... In Japanese, say the blank as「まるまる」— NEVER pronounce the symbol 〇〇)',
+        patterns: ["I found ...", "i found", "found"],
+        coachNote:
+          "「I found ◯◯」= ◯◯を見つけた。今日見つけたものを思い出そう（tree, stone, iron, cave...）",
+        japaneseHints: ["見つけ", "あった", "発見"],
+      },
+      {
+        id: "review_made",
+        label: "作ったものを言う",
+        display: "I made 〇〇!",
+        spokenPhrase:
+          'I made a furnace! (an example — the child names anything THEY made today: table, pickaxe, furnace... In Japanese, say the blank as「まるまる」— NEVER pronounce the symbol 〇〇)',
+        patterns: ["I made ...", "i made", "made"],
+        coachNote:
+          "「I made ◯◯」= ◯◯を作った。今日作ったものを思い出そう（table, pickaxe, furnace...）",
+        japaneseHints: ["作っ", "作れた", "できた", "クラフト"],
+      },
+      {
+        id: "review_want",
+        label: "次にやりたいことを言う",
+        display: "I want to 〇〇!",
+        spokenPhrase:
+          'I want to find diamonds! (an example — the child says whatever THEY want to do next. In Japanese, say the blank as「まるまる」— NEVER pronounce the symbol 〇〇)',
+        patterns: ["I want to ...", "i want to", "want to"],
+        coachNote:
+          "「I want to ◯◯」= ◯◯したい。次の冒険でやりたいことを言ってみよう！",
+        japaneseHints: ["したい", "やりたい", "つぎは", "今度"],
+      },
+      {
+        id: "review_did",
+        label: "「I did it!」でお祝い",
+        patterns: ["I did it!", "i did it", "we did it", "did it"],
+        coachNote:
+          "「I did it!」= やったー！できた！ミッションクリアのおまじない",
+        japaneseHints: ["できた", "やった", "クリア", "終わっ"],
       },
     ],
   },

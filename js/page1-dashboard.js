@@ -10,7 +10,8 @@ import {
   isLessonComplete,
   resetProgress,
   getLearnedPhrases,
-  getLessonBadgeSlots,
+  getMainBadgeSlots,
+  getHiddenBadgeSlots,
   PROGRESS_KEY,
   STEP_PROGRESS_KEY,
   SELECTED_QUEST_KEY,
@@ -46,38 +47,93 @@ function getTotalQuests() {
   return getQuests().length;
 }
 
+// Badges the user has already "seen" in the collection panel. Earned badges
+// not in this list show a notification dot and get a reveal animation on the
+// next panel open.
+const BADGES_SEEN_KEY = "gc_beginner_badgesSeenIds";
+
+function loadSeenBadgeIds() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(BADGES_SEEN_KEY) || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSeenBadgeIds(ids) {
+  try {
+    localStorage.setItem(BADGES_SEEN_KEY, JSON.stringify([...new Set(ids)]));
+  } catch {
+    // storage unavailable — dot just stays until next visit
+  }
+}
+
+function getEarnedBadgeIds() {
+  return [...getMainBadgeSlots(), ...getHiddenBadgeSlots()]
+    .filter((s) => s.earned)
+    .map((s) => s.id);
+}
+
+function getUnseenEarnedBadgeIds() {
+  const seen = new Set(loadSeenBadgeIds());
+  return getEarnedBadgeIds().filter((id) => !seen.has(id));
+}
+
+/** revealIndex >= 0: play the reveal pop, staggered one badge at a time. */
+function renderBadgeSlotHtml(slot, revealIndex = -1) {
+  const classes = [
+    "dashboard-badge-slot",
+    slot.earned ? "earned" : "",
+    slot.upcoming && !slot.earned ? "upcoming" : "",
+    revealIndex >= 0 ? "reveal" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const revealStyle = revealIndex >= 0 ? ` style="animation-delay: ${revealIndex * 0.8}s"` : "";
+  const inner = slot.earned
+    ? `<img src="${slot.image || "images/completion-badge-bronze.png"}" alt="" class="dashboard-badge-slot-img" decoding="async">`
+    : slot.upcoming
+      ? `<span class="dashboard-badge-slot-empty" aria-hidden="true">?</span>`
+      : `<span class="dashboard-badge-slot-empty" aria-hidden="true"></span>`;
+  return `<div class="${classes}"${revealStyle} role="listitem" title="${slot.label}${slot.desc ? ` — ${slot.desc}` : ""}">
+    ${inner}
+    <span class="dashboard-badge-slot-label">${slot.label}</span>
+  </div>`;
+}
+
 function renderBadgesPanel(container) {
-  const slots = getLessonBadgeSlots();
-  const earnedCount = slots.filter((s) => s.earned).length;
+  const mainSlots = getMainBadgeSlots();
+  const hiddenSlots = getHiddenBadgeSlots();
+  const earnedCount =
+    mainSlots.filter((s) => s.earned).length +
+    hiddenSlots.filter((s) => s.earned).length;
+  const totalCount = mainSlots.length + hiddenSlots.length;
+
+  // Newly earned badges reveal one at a time on this open, then count as seen.
+  const unseen = new Set(getUnseenEarnedBadgeIds());
+  let revealIdx = 0;
+  const slotHtml = (slot) =>
+    renderBadgeSlotHtml(slot, slot.earned && unseen.has(slot.id) ? revealIdx++ : -1);
 
   container.innerHTML = `
     <div class="dashboard-badge-board">
       <p class="dashboard-badge-board-desc">
-        レッスンを全部クリアするとバッジがもらえる！（${earnedCount} / ${slots.length}）
+        レベルクリアでメインバッジ、かくしチャレンジでシークレットバッジをゲット！（${earnedCount} / ${totalCount}）
       </p>
-      <div class="dashboard-badge-grid" role="list">
-        ${slots
-          .map((slot) => {
-            const classes = [
-              "dashboard-badge-slot",
-              slot.earned ? "earned" : "",
-              slot.upcoming && !slot.earned ? "upcoming" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            const inner = slot.earned
-              ? `<img src="images/mission-complete-badge.png" alt="" class="dashboard-badge-slot-img" decoding="async">`
-              : slot.upcoming
-                ? `<span class="dashboard-badge-slot-empty" aria-hidden="true">?</span>`
-                : `<span class="dashboard-badge-slot-empty" aria-hidden="true"></span>`;
-            return `<div class="${classes}" role="listitem" title="${slot.label}${slot.desc ? ` — ${slot.desc}` : ""}">
-              ${inner}
-              <span class="dashboard-badge-slot-label">${slot.label}</span>
-            </div>`;
-          })
-          .join("")}
+      <p class="dashboard-badge-section-title">メインバッジ</p>
+      <div class="dashboard-badge-grid dashboard-badge-grid--main" role="list">
+        ${mainSlots.map(slotHtml).join("")}
+      </div>
+      <p class="dashboard-badge-section-title">シークレットバッジ</p>
+      <div class="dashboard-badge-grid dashboard-badge-grid--hidden" role="list">
+        ${hiddenSlots.map(slotHtml).join("")}
       </div>
     </div>`;
+
+  if (unseen.size) {
+    saveSeenBadgeIds([...loadSeenBadgeIds(), ...getEarnedBadgeIds()]);
+  }
 }
 
 function renderWordsPanel(container) {
@@ -214,6 +270,118 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   let callState = "idle";
   let pendingMissionSelect = null;
 
+  // Earned badge ids from the previous shelf render — lets us animate only
+  // freshly earned badges (null = first render, nothing animates on page load).
+  let shelfEarnedIds = null;
+
+  // Badges currently mid "award ceremony": their shelf slot stays empty until
+  // the flying badge lands in it.
+  const pendingAwardIds = new Set();
+  const badgeAwardQueue = [];
+  let badgeAwardPlaying = false;
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function ensureBadgeAwardOverlay() {
+    let overlay = document.getElementById("badge-award-overlay");
+    if (overlay) return overlay;
+    overlay = document.createElement("div");
+    overlay.id = "badge-award-overlay";
+    overlay.className = "badge-award-overlay";
+    overlay.hidden = true;
+    overlay.innerHTML = `
+      <div class="badge-award-backdrop"></div>
+      <div class="badge-award-stage">
+        <div class="badge-award-rays" aria-hidden="true"></div>
+        <img class="badge-award-img" alt="" decoding="async">
+      </div>
+      <div class="badge-award-label"></div>`;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function popShelfSlot(slot) {
+    const el = document.querySelector(`.trophy-slot[data-badge-id="${slot.id}"]`);
+    if (!el) return;
+    el.classList.add("just-earned");
+    if (slot.secret) el.classList.add("just-earned--secret");
+  }
+
+  /** Center-screen reveal, then the badge flies into its shelf slot. */
+  async function runBadgeAwardAnimation(slot) {
+    const overlay = ensureBadgeAwardOverlay();
+    const img = overlay.querySelector(".badge-award-img");
+    const label = overlay.querySelector(".badge-award-label");
+    img.src = slot.image || "images/completion-badge-bronze.png";
+    label.textContent = slot.secret
+      ? "✨ シークレットバッジゲット！ ✨"
+      : "🏆 バッジゲット！ 🏆";
+
+    overlay.hidden = false;
+    overlay.classList.remove("show", "flying");
+    void overlay.offsetWidth; // restart CSS animations
+    overlay.classList.add("show");
+
+    // Center celebration: spin-in pop, light rays, sparkles, label.
+    await wait(1800);
+
+    // Fly into the (still empty) shelf slot.
+    const target =
+      document.querySelector(`.trophy-slot[data-badge-id="${slot.id}"]`) ||
+      document.getElementById("trophy-shelf-badges");
+    let flight = null;
+    if (target && typeof img.animate === "function") {
+      const from = img.getBoundingClientRect();
+      const to = target.getBoundingClientRect();
+      if (from.width > 0 && to.width > 0) {
+        const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+        const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+        const scale = Math.max(to.width / from.width, 0.05);
+        overlay.classList.add("flying");
+        flight = img.animate(
+          [
+            { transform: "translate(0, 0) scale(1) rotate(0deg)", opacity: 1 },
+            {
+              transform: `translate(${dx}px, ${dy}px) scale(${scale}) rotate(360deg)`,
+              opacity: 0.85,
+            },
+          ],
+          { duration: 750, easing: "cubic-bezier(0.45, -0.15, 0.25, 1)", fill: "forwards" }
+        );
+      }
+    }
+    if (flight) await flight.finished.catch(() => {});
+
+    overlay.classList.remove("show", "flying");
+    overlay.hidden = true;
+    if (flight) flight.cancel();
+
+    // Land: reveal the badge in its slot with the pop/glow animation.
+    pendingAwardIds.delete(slot.id);
+    renderTrophyShelf();
+    popShelfSlot(slot);
+    await wait(350);
+  }
+
+  function playNextBadgeAward() {
+    if (badgeAwardPlaying || !badgeAwardQueue.length) return;
+    badgeAwardPlaying = true;
+    const slot = badgeAwardQueue.shift();
+    runBadgeAwardAnimation(slot)
+      .catch(() => {
+        pendingAwardIds.delete(slot.id);
+        renderTrophyShelf();
+      })
+      .finally(() => {
+        badgeAwardPlaying = false;
+        playNextBadgeAward();
+      });
+  }
+
+  function queueBadgeAward(slot) {
+    badgeAwardQueue.push(slot);
+    playNextBadgeAward();
+  }
+
   /** Always-visible trophy shelf: mini badge slots + star row. */
   function renderTrophyShelf() {
     const slotsEl = document.getElementById("trophy-badge-slots");
@@ -221,20 +389,42 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     const starRowEl = document.getElementById("trophy-star-row");
     const starCountEl = document.getElementById("trophy-star-count");
 
-    const slots = getLessonBadgeSlots();
-    const earnedBadges = slots.filter((s) => s.earned).length;
+    const mainSlots = getMainBadgeSlots();
+    const hiddenSlots = getHiddenBadgeSlots();
+    const allSlots = [...mainSlots, ...hiddenSlots];
+    const earnedBadges = allSlots.filter((s) => s.earned).length;
     if (badgeCountEl) {
-      badgeCountEl.textContent = `${earnedBadges}/${slots.length}`;
+      badgeCountEl.textContent = `${earnedBadges}/${allSlots.length}`;
     }
+
+    // Freshly earned badges get the full award ceremony (queued one at a
+    // time); their slot renders empty until the flying badge lands.
+    if (shelfEarnedIds !== null) {
+      for (const slot of allSlots) {
+        if (slot.earned && !shelfEarnedIds.has(slot.id) && !pendingAwardIds.has(slot.id)) {
+          pendingAwardIds.add(slot.id);
+          queueBadgeAward(slot);
+        }
+      }
+    }
+
     if (slotsEl) {
-      slotsEl.innerHTML = slots
-        .map((slot) =>
-          slot.earned
-            ? `<span class="trophy-slot earned" title="${slot.label}"><img src="images/mission-complete-badge.png" alt="" decoding="async"></span>`
-            : `<span class="trophy-slot${slot.upcoming ? " upcoming" : ""}" title="${slot.label}">${slot.upcoming ? "?" : ""}</span>`
-        )
-        .join("");
+      const slotHtml = (slot) => {
+        const awaiting = pendingAwardIds.has(slot.id);
+        if (!slot.earned || awaiting) {
+          const showQ = slot.upcoming || awaiting;
+          return `<span class="trophy-slot${showQ ? " upcoming" : ""}" data-badge-id="${slot.id}" title="${slot.label}">${showQ ? "?" : ""}</span>`;
+        }
+        return `<span class="trophy-slot earned" data-badge-id="${slot.id}" title="${slot.label}"><img src="${slot.image || "images/completion-badge-bronze.png"}" alt="" decoding="async"></span>`;
+      };
+      slotsEl.innerHTML =
+        `<span class="trophy-shelf__group trophy-shelf__group--main">${mainSlots.map(slotHtml).join("")}</span>` +
+        `<span class="trophy-shelf__group trophy-shelf__group--hidden">${hiddenSlots.map(slotHtml).join("")}</span>`;
     }
+    shelfEarnedIds = new Set(allSlots.filter((s) => s.earned).map((s) => s.id));
+
+    const notifEl = document.getElementById("trophy-badge-notif");
+    if (notifEl) notifEl.hidden = getUnseenEarnedBadgeIds().length === 0;
 
     const earned = getCompletedQuestCount();
     const total = getTotalQuests();
@@ -249,23 +439,21 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
   function updateStarBadge() {
     renderTrophyShelf();
-    updateStartOverButton();
-  }
-
-  function updateStartOverButton() {
-    if (!startOverBtn) return;
-    const show = isLessonComplete();
-    startOverBtn.hidden = !show;
   }
 
   function setPanelModeClass(name) {
     panel.classList.toggle("dashboard-panel--instructions", name === "instructions");
     panel.classList.toggle("dashboard-panel--missions", name === "missions");
+    panel.classList.toggle("dashboard-panel--badges", name === "badges");
   }
 
   function closePanel() {
     panel.hidden = true;
-    panel.classList.remove("dashboard-panel--instructions", "dashboard-panel--missions");
+    panel.classList.remove(
+      "dashboard-panel--instructions",
+      "dashboard-panel--missions",
+      "dashboard-panel--badges"
+    );
     activePanel = null;
     buttons.forEach((btn) => {
       btn.classList.remove("active");
@@ -300,6 +488,11 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     resetProgress();
     clearSelectedQuest();
     setSelectedQuestIndex(0);
+    try {
+      localStorage.removeItem(BADGES_SEEN_KEY);
+    } catch {
+      // ignore
+    }
     postToVoiceTab({ type: "gc_progress_reset", questIndex: 0 });
     refreshProgressPanels();
     closePanel();
@@ -307,8 +500,6 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   }
 
   function requestStartOver() {
-    if (!isLessonComplete()) return;
-
     const ok = window.confirm(
       "最初からやり直しますか？スターとフレーズの記録もリセットされます。"
     );
