@@ -366,19 +366,19 @@ export const LESSON_1_QUESTS = [
     id: 8,
     title: "クエスト8",
     titleEn: "Find iron",
-    goal: "鉄（アイアン）を見つけて掘ろう",
+    goal: "てつ（アイアン）を見つけて掘ろう",
     hint: "例：「I found iron!」→「I got iron!」",
     sideChallenge: {
       id: "hidden_iron",
       label: "シークレットチャレンジ",
-      desc: "鉄を2個以上あつめる（例:「I got two irons!」）か、鉄の道具を作る（例:「I made an iron sword!」）",
+      desc: "てつを2個以上あつめる（例:「I got two irons!」）か、てつの道具を作る（例:「I made an iron sword!」）",
     },
     openingPlay:
-      "かまどの次は鉄探し！鉄は石より深いところにあるよ。ツルハシを持って探してみよう。見つけたら「I found iron!」って言ってみよう！",
+      "かまどの次はてつ探し！てつは石より深いところにあるよ。ツルハシを持って探してみよう。見つけたら「I found iron!」って言ってみよう！",
     steps: [
       {
         id: "found_iron",
-        label: "鉄を見つけた",
+        label: "てつを見つけた",
         patterns: [
           "I found iron",
           "found iron",
@@ -391,12 +391,12 @@ export const LESSON_1_QUESTS = [
           "there is iron",
         ],
         coachNote:
-          "「I found iron」= 鉄を見つけた。found（ファウンド）= 見つけた、iron（アイアン）= 鉄",
+          "「I found iron」= てつを見つけた。found（ファウンド）= 見つけた、iron（アイアン）= てつ",
         japaneseHints: ["鉄", "アイアン", "見つけ", "あった", "発見"],
       },
       {
         id: "got_iron",
-        label: "鉄を手に入れた",
+        label: "てつを手に入れた",
         patterns: [
           "I got iron",
           "got iron",
@@ -411,7 +411,7 @@ export const LESSON_1_QUESTS = [
           "got iron ore",
         ],
         coachNote:
-          "「I got iron」= 鉄を手に入れた。got（ガット）= 手に入れた、iron（アイアン）= 鉄",
+          "「I got iron」= てつを手に入れた。got（ガット）= 手に入れた、iron（アイアン）= てつ",
         japaneseHints: ["鉄", "掘っ", "取っ", "手に入", "ゲット", "集め"],
       },
     ],
@@ -420,14 +420,14 @@ export const LESSON_1_QUESTS = [
     id: 9,
     title: "クエスト9",
     titleEn: "Find a cave and decide what to do",
-    goal: "洞窟を見つけて、次にやることを自分で決めよう",
+    goal: "どうくつを見つけて、次にやることを自分で決めよう",
     hint: "例：「I found a cave!」→「I want to explore!」",
     openingPlay:
-      "探検の時間だ！洞窟（cave）を探してみよう。見つけたら「I found a cave!」って言ってね。そのあと、次に何をしたいか英語で教えて！",
+      "探検の時間だ！どうくつ（cave）を探してみよう。見つけたら「I found a cave!」って言ってね。そのあと、次に何をしたいか英語で教えて！",
     steps: [
       {
         id: "found_cave",
-        label: "洞窟を見つけた",
+        label: "どうくつを見つけた",
         patterns: [
           "I found a cave",
           "found a cave",
@@ -439,7 +439,7 @@ export const LESSON_1_QUESTS = [
           "there's a cave",
         ],
         coachNote:
-          "「I found a cave」= 洞窟を見つけた。found（ファウンド）= 見つけた、cave（ケイブ）= 洞窟",
+          "「I found a cave」= どうくつを見つけた。found（ファウンド）= 見つけた、cave（ケイブ）= どうくつ",
         japaneseHints: ["洞窟", "どうくつ", "ケイブ", "穴", "見つけ", "あった"],
       },
       {
@@ -462,7 +462,7 @@ export const LESSON_1_QUESTS = [
           "we should",
         ],
         coachNote:
-          "「I want to explore!」= 探検したい！want to（ウォント・トゥ）= 〜したい。洞窟でやりたいことを自分で決めて英語で言ってみよう。なんでもOK！",
+          "「I want to explore!」= 探検したい！want to（ウォント・トゥ）= 〜したい。どうくつでやりたいことを自分で決めて英語で言ってみよう。なんでもOK！",
         japaneseHints: ["したい", "やりたい", "行きたい", "行く", "探検", "決めた"],
       },
     ],

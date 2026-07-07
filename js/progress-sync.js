@@ -1,5 +1,5 @@
 import { doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { buildProgressSnapshot } from "./quest-engine.js";
+import { buildProgressSnapshot, getActiveLevelInfo } from "./quest-engine.js";
 
 let syncTimer = null;
 
@@ -8,8 +8,10 @@ export async function syncProgressToFirestore(db, userId) {
 
   try {
     const snapshot = buildProgressSnapshot();
+    // Field per level: beginnerProgress / intermediateProgress / advancedProgress
+    const field = getActiveLevelInfo().firestoreField;
     await updateDoc(doc(db, "users", userId), {
-      beginnerProgress: snapshot,
+      [field]: snapshot,
       progressUpdatedAt: serverTimestamp(),
     });
   } catch {

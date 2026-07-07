@@ -381,6 +381,31 @@
             margin-bottom: 0.75rem;
         }
 
+        .progress-extra-levels {
+            margin-bottom: 0.75rem;
+        }
+
+        .progress-extra-level {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.45rem;
+            border-radius: 8px;
+            margin-bottom: 0.25rem;
+            background: #f0f4ff;
+            font-size: 0.75rem;
+        }
+
+        .progress-extra-level.complete {
+            background: #e8f5e9;
+        }
+
+        .progress-extra-level-label {
+            flex-shrink: 0;
+            font-weight: 700;
+            color: #555;
+        }
+
         .progress-track-label {
             display: block;
             font-size: 0.72rem;
@@ -1506,6 +1531,8 @@
                         remainingTime: parseInt(data.remainingTime, 10) || 0,
                         role: data.role || '',
                         beginnerProgress: data.beginnerProgress || null,
+                        intermediateProgress: data.intermediateProgress || null,
+                        advancedProgress: data.advancedProgress || null,
                         progressUpdatedAt: data.progressUpdatedAt || null
                     });
                 });
@@ -2092,6 +2119,8 @@
                     remainingTime: parseInt(data.remainingTime, 10) || 0,
                     role: data.role || '',
                     beginnerProgress: data.beginnerProgress || null,
+                    intermediateProgress: data.intermediateProgress || null,
+                    advancedProgress: data.advancedProgress || null,
                     progressUpdatedAt: data.progressUpdatedAt || null
                 });
             });

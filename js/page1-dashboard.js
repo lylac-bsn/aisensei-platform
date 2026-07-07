@@ -12,6 +12,8 @@ import {
   getLearnedPhrases,
   getMainBadgeSlots,
   getHiddenBadgeSlots,
+  getActiveLevelInfo,
+  HIDDEN_BADGES,
   PROGRESS_KEY,
   STEP_PROGRESS_KEY,
   SELECTED_QUEST_KEY,
@@ -49,8 +51,17 @@ function getTotalQuests() {
 
 // Badges the user has already "seen" in the collection panel. Earned badges
 // not in this list show a notification dot and get a reveal animation on the
-// next panel open.
+// next panel open. Shared across levels (the badge collection is shared).
 const BADGES_SEEN_KEY = "gc_beginner_badgesSeenIds";
+
+/** Badge ids belonging to the active level (main + its hidden badges). */
+function getActiveLevelBadgeIds() {
+  const level = getActiveLevelInfo();
+  return new Set([
+    level.mainBadgeId,
+    ...HIDDEN_BADGES.filter((b) => b.level === level.id).map((b) => b.id),
+  ]);
+}
 
 function loadSeenBadgeIds() {
   try {
@@ -80,6 +91,98 @@ function getUnseenEarnedBadgeIds() {
   return getEarnedBadgeIds().filter((id) => !seen.has(id));
 }
 
+// ---------------------------------------------------------------------------
+// Badge hint bubble — tapping any badge slot (trophy shelf or badge panel)
+// shows how to earn it: earned badges show their story, unearned show a hint.
+// ---------------------------------------------------------------------------
+let badgeHintBubbleEl = null;
+let badgeHintBubbleForId = null;
+let badgeHintBubbleTimer = null;
+
+function hideBadgeHintBubble() {
+  if (badgeHintBubbleTimer) {
+    clearTimeout(badgeHintBubbleTimer);
+    badgeHintBubbleTimer = null;
+  }
+  badgeHintBubbleForId = null;
+  if (badgeHintBubbleEl) {
+    badgeHintBubbleEl.remove();
+    badgeHintBubbleEl = null;
+  }
+}
+
+function findBadgeSlotById(id) {
+  return [...getMainBadgeSlots(), ...getHiddenBadgeSlots()].find((s) => s.id === id) || null;
+}
+
+function showBadgeHintBubble(anchorEl, slot) {
+  hideBadgeHintBubble();
+
+  const title = slot.earned ? slot.label : "どうやってゲットする？";
+  const text = slot.earned ? slot.desc || slot.label : slot.hint || "？？？";
+  const icon = slot.earned ? "🏆" : "🔎";
+
+  const bubble = document.createElement("div");
+  bubble.className = "badge-hint-bubble";
+  bubble.setAttribute("role", "tooltip");
+  bubble.innerHTML = `
+    <span class="badge-hint-bubble-title">${icon} ${title}</span>
+    <span class="badge-hint-bubble-text">${text}</span>`;
+  document.body.appendChild(bubble);
+
+  // Position: centered under the slot, clamped to the viewport; flip above
+  // when there is no room below.
+  const rect = anchorEl.getBoundingClientRect();
+  const bw = bubble.offsetWidth;
+  const bh = bubble.offsetHeight;
+  const margin = 8;
+  let left = rect.left + rect.width / 2 - bw / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - bw - margin));
+  let top = rect.bottom + 10;
+  let above = false;
+  if (top + bh > window.innerHeight - margin) {
+    top = rect.top - bh - 10;
+    above = true;
+  }
+  bubble.style.left = `${left}px`;
+  bubble.style.top = `${top}px`;
+
+  const arrowX = rect.left + rect.width / 2 - left;
+  bubble.style.setProperty("--arrow-x", `${Math.max(14, Math.min(arrowX, bw - 14))}px`);
+  bubble.classList.add(above ? "badge-hint-bubble--above" : "badge-hint-bubble--below");
+
+  badgeHintBubbleEl = bubble;
+  badgeHintBubbleForId = slot.id;
+  badgeHintBubbleTimer = setTimeout(hideBadgeHintBubble, 8000);
+}
+
+let badgeHintClicksBound = false;
+
+function setupBadgeHintClicks() {
+  if (badgeHintClicksBound) return;
+  badgeHintClicksBound = true;
+
+  document.addEventListener("click", (event) => {
+    const slotEl = event.target.closest?.(
+      ".trophy-slot[data-badge-id], .dashboard-badge-slot[data-badge-id]"
+    );
+    if (!slotEl) {
+      hideBadgeHintBubble();
+      return;
+    }
+    const id = slotEl.dataset.badgeId;
+    if (badgeHintBubbleForId === id) {
+      hideBadgeHintBubble();
+      return;
+    }
+    const slot = findBadgeSlotById(id);
+    if (slot) showBadgeHintBubble(slotEl, slot);
+  });
+
+  window.addEventListener("resize", hideBadgeHintBubble);
+  window.addEventListener("scroll", hideBadgeHintBubble, true);
+}
+
 /** revealIndex >= 0: play the reveal pop, staggered one badge at a time. */
 function renderBadgeSlotHtml(slot, revealIndex = -1) {
   const classes = [
@@ -96,7 +199,7 @@ function renderBadgeSlotHtml(slot, revealIndex = -1) {
     : slot.upcoming
       ? `<span class="dashboard-badge-slot-empty" aria-hidden="true">?</span>`
       : `<span class="dashboard-badge-slot-empty" aria-hidden="true"></span>`;
-  return `<div class="${classes}"${revealStyle} role="listitem" title="${slot.label}${slot.desc ? ` — ${slot.desc}` : ""}">
+  return `<div class="${classes}"${revealStyle} role="listitem" data-badge-id="${slot.id}" title="${slot.label}${slot.desc ? ` — ${slot.desc}` : ""}">
     ${inner}
     <span class="dashboard-badge-slot-label">${slot.label}</span>
   </div>`;
@@ -265,6 +368,8 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   const buttons = document.querySelectorAll("[data-panel]");
 
   if (!panel || !panelBody) return;
+
+  setupBadgeHintClicks();
 
   let activePanel = null;
   let callState = "idle";
@@ -489,7 +594,10 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     clearSelectedQuest();
     setSelectedQuestIndex(0);
     try {
-      localStorage.removeItem(BADGES_SEEN_KEY);
+      // Seen-list is shared across levels — forget only this level's badges
+      // so other levels' earned badges don't replay their reveal animation.
+      const levelIds = getActiveLevelBadgeIds();
+      saveSeenBadgeIds(loadSeenBadgeIds().filter((id) => !levelIds.has(id)));
     } catch {
       // ignore
     }

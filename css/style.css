@@ -930,6 +930,71 @@ body.page-dashboard .user-dashboard {
     font-weight: 800;
     color: #FFB74D;
     overflow: hidden;
+    cursor: pointer;
+}
+
+/* Tap a badge slot → hint bubble on how to earn it (badge-hint-bubble). */
+.badge-hint-bubble {
+    position: fixed;
+    z-index: 3000;
+    max-width: 240px;
+    padding: 0.6rem 0.8rem;
+    border-radius: 14px;
+    background: #FFF8E1;
+    border: 2px solid #FFC107;
+    box-shadow: 0 6px 18px rgba(230, 81, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    animation: badge-hint-pop 0.18s ease-out;
+    pointer-events: none;
+}
+
+.badge-hint-bubble-title {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #E65100;
+}
+
+.badge-hint-bubble-text {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.45;
+    color: #5D4037;
+}
+
+.badge-hint-bubble::after {
+    content: "";
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: #FFF8E1;
+    border: 2px solid #FFC107;
+}
+
+.badge-hint-bubble--below::after {
+    top: -7px;
+    border-bottom: none;
+    border-right: none;
+}
+
+.badge-hint-bubble--above::after {
+    bottom: -7px;
+    border-top: none;
+    border-left: none;
+}
+
+@keyframes badge-hint-pop {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .trophy-slot.earned {
@@ -1783,6 +1848,7 @@ body.page-dashboard .user-dashboard {
     border-radius: 12px;
     background: #fafafa;
     min-height: 0;
+    cursor: pointer;
 }
 
 .dashboard-badge-slot.earned {

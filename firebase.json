@@ -10,7 +10,8 @@
       "functions/**",
       "package.json",
       "package-lock.json",
-      "*.md"
+      "*.md",
+      "tmp-*"
     ],
     "headers": [
       {

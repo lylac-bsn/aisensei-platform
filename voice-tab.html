@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Voice &amp; Transcription</title>
+    <script>
+        // Level bootstrap — must run before any ES module import so that
+        // quest-engine.js resolves the right level at load time.
+        // Usage: voice-tab.html?level=intermediate / ?level=advanced (default beginner).
+        (function () {
+            var level = new URLSearchParams(window.location.search).get('level');
+            window.GC_LEVEL =
+                level === 'intermediate' || level === 'advanced' ? level : 'beginner';
+        })();
+    </script>
     <link rel="icon" href="images/tab-logo.png" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1316,10 +1326,11 @@
             getStepDisplayPhrase,
             buildHostileRedirectNudge,
             buildPrematureCompleteCorrectionNudge,
-            BEGINNER_VOICE_BASE_PROMPT,
-            BEGINNER_FREE_CHAT_PROMPT,
+            getLevelBasePrompt,
+            getLevelFreeChatPrompt,
+            getActiveLevelInfo,
+            buildSideChallengeSecretBadgeNudge,
         } from './js/quest-engine.js';
-        import { LESSON_1_TITLE } from './js/quests/beginner-lesson1.js';
         import { resolveProxyUrl, US_CLOUD_PROXY_URL, TOKYO_CLOUD_PROXY_URL } from './js/proxy-config.js';
         import { QuestSfx } from './js/quest-sfx.js';
 
@@ -1330,8 +1341,15 @@
         // Must match the GCP project where Cloud Run proxy runs (same project as Firebase ai-sensei-8849b).
         const projectId = "ai-sensei-8849b";
         const model = "gemini-live-2.5-flash-native-audio";
-        const baseSystemInstructions = BEGINNER_VOICE_BASE_PROMPT;
-        const freeChatInstructions = BEGINNER_FREE_CHAT_PROMPT;
+        // Level-resolved (beginner / intermediate / advanced via ?level= param)
+        const LEVEL_INFO = getActiveLevelInfo();
+        const baseSystemInstructions = getLevelBasePrompt();
+        const freeChatInstructions = getLevelFreeChatPrompt();
+        dbg('active level', LEVEL_INFO.id);
+        // Completion modal shows this level's badge (bronze/silver/gold)
+        document
+            .querySelector('#quest-modal .quest-modal-badge img')
+            ?.setAttribute('src', LEVEL_INFO.badgeImage);
         const voice = "Kore";
         const temperature = 0.9;
         const enableProactiveAudio = true;
@@ -1490,6 +1508,12 @@
         // One "say it in Japanese too" nudge per user turn (mission 7 quiz
         // mode tends to drift into English-only replies).
         let jpEchoRequestedTurnSeq = -1;
+        // Mic-echo guard: when the speaker output leaks into the mic (no
+        // headphones), Learny's own example phrases come back as a "user"
+        // transcript and can tick mission steps. Track recent assistant
+        // speech + whether this user turn overlapped assistant audio.
+        let recentAssistantSpeech = '';
+        let userTurnOverlappedAssistant = false;
         let lastRecoveryNudgeKey = "";
         let lastRecoveryNudgeAt = 0;
         let lastPrematureCompleteCorrectionAt = 0;
@@ -2416,13 +2440,7 @@
             }
 
             if (secretBadgeEarned) {
-                sendSteeringNudge(
-                    '[App verdict] SECRET CHALLENGE COMPLETE — the child just earned a secret badge (the app already showed it on screen). ' +
-                        'This is a BIG deal — your most excited voice! Build it up like a surprise (「じゃじゃーん！」), ' +
-                        'then say exactly: "Congrats! You earned a secret badge!!" and in Japanese ' +
-                        '「おめでとう！シークレットバッジゲットだよ！めったに取れないスペシャルバッジだよ、すごすぎる！」. ' +
-                        'Then continue the current mission step.'
-                );
+                sendSteeringNudge(buildSideChallengeSecretBadgeNudge());
                 return newly;
             }
 
@@ -3121,6 +3139,8 @@
 
                 clearChatOnNextStart = false;
                 chatMessages = [];
+                recentAssistantSpeech = '';
+                userTurnOverlappedAssistant = false;
                 renderChat();
                 emptyState.style.display = '';
 
@@ -3211,6 +3231,27 @@
             scheduleQuestOpeningRetry();
         }
 
+        /**
+         * True when a "user" utterance is almost certainly Learny's own voice
+         * picked up by the mic: the turn overlapped assistant audio AND nearly
+         * every English word was just spoken by Learny. A child repeating the
+         * phrase after Learny finishes does not overlap, so it still counts.
+         */
+        function isLikelyAssistantEchoUtterance(utterance) {
+            const tokenize = (s) =>
+                (s || '')
+                    .toLowerCase()
+                    .replace(/[^a-z']+/g, ' ')
+                    .split(/\s+/)
+                    .filter(Boolean);
+            const words = tokenize(utterance);
+            if (words.length < 3) return false;
+            const spoken = new Set(tokenize(recentAssistantSpeech));
+            if (!spoken.size) return false;
+            const hits = words.filter((w) => spoken.has(w)).length;
+            return hits / words.length >= 0.9;
+        }
+
         function getLatestFinishedUserUtterance() {
             const last = [...chatMessages]
                 .reverse()
@@ -3236,6 +3277,9 @@
          * Japanese half (without repeating the English).
          */
         function maybeRequestJapaneseEcho(assistantText) {
+            // Bilingual echo is a BEGINNER rule only — intermediate is mostly
+            // English and advanced is English-only by design.
+            if (LEVEL_INFO.id !== 'beginner') return;
             if (!questSessionActive || !activeQuest || questCompleting || awaitingQuestFarewell) return;
             if (!client?.connected) return;
             if (jpEchoRequestedTurnSeq === lastUserTurnSeq) return;
@@ -3379,7 +3423,7 @@
                 lessonDone = nextIndex >= getQuests().length;
                 awardQuestStar(nextIndex - 1, true);
                 if (lessonDone) {
-                    recordLessonBadge("lesson1");
+                    recordLessonBadge(LEVEL_INFO.mainBadgeId);
                     setSelectedQuestIndex(completedIndex);
                 } else {
                     selectNextQuestAfterComplete();
@@ -3818,6 +3862,7 @@
                 case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
                     if (sourceClient !== client) break;
                     if (message.data.text?.trim() && assistantOutputActive()) {
+                        userTurnOverlappedAssistant = true;
                         handleUserBargeIn();
                     }
                     if (
@@ -3832,11 +3877,18 @@
                     ensureMicActive();
                     addMessage(message.data.text, 'user-transcript', 'append', message.data.finished);
                     if (message.data.finished) {
+                        const overlappedAssistant = userTurnOverlappedAssistant;
+                        userTurnOverlappedAssistant = false;
                         const allowTurn = !isMuted || userBargeInThisTurn;
                         if (allowTurn) {
                             const unclear = handleFinishedUserTranscript();
                             if (!unclear) {
-                                maybeMatchQuestFromTranscript(true);
+                                const utterance = getLatestFinishedUserUtterance();
+                                if (overlappedAssistant && isLikelyAssistantEchoUtterance(utterance)) {
+                                    dbg('quest match skipped: likely mic echo of Learny', { utterance });
+                                } else {
+                                    maybeMatchQuestFromTranscript(true);
+                                }
                             }
                         }
                         userBargeInThisTurn = false;
@@ -3848,6 +3900,8 @@
                     if (message.data.text?.trim()) {
                         resolvePostBargeIn();
                         markAssistantTurnStarted();
+                        recentAssistantSpeech =
+                            (recentAssistantSpeech + ' ' + message.data.text).slice(-800);
                     }
                     markFarewellAssistantActivity(sourceClient);
                     addMessage(message.data.text, 'assistant', 'append', message.data.finished);

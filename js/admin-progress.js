@@ -142,6 +142,31 @@ function renderMissionSteps(starsEarned, totalQuests, lessonComplete) {
   }).join("");
 }
 
+/** Compact one-line progress for intermediate / advanced (beginner keeps the full card). */
+function renderExtraLevelLines(user) {
+  const levels = [
+    { label: "中級", data: user.intermediateProgress },
+    { label: "上級", data: user.advancedProgress },
+  ].filter((l) => l.data && typeof l.data === "object");
+  if (!levels.length) return "";
+
+  const lines = levels
+    .map((l) => {
+      const stars = Number(l.data.starsEarned) || 0;
+      const total = Number(l.data.totalQuests) || 5;
+      const done = !!l.data.lessonComplete;
+      const status = done ? "全ミッションクリア！" : `ミッション ${Math.min(stars + 1, total)} / ${total}（★${stars}）`;
+      const detail = l.data.missionTitleEn ? ` — ${escapeHtml(l.data.missionTitleEn)}` : "";
+      return `<div class="progress-extra-level${done ? " complete" : ""}">
+        <span class="progress-extra-level-label">${l.label}</span>
+        <span class="progress-extra-level-status">${escapeHtml(status)}${done ? "" : detail}</span>
+      </div>`;
+    })
+    .join("");
+
+  return `<div class="progress-extra-levels">${lines}</div>`;
+}
+
 function renderPhrasesList(phrases) {
   if (!phrases.length) {
     return '<p class="progress-phrases-empty">まだフレーズがありません</p>';
@@ -216,6 +241,8 @@ export function renderProgressDashboard(users, searchQuery = "") {
               <span class="progress-track-label">ミッション進捗</span>
               ${renderMissionSteps(p.starsEarned, p.totalQuests, p.lessonComplete)}
             </div>
+
+            ${renderExtraLevelLines(u)}
 
             <details class="progress-phrases-details">
               <summary>覚えたフレーズ (${p.phraseCount})</summary>

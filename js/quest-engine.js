@@ -1,9 +1,69 @@
 import { LESSON_1_QUESTS, LESSON_1_TITLE } from "./quests/beginner-lesson1.js";
+import { INTERMEDIATE_QUESTS, INTERMEDIATE_LESSON_TITLE } from "./quests/intermediate-lesson1.js";
+import { ADVANCED_QUESTS, ADVANCED_LESSON_TITLE } from "./quests/advanced-lesson1.js";
 
-export const PROGRESS_KEY = "gc_beginner_lesson1_questIndex";
-export const STEP_PROGRESS_KEY = "gc_beginner_lesson1_stepProgress";
-export const SELECTED_QUEST_KEY = "gc_beginner_lesson1_selectedQuest";
-export const LEARNED_PHRASES_KEY = "gc_beginner_lesson1_learnedPhrases";
+/**
+ * Per-level configuration. The active level is resolved ONCE at module load
+ * from `window.GC_LEVEL` (set by an inline script before module imports, e.g.
+ * from voice-tab.html's ?level= URL param). Defaults to beginner, so all
+ * existing beginner pages keep working with identical storage keys.
+ */
+const LEVELS = {
+  beginner: {
+    id: "beginner",
+    quests: LESSON_1_QUESTS,
+    lessonTitle: LESSON_1_TITLE,
+    keyPrefix: "gc_beginner_lesson1_",
+    mainBadgeId: "lesson1",
+    badgeImage: "images/completion-badge-bronze.png",
+    headerLabel: "ビギナー",
+    firestoreField: "beginnerProgress",
+  },
+  intermediate: {
+    id: "intermediate",
+    quests: INTERMEDIATE_QUESTS,
+    lessonTitle: INTERMEDIATE_LESSON_TITLE,
+    keyPrefix: "gc_intermediate_lesson1_",
+    mainBadgeId: "intermediate",
+    badgeImage: "images/completion-badge-silver.png",
+    headerLabel: "中級",
+    firestoreField: "intermediateProgress",
+  },
+  advanced: {
+    id: "advanced",
+    quests: ADVANCED_QUESTS,
+    lessonTitle: ADVANCED_LESSON_TITLE,
+    keyPrefix: "gc_advanced_lesson1_",
+    mainBadgeId: "advanced",
+    badgeImage: "images/completion-badge-gold.png",
+    headerLabel: "上級",
+    firestoreField: "advancedProgress",
+  },
+};
+
+function resolveLevelId() {
+  try {
+    const fromGlobal =
+      (typeof window !== "undefined" && window.GC_LEVEL) || globalThis.GC_LEVEL;
+    if (fromGlobal && LEVELS[fromGlobal]) return fromGlobal;
+  } catch {
+    // ignore
+  }
+  return "beginner";
+}
+
+export const ACTIVE_LEVEL = LEVELS[resolveLevelId()];
+const ACTIVE_QUESTS = ACTIVE_LEVEL.quests;
+
+export function getActiveLevelId() {
+  return ACTIVE_LEVEL.id;
+}
+
+export const PROGRESS_KEY = `${ACTIVE_LEVEL.keyPrefix}questIndex`;
+export const STEP_PROGRESS_KEY = `${ACTIVE_LEVEL.keyPrefix}stepProgress`;
+export const SELECTED_QUEST_KEY = `${ACTIVE_LEVEL.keyPrefix}selectedQuest`;
+export const LEARNED_PHRASES_KEY = `${ACTIVE_LEVEL.keyPrefix}learnedPhrases`;
+/** Shared across ALL levels — one badge collection for the whole account. */
 export const LESSON_BADGES_KEY = "gc_beginner_lessonBadges";
 
 /** Main badges — one per level's full mission-completion. */
@@ -12,10 +72,23 @@ export const MAIN_BADGE_SLOTS = [
     id: "lesson1",
     label: "ビギナー",
     desc: "ビギナーミッション全クリア",
+    hint: "ビギナーのミッションを全部クリアしたらゲット！",
     image: "images/completion-badge-bronze.png",
   },
-  { id: "intermediate", label: "中級", desc: "???", upcoming: true },
-  { id: "advanced", label: "上級", desc: "???", upcoming: true },
+  {
+    id: "intermediate",
+    label: "中級",
+    desc: "中級ミッション全クリア",
+    hint: "中級のミッションを全部クリアしたらゲット！",
+    image: "images/completion-badge-silver.png",
+  },
+  {
+    id: "advanced",
+    label: "上級",
+    desc: "上級ミッション全クリア",
+    hint: "上級のミッションを全部クリアしたらゲット！",
+    image: "images/completion-badge-gold.png",
+  },
 ];
 
 /** Hidden badge collection size (unused slots show as "？？？"). */
@@ -23,20 +96,143 @@ export const HIDDEN_BADGE_SLOT_COUNT = 8;
 
 /**
  * Secret badges earned inside missions (quiz answered with no hints,
- * side challenges). Shown as "？？？" slots until earned.
+ * side challenges). Shown as "？？？" slots until earned. `level` scopes
+ * each badge to the level whose missions can award it (used by reset).
  */
 export const HIDDEN_BADGES = [
   {
     id: "hidden_furnace",
+    level: "beginner",
     earnedLabel: "かまどマスター",
     desc: "ヒントなしで英語のフレーズが言えた！",
+    hint: "ビギナーのかまどミッションで、先生におしえてもらう前に英語で言えたら…？",
   },
   {
     id: "hidden_iron",
+    level: "beginner",
     earnedLabel: "アイアンハンター",
-    desc: "鉄のシークレットチャレンジに成功！",
+    desc: "てつのシークレットチャレンジに成功！",
+    hint: "ビギナーのてつミッションで、てつを2つ以上ゲット！って英語で言えたら…？",
+  },
+  {
+    id: "hidden_prep_int",
+    level: "intermediate",
+    earnedLabel: "準備マスター",
+    desc: "どうくつの準備でプラス1つ必要なものを英語で言えた！",
+    hint: "中級のどうくつじゅんびミッションで、もう1つ必要なものを英語で言えたら…？",
+  },
+  {
+    id: "hidden_report_int",
+    level: "intermediate",
+    earnedLabel: "レポートマスター",
+    desc: "ヒントなしで英語レポートが言えた！",
+    hint: "中級の英語レポートミッションを、先生のヒントなしでクリアできたら…？",
+  },
+  {
+    id: "hidden_diamond_adv",
+    level: "advanced",
+    earnedLabel: "ダイヤハンター",
+    desc: "ベストせんりひんがダイヤモンドだった！",
+    hint: "上級のせんりひんミッションで、ベストせんりひんがダイヤモンドだったら…？",
+  },
+  {
+    id: "hidden_question_adv",
+    level: "advanced",
+    earnedLabel: "しつもんマスター",
+    desc: "英語でラーニー先生にしつもんできた！",
+    hint: "上級のミッション中に、英語で先生にしつもんしてみたら…？",
+  },
+  {
+    id: "hidden_feeling_adv",
+    level: "advanced",
+    earnedLabel: "きもちマスター",
+    desc: "きもちを英語で言えた！",
+    hint: "上級のデンジャーミッションで、そのときの気もちを英語で言えたら…？",
+  },
+  {
+    id: "hidden_english_adv",
+    level: "advanced",
+    earnedLabel: "英語チャレンジマスター",
+    desc: "ヒントなしで英語チャレンジをクリア！",
+    hint: "上級の英語オンリーチャレンジを、先生のヒントなしでクリアできたら…？",
   },
 ];
+
+/** Badge ids (main + hidden) owned by the active level — reset scope. */
+function getActiveLevelBadgeIds() {
+  return new Set([
+    ACTIVE_LEVEL.mainBadgeId,
+    ...HIDDEN_BADGES.filter((b) => b.level === ACTIVE_LEVEL.id).map((b) => b.id),
+  ]);
+}
+
+/**
+ * Per-level language directives injected into referee nudges and prompts.
+ * Beginner = English then Japanese every turn; intermediate = ~80% English
+ * with light Japanese support; advanced = 100% English. Beginner strings are
+ * byte-identical to the original hardcoded nudge text.
+ */
+const LEVEL_LANG = {
+  beginner: {
+    pair: "EN then JP",
+    pairHype: "EN then JP, friendly!",
+    firstCasual: "English first, then casual Japanese",
+    sentencesRule: "Keep it 1–3 short fun sentences, EN then JP.",
+    niceTry: 'Nice try! いいチャレンジ！',
+    inviteTogether: "(「一緒に言ってみよう」)",
+    inviteTogetherExcl: "「一緒に言ってみよう！」「ゆっくりでいいよ」",
+    slowOk: "(「ゆっくりでいいよ」)",
+    echoReassure: "(「だいじょうぶ、ゆっくりいこう！」)",
+    echoInvite: "(「まねして言ってみて！」)",
+    openerLangLine: "English first, then Japanese.",
+    openerEnd: '「やってみよう！」 / "Let\'s go!"',
+    speakStyleLine:
+      "■話し方: 英語→日本語。かんたん・元気・友だち口調。1回の返事は短く（ひと息で言える長さ）。堅い敬語・講義口調は避ける。",
+    secretBuildUp: '(e.g. "Wait... something special happened!" / 「じゃじゃーん！」)',
+    secretBadgeJa:
+      'and in Japanese 「おめでとう！シークレットバッジゲットだよ！めったに取れないスペシャルバッジだよ、すごすぎる！」. ',
+  },
+  intermediate: {
+    pair: "mostly EN + one short JP line",
+    pairHype: "mostly EN + one short JP line, friendly!",
+    firstCasual: "English first — casual, then one short Japanese follow-up line",
+    sentencesRule:
+      "Keep it 1–3 short fun sentences, about 80% English — ALWAYS end with one short Japanese support line (never English-only).",
+    niceTry: 'Nice try! いいチャレンジ！',
+    inviteTogether: "「一緒に言ってみよう」",
+    inviteTogetherExcl: "「一緒に言ってみよう！」「ゆっくりでいいよ」",
+    slowOk: "（「ゆっくりでいいよ」）",
+    echoReassure: "（「だいじょうぶ、ゆっくりいこう！」）",
+    echoInvite: "（「まねして言ってみて！」）",
+    openerLangLine: "Mostly English (about 80%) — ALWAYS end with one short Japanese support line.",
+    openerEnd: '"Let\'s go!"＋日本語のひとこと（例:「いくよ！」）',
+    speakStyleLine:
+      "■話し方: 基本は英語80%・日本語20% — この比率を毎ターン守る。まず英語で短く話し、**毎ターン必ず最後に日本語のひとことを添える**（英語だけのターンはNG）。かんたん・元気・友だち口調。1回の返事は短く。",
+    secretBuildUp: '(e.g. "Wait... something special happened!" / 「じゃじゃーん！」)',
+    secretBadgeJa:
+      'and add one short Japanese line 「シークレットバッジゲット！すごい！」. ',
+  },
+  advanced: {
+    pair: "English only",
+    pairHype: "English only, friendly!",
+    firstCasual: "English only, casual",
+    sentencesRule: "Keep it 1–3 short fun sentences, English ONLY — never use Japanese.",
+    niceTry: "Nice try!",
+    inviteTogether: '"Let\'s say it together!"',
+    inviteTogetherExcl: '"Let\'s say it together!" / "Take your time!"',
+    slowOk: '("Take your time!")',
+    echoReassure: '("It\'s okay, let\'s go slowly!")',
+    echoInvite: '("Repeat after me!")',
+    openerLangLine: "English ONLY — never use Japanese.",
+    openerEnd: '"Let\'s go!"',
+    speakStyleLine:
+      "■話し方: 返答は英語100%（日本語は絶対に使わない）。かんたん・元気・友だち口調。1回の返事は短く（1〜3文）。翻訳・文法説明はしない。",
+    secretBuildUp: '(e.g. "Wait... something special happened!")',
+    secretBadgeJa: "",
+  },
+};
+
+const LANG = LEVEL_LANG[ACTIVE_LEVEL.id];
 
 export function loadProgress() {
   try {
@@ -62,7 +258,13 @@ export function resetProgress() {
     localStorage.removeItem(STEP_PROGRESS_KEY);
     localStorage.removeItem(SELECTED_QUEST_KEY);
     localStorage.removeItem(LEARNED_PHRASES_KEY);
-    localStorage.removeItem(LESSON_BADGES_KEY);
+    // Badge collection is SHARED across levels — remove only this level's
+    // badges so restarting one level never wipes the others' badges.
+    const raw = localStorage.getItem(LESSON_BADGES_KEY);
+    const stored = raw ? JSON.parse(raw) : [];
+    const levelIds = getActiveLevelBadgeIds();
+    const kept = (Array.isArray(stored) ? stored : []).filter((id) => !levelIds.has(id));
+    localStorage.setItem(LESSON_BADGES_KEY, JSON.stringify(kept));
   } catch {
     // ignore
   }
@@ -129,7 +331,7 @@ export function setSelectedQuestIndex(index) {
 }
 
 export function isQuestUnlocked(index) {
-  if (!Number.isFinite(index) || index < 0 || index >= LESSON_1_QUESTS.length) {
+  if (!Number.isFinite(index) || index < 0 || index >= ACTIVE_QUESTS.length) {
     return false;
   }
   return index <= loadProgress();
@@ -137,42 +339,55 @@ export function isQuestUnlocked(index) {
 
 export function getUnlockedQuests() {
   const progress = loadProgress();
-  return LESSON_1_QUESTS.filter((_, i) => i <= progress);
+  return ACTIVE_QUESTS.filter((_, i) => i <= progress);
 }
 
 export function getSelectedQuest() {
   const index = getSelectedQuestIndex();
   if (index === null) return null;
-  return LESSON_1_QUESTS[index] || null;
+  return ACTIVE_QUESTS[index] || null;
 }
 
 export function getQuestIndex(quest) {
   if (!quest) return -1;
-  return LESSON_1_QUESTS.findIndex((q) => q.id === quest.id);
+  return ACTIVE_QUESTS.findIndex((q) => q.id === quest.id);
 }
 
 export function selectNextQuestAfterComplete() {
   const index = loadProgress();
-  if (index >= LESSON_1_QUESTS.length) {
+  if (index >= ACTIVE_QUESTS.length) {
     clearSelectedQuest();
     return null;
   }
   setSelectedQuestIndex(index);
-  return LESSON_1_QUESTS[index];
+  return ACTIVE_QUESTS[index];
 }
 
 export function getQuests() {
-  return LESSON_1_QUESTS;
+  return ACTIVE_QUESTS;
 }
 
 export function getCurrentQuest() {
   const index = loadProgress();
-  if (index >= LESSON_1_QUESTS.length) return null;
-  return LESSON_1_QUESTS[index];
+  if (index >= ACTIVE_QUESTS.length) return null;
+  return ACTIVE_QUESTS[index];
 }
 
 export function isLessonComplete() {
-  return loadProgress() >= LESSON_1_QUESTS.length;
+  return loadProgress() >= ACTIVE_QUESTS.length;
+}
+
+/** Whether a level's lesson is complete, from its OWN progress key. */
+function isLevelLessonComplete(levelId) {
+  const level = LEVELS[levelId];
+  if (!level) return false;
+  try {
+    const raw = localStorage.getItem(`${level.keyPrefix}questIndex`);
+    const index = raw === null ? 0 : parseInt(raw, 10);
+    return Number.isFinite(index) && index >= level.quests.length;
+  } catch {
+    return false;
+  }
 }
 
 export function loadEarnedLessonBadges() {
@@ -180,16 +395,19 @@ export function loadEarnedLessonBadges() {
     const raw = localStorage.getItem(LESSON_BADGES_KEY);
     const stored = raw ? JSON.parse(raw) : [];
     const earned = new Set(Array.isArray(stored) ? stored : []);
-    if (isLessonComplete()) {
-      earned.add("lesson1");
-    } else {
-      // The lesson badge is derived from progress. Drop a stale stored copy
-      // (e.g. earned when the lesson had fewer missions than it does now).
-      earned.delete("lesson1");
+    // Main lesson badges are derived from each level's own progress, so the
+    // shared collection stays accurate on every page. A stale stored copy
+    // (e.g. earned when the lesson had fewer missions) is dropped.
+    for (const level of Object.values(LEVELS)) {
+      if (isLevelLessonComplete(level.id)) {
+        earned.add(level.mainBadgeId);
+      } else {
+        earned.delete(level.mainBadgeId);
+      }
     }
     return [...earned];
   } catch {
-    return isLessonComplete() ? ["lesson1"] : [];
+    return isLessonComplete() ? [ACTIVE_LEVEL.mainBadgeId] : [];
   }
 }
 
@@ -233,6 +451,7 @@ export function getHiddenBadgeSlots() {
       id: badge.id,
       label: isEarned ? badge.earnedLabel : "シークレット",
       desc: isEarned ? badge.desc : "？？？",
+      hint: badge.hint || "",
       secret: true,
       // Unearned secrets render like upcoming slots ("?" placeholder).
       upcoming: !isEarned,
@@ -245,6 +464,7 @@ export function getHiddenBadgeSlots() {
       id: `hidden_slot_${slots.length + 1}`,
       label: "シークレット",
       desc: "？？？",
+      hint: "ミッションの中にかくされたチャレンジをさがしてみよう！",
       secret: true,
       upcoming: true,
       earned: false,
@@ -260,7 +480,7 @@ export function getLessonBadgeSlots() {
 
 /** Snapshot for Firestore sync and admin dashboard. */
 export function buildProgressSnapshot() {
-  const totalQuests = LESSON_1_QUESTS.length;
+  const totalQuests = ACTIVE_QUESTS.length;
   const questIndex = loadProgress();
   const starsEarned = Math.min(questIndex, totalQuests);
   const lessonComplete = isLessonComplete();
@@ -275,28 +495,28 @@ export function buildProgressSnapshot() {
 
   if (lessonComplete) {
     missionStatus = "レッスンクリア";
-    if (selectedIndex !== null && LESSON_1_QUESTS[selectedIndex]) {
+    if (selectedIndex !== null && ACTIVE_QUESTS[selectedIndex]) {
       missionIndex = selectedIndex;
-      missionTitleEn = LESSON_1_QUESTS[selectedIndex].titleEn || "";
-      missionGoal = LESSON_1_QUESTS[selectedIndex].goal || "";
+      missionTitleEn = ACTIVE_QUESTS[selectedIndex].titleEn || "";
+      missionGoal = ACTIVE_QUESTS[selectedIndex].goal || "";
     }
-  } else if (selectedIndex !== null && LESSON_1_QUESTS[selectedIndex]) {
+  } else if (selectedIndex !== null && ACTIVE_QUESTS[selectedIndex]) {
     missionIndex = selectedIndex;
-    missionTitleEn = LESSON_1_QUESTS[selectedIndex].titleEn || "";
-    missionGoal = LESSON_1_QUESTS[selectedIndex].goal || "";
+    missionTitleEn = ACTIVE_QUESTS[selectedIndex].titleEn || "";
+    missionGoal = ACTIVE_QUESTS[selectedIndex].goal || "";
     missionStatus = selectedIndex === questIndex ? "いまのミッション" : "復習中";
   } else if (questIndex < totalQuests) {
     missionIndex = questIndex;
-    missionTitleEn = LESSON_1_QUESTS[questIndex].titleEn || "";
-    missionGoal = LESSON_1_QUESTS[questIndex].goal || "";
+    missionTitleEn = ACTIVE_QUESTS[questIndex].titleEn || "";
+    missionGoal = ACTIVE_QUESTS[questIndex].goal || "";
     missionStatus = "自由会話（次のミッション待ち）";
   } else {
     missionStatus = "自由会話";
   }
 
   return {
-    level: "beginner",
-    lessonTitle: LESSON_1_TITLE,
+    level: ACTIVE_LEVEL.id,
+    lessonTitle: ACTIVE_LEVEL.lessonTitle,
     questIndex,
     starsEarned,
     totalQuests,
@@ -395,6 +615,35 @@ const VERB_FORMS = {
   explore: "explore",
   explored: "explore",
   exploring: "explore",
+  improve: "improve",
+  improved: "improve",
+  improving: "improve",
+  change: "change",
+  changed: "change",
+  changing: "change",
+  organize: "organize",
+  organized: "organize",
+  organizing: "organize",
+  clean: "clean",
+  cleaned: "clean",
+  cleaning: "clean",
+  choose: "choose",
+  chose: "choose",
+  choosing: "choose",
+  pick: "choose",
+  picked: "choose",
+  // NOTE: go/went/going intentionally NOT mapped — "going" must stay intact
+  // for the aspiration guard ("I'm going to ..." is not completion proof).
+  run: "run",
+  ran: "run",
+  running: "run",
+  escape: "escape",
+  escaped: "escape",
+  fall: "fall",
+  fell: "fall",
+  falling: "fall",
+  like: "like",
+  liked: "like",
 };
 
 const CONTRACTIONS = {
@@ -427,6 +676,26 @@ const PLURAL_TO_SINGULAR = {
   axes: "axe",
   hoes: "hoe",
   tools: "tool",
+  torches: "torch",
+  diamonds: "diamond",
+  emeralds: "emerald",
+  villages: "village",
+  enemies: "enemy",
+  zombies: "zombie",
+  creepers: "creeper",
+  skeletons: "skeleton",
+  monsters: "monster",
+  chests: "chest",
+  beds: "bed",
+  farms: "farm",
+  rooms: "room",
+  areas: "area",
+  goals: "goal",
+  bases: "base",
+  shields: "shield",
+  buckets: "bucket",
+  arrows: "arrow",
+  potions: "potion",
 };
 
 const NUMBER_WORDS = {
@@ -546,10 +815,28 @@ const STEP_REQUIRES_COMPLETION = new Set([
   "found_iron",
   "got_iron",
   "found_cave",
+  // Intermediate
+  "report_change",
+  "made_tool",
+  "found_useful",
+  // Advanced
+  "best_loot",
+  "did_today",
 ]);
 
 /** Open-ended intent steps — "I want to / I will ..." IS the success phrase. */
-const STEP_ALLOWS_ASPIRATION = new Set(["decide_action", "review_want"]);
+const STEP_ALLOWS_ASPIRATION = new Set([
+  "decide_action",
+  "review_want",
+  // Intermediate
+  "decide_improvement",
+  "choose_tool",
+  "next_want",
+  // Advanced
+  "next_goal",
+  "next_action",
+  "want_next",
+]);
 
 const ASPIRATION_WORDS = [
   "need", "needed", "want", "wanted", "wanna", "gonna", "going", "must",
@@ -578,6 +865,41 @@ const STEP_SALIENT_GROUPS = {
   found_iron: [["find", "found", "see"], ["iron"]],
   got_iron: [["get", "got", "have", "mine", "dig", "collect"], ["iron"]],
   found_cave: [["find", "found", "see"], ["cave"]],
+  // Intermediate
+  decide_improvement: [
+    ["improve", "change", "make"],
+    ["base", "chest", "bed", "farm", "better"],
+  ],
+  report_change: [
+    ["improve", "change", "organize", "clean", "place", "make", "build"],
+    ["base", "chest", "bed", "farm", "better", "furnace", "part"],
+  ],
+  choose_tool: [
+    ["make", "craft", "build", "create"],
+    ["sword", "pickaxe", "axe", "shovel", "tool"],
+  ],
+  made_tool: [
+    ["made", "crafted", "built", "created"],
+    ["sword", "pickaxe", "axe", "shovel", "tool"],
+  ],
+  need_torches: [["need", "want"], ["torch", "light"]],
+  need_food_prep: [["need", "want"], ["food", "meat", "bread"]],
+  ready_cave: [["ready"]],
+  found_useful: [
+    ["find", "found", "see"],
+    ["iron", "coal", "cave", "village", "diamond", "useful"],
+  ],
+  its_useful: [["useful"]],
+  // Advanced
+  best_loot: [
+    ["get", "got", "have", "find", "found"],
+    ["diamond", "iron", "gold", "emerald", "loot"],
+  ],
+  what_happened: [
+    ["see", "saw", "fall", "fell"],
+    ["enemy", "zombie", "creeper", "skeleton", "monster", "spider"],
+  ],
+  danger_reaction: [["dangerous"]],
 };
 
 /** Max word gap between salient verb and object (STT may insert short fillers). */
@@ -735,6 +1057,13 @@ const STEP_COMPLETION_VERBS = {
   found_iron: ["found", "find", "see", "saw"],
   got_iron: ["got", "get", "have", "mine", "mined", "dig", "dug", "collect", "collected"],
   found_cave: ["found", "find", "see", "saw"],
+  // Intermediate
+  report_change: ["made", "improved", "changed", "organized", "cleaned", "placed", "put", "built", "created"],
+  made_tool: ["made", "crafted", "built", "created", "have", "has", "had"],
+  found_useful: ["found", "find", "see", "saw"],
+  // Advanced
+  best_loot: ["got", "get", "found", "find", "have", "had", "was", "is"],
+  did_today: ["built", "build", "explored", "explore", "made", "found"],
 };
 
 function stepCompletionVerbWords(step) {
@@ -943,7 +1272,7 @@ export function buildActiveMissionHeader(quest, questIndex = loadProgress()) {
 
   if (!remaining.length) {
     return (
-      `Mission ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
+      `Mission ${missionNum}/${ACTIVE_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
       `All steps done (${progress}) → call complete_quest, then celebrate once.`
     );
   }
@@ -956,7 +1285,7 @@ export function buildActiveMissionHeader(quest, questIndex = loadProgress()) {
       `Quiz mode does NOT change the language rule: EVERY reply = English first, then the same meaning in Japanese`
     : `guide Minecraft action, then have them say "${phrase}"`;
   return (
-    `Mission ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
+    `Mission ${missionNum}/${ACTIVE_QUESTS.length}: ${quest.titleEn || quest.title} | ` +
     `Progress ${progress} | NEXT: ${next.label} → ${directive}`
   );
 }
@@ -973,6 +1302,19 @@ export const LEARNY_FRIENDLY_TONE =
   "Never stiff, lecture-y, or overly polite (です・ますだらけ・堅い敬語は避ける). " +
   "Short sentences. Smile in your voice. Make English feel fun, not like homework.";
 
+const INTERMEDIATE_FRIENDLY_TONE =
+  "Sound like a fun Minecraft buddy for Japanese elementary kids — warm, casual, upbeat. " +
+  "Speak mostly English (about 80%), simple and short, native-like rhythm; add one quick Japanese support line only when it helps. " +
+  "EN: Cool! Awesome! Nice one! Let's go! You got this! " +
+  "Never stiff, lecture-y, or overly polite. " +
+  "Short sentences. Smile in your voice. Make English feel fun, not like homework.";
+
+const ADVANCED_FRIENDLY_TONE =
+  "Sound like a fun Minecraft buddy for Japanese kids who are strong in English — warm, casual, upbeat, natural native-like rhythm. " +
+  "English ONLY — never use Japanese. " +
+  "EN: Cool! Awesome! Nice one! Let's go! You got this! " +
+  "Never stiff or lecture-y. Short replies (1–3 sentences). Smile in your voice. Match their energy.";
+
 /** What Learny should do this turn — one clear instruction. */
 function buildStepDirective(
   quest,
@@ -980,7 +1322,7 @@ function buildStepDirective(
   { stepJustCompleted = false, japaneseOnly = false, alreadyAudible = false, wrongAttempt = false } = {}
 ) {
   if (!nextStep) {
-    return "All steps done → call complete_quest once, then one short celebration (EN then JP).";
+    return `All steps done → call complete_quest once, then one short celebration (${LANG.pair}).`;
   }
 
   const phrase = getStepSpokenPhrase(nextStep);
@@ -991,14 +1333,14 @@ function buildStepDirective(
   if (wrongAttempt) {
     return (
       `Wrong phrase — step NOT recorded. Do NOT say they got "${phrase}" right, but do NOT sound disappointed either. ` +
-      `Praise the try first (e.g. "Nice try! いいチャレンジ！"), then say "${phrase}" SLOWLY, broken into small chunks${coachHint}. ` +
-      `Invite softly — 「一緒に言ってみよう！」「ゆっくりでいいよ」 — never pressure or demand a retry.`
+      `Praise the try first (e.g. "${LANG.niceTry}"), then say "${phrase}" SLOWLY, broken into small chunks${coachHint}. ` +
+      `Invite softly — ${LANG.inviteTogetherExcl} — never pressure or demand a retry.`
     );
   }
 
   if (stepJustCompleted) {
     if (!nextStep) {
-      return "All steps done → call complete_quest once, then one short fun celebration (EN then JP).";
+      return `All steps done → call complete_quest once, then one short fun celebration (${LANG.pair}).`;
     }
     if (alreadyAudible) {
       return (
@@ -1008,7 +1350,7 @@ function buildStepDirective(
       );
     }
     return (
-      `Step done — hype them up briefly (EN then JP, friendly!), then guide the next step: ` +
+      `Step done — hype them up briefly (${LANG.pairHype}), then guide the next step: ` +
       `"${nextStep.label}" in Minecraft, then say "${phrase}". Do NOT say mission complete yet.`
     );
   }
@@ -1022,14 +1364,14 @@ function buildStepDirective(
       );
     }
     return (
-      `They reported success in Japanese only — cheer them on (EN then JP), teach "${phrase}" once${coachHint}, ` +
+      `They reported success in Japanese only — cheer them on (${LANG.pair}), teach "${phrase}" once${coachHint}, ` +
       `invite them to try it in English. Do not mark step done until English is spoken.`
     );
   }
 
   return (
-    `Reply warmly to what they said (EN then JP), then guide the next Minecraft move ` +
-    `and the English to say: "${phrase}". Keep it 1–3 short fun sentences, EN then JP. ` +
+    `Reply warmly to what they said (${LANG.pair}), then guide the next Minecraft move ` +
+    `and the English to say: "${phrase}". ${LANG.sentencesRule} ` +
     `Do NOT celebrate or say they got the phrase right unless the app recorded the step.`
   );
 }
@@ -1051,7 +1393,7 @@ export function buildNoAudioRecoveryNudge(userUtterance = "", quest = null, ques
   return (
     `[Speak now] ${mission}` +
     (transcript ? `Child said: "${transcript}". ` : "") +
-    `Reply in 1–2 short friendly sentences (EN then JP). Guide them to the NEXT step above.`
+    `Reply in 1–2 short friendly sentences (${LANG.pair}). Guide them to the NEXT step above.`
   );
 }
 
@@ -1059,7 +1401,7 @@ export function buildNoAudioRecoveryNudge(userUtterance = "", quest = null, ques
 export function buildUnclearInputRepeatNudge(userUtterance = "", quest = null, questIndex = null) {
   const mission = quest ? `${buildActiveMissionHeader(quest, questIndex ?? loadProgress())}. ` : "";
   return (
-    `[Speak now] ${mission}Could not hear clearly — ask them to say it again, gently and casually (1–2 sentences, EN then JP). ` +
+    `[Speak now] ${mission}Could not hear clearly — ask them to say it again, gently and casually (1–2 sentences, ${LANG.pair}). ` +
     `Do not advance steps or guess what they meant.`
   );
 }
@@ -1291,7 +1633,7 @@ function migrateLearnedPhrasesFromStepProgress() {
   const map = loadLearnedPhrasesMap();
   if (Object.keys(map).length) return;
 
-  const quests = LESSON_1_QUESTS;
+  const quests = ACTIVE_QUESTS;
   let changed = false;
   quests.forEach((quest, questIndex) => {
     const doneIds = loadCompletedStepIds(questIndex);
@@ -1319,7 +1661,7 @@ function migrateLearnedPhrasesFromStepProgress() {
 export function getLearnedPhrases() {
   migrateLearnedPhrasesFromStepProgress();
   const map = loadLearnedPhrasesMap();
-  const quests = LESSON_1_QUESTS;
+  const quests = ACTIVE_QUESTS;
 
   return Object.values(map).sort((a, b) => {
     if (a.questIndex !== b.questIndex) return a.questIndex - b.questIndex;
@@ -1477,17 +1819,25 @@ const IRON_TOOL_WORDS = new Set([
 const SIDE_MAKE_VERBS = new Set(["make", "craft", "build", "create"]);
 const SIDE_GET_VERBS = new Set(["get", "find", "have", "mine", "collect"]);
 
-/**
- * Secret side challenge for a quest (e.g. quest 8: collect 2+ iron OR make
- * an iron tool). Success passes anytime during the quest, any wording.
- */
-export function matchesQuestSideChallenge(quest, text) {
-  if (!quest?.sideChallenge?.id || !text?.trim()) return false;
-  if (!userTextHasEnglish(text)) return false;
+/** Extra prep items for the intermediate cave-prep side challenge (not torch/food). */
+const PREP_EXTRA_ITEMS = new Set([
+  "sword", "shield", "armor", "pickaxe", "axe", "shovel", "weapon",
+  "water", "bucket", "bed", "arrow", "bow", "helmet", "potion",
+  "ladder", "boat", "rope", "wood", "block",
+]);
+
+/** Feeling words for the advanced danger-moment side challenge. */
+const FEELING_WORDS = new Set([
+  "scared", "scary", "afraid", "surprised", "surprising", "nervous",
+  "creepy", "shocked", "excited", "terrified", "frightened",
+]);
+
+/** Question openers — an English question aimed at Learny. */
+const QUESTION_OPENER_RE =
+  /^(what|where|when|which|who|how|why|should|can|could|would|will|do you|does|is it|is this|are there|are you)\b/i;
+
+function matchIronSideChallenge(text) {
   if (isHostileOrOffTopicUtterance(text)) return false;
-
-  if (quest.sideChallenge.id !== "hidden_iron") return false;
-
   const chunks = [text, ...splitIntoClauses(text)];
   return chunks.some((chunk) => {
     if (textHasNegation(chunk) || textHasAspiration(chunk)) return false;
@@ -1508,6 +1858,77 @@ export function matchesQuestSideChallenge(quest, text) {
     const hasMany = words.includes("more") || words.includes("many") || words.includes("lots");
     return hasGet && (hasBigNumber || hasMany);
   });
+}
+
+function matchPrepExtraSideChallenge(text) {
+  if (isHostileOrOffTopicUtterance(text)) return false;
+  const chunks = [text, ...splitIntoClauses(text)];
+  return chunks.some((chunk) => {
+    if (textHasNegation(chunk)) return false;
+    const words = textWords(chunk);
+    if (!words.includes("need") && !words.includes("want")) return false;
+    return words.some((w) => PREP_EXTRA_ITEMS.has(w));
+  });
+}
+
+function matchDiamondSideChallenge(text) {
+  if (isHostileOrOffTopicUtterance(text)) return false;
+  const chunks = [text, ...splitIntoClauses(text)];
+  return chunks.some((chunk) => {
+    if (textHasNegation(chunk) || textHasAspiration(chunk)) return false;
+    const words = textWords(chunk);
+    if (!words.includes("diamond")) return false;
+    const hasGet = words.some((w) => SIDE_GET_VERBS.has(w));
+    return hasGet || words.includes("loot") || words.includes("best");
+  });
+}
+
+function matchQuestionSideChallenge(text) {
+  // An English question IS the success condition — deliberately no
+  // hostile/aspiration/negation filters (aspiration words like "should"
+  // are exactly what a question contains).
+  const chunks = [text.trim(), ...splitIntoClauses(text)];
+  return chunks.some((chunk) => {
+    const t = (chunk || "").trim();
+    if (!t || !userTextHasEnglish(t)) return false;
+    const wordCount = t.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 3) return false;
+    if (isHostileOrOffTopicUtterance(t)) return false;
+    return QUESTION_OPENER_RE.test(t) || /[?？]\s*$/.test(t);
+  });
+}
+
+function matchFeelingSideChallenge(text) {
+  if (isHostileOrOffTopicUtterance(text)) return false;
+  const chunks = [text, ...splitIntoClauses(text)];
+  return chunks.some((chunk) => {
+    if (textHasNegation(chunk)) return false;
+    // "wasn't scared" — global negation list lacks "wasnt", check locally.
+    if (/\bwasn'?t\b|\bnot\b/i.test(chunk)) return false;
+    const words = textWords(chunk);
+    return words.some((w) => FEELING_WORDS.has(w));
+  });
+}
+
+/** Per-badge side-challenge matchers, dispatched by sideChallenge.id. */
+const SIDE_CHALLENGE_MATCHERS = {
+  hidden_iron: matchIronSideChallenge,
+  hidden_prep_int: matchPrepExtraSideChallenge,
+  hidden_diamond_adv: matchDiamondSideChallenge,
+  hidden_question_adv: matchQuestionSideChallenge,
+  hidden_feeling_adv: matchFeelingSideChallenge,
+};
+
+/**
+ * Secret side challenge for a quest (e.g. beginner quest 8: collect 2+ iron
+ * OR make an iron tool). Success passes anytime during the quest, any wording.
+ */
+export function matchesQuestSideChallenge(quest, text) {
+  if (!quest?.sideChallenge?.id || !text?.trim()) return false;
+  if (!userTextHasEnglish(text)) return false;
+  const matcher = SIDE_CHALLENGE_MATCHERS[quest.sideChallenge.id];
+  if (!matcher) return false;
+  return matcher(text);
 }
 
 /**
@@ -1711,7 +2132,7 @@ export function buildHostileRedirectNudge(quest, userUtterance = "", questIndex 
   return (
     `[Speak now] ${mission} Child sounded upset or off-topic` +
     (transcript ? ` ("${transcript}")` : "") +
-    `. Respond kindly and casually (EN then JP) — no lecturing — then gently bring them back to the Minecraft step. ` +
+    `. Respond kindly and casually (${LANG.pair}) — no lecturing — then gently bring them back to the Minecraft step. ` +
     `${directive} Do NOT say mission complete or call complete_quest.`
   );
 }
@@ -1780,8 +2201,8 @@ export function buildWrongStepPhraseCorrectionNudge(
     `[Correction] ${mission} Step NOT recorded — child did NOT say the correct phrase` +
     (transcript ? ` (said "${transcript}")` : "") +
     `. Do NOT say they got "${phrase}" right — but stay warm, never disappointed. ` +
-    `Praise the try (EN then JP), then say "${phrase}" SLOWLY in small chunks and invite them to say it together (「一緒に言ってみよう」). ` +
-    `No pressure — if they struggle, reassure them (「ゆっくりでいいよ」). ` +
+    `Praise the try (${LANG.pair}), then say "${phrase}" SLOWLY in small chunks and invite them to say it together ${LANG.inviteTogether}. ` +
+    `No pressure — if they struggle, reassure them ${LANG.slowOk}. ` +
     `Do NOT say mission complete / ミッションクリア. ${QUEST_TRACKER_NO_REPEAT}`
   );
 }
@@ -1799,7 +2220,7 @@ export function buildJapaneseOnlyStepCorrectionNudge(
     `[Correction] ${mission} Child spoke Japanese only` +
     (transcript ? ` ("${transcript}")` : "") +
     `. Do NOT say they said the English phrase or mark the step done. ` +
-    `Cheer what they did in Minecraft (EN then JP), then say "${phrase}" SLOWLY in small chunks and gently invite them to try it in English (「一緒に言ってみよう」) — no pressure. ` +
+    `Cheer what they did in Minecraft (${LANG.pair}), then say "${phrase}" SLOWLY in small chunks and gently invite them to try it in English ${LANG.inviteTogether} — no pressure. ` +
     `Do NOT say mission complete / ミッションクリア.`
   );
 }
@@ -1813,7 +2234,7 @@ export function buildPrematureCompleteCorrectionNudge(quest, questIndex = loadPr
     `[Correction] ${mission} NOT complete — ${remaining.length} step(s) remain. ` +
     `Do NOT say mission complete / ミッションクリア. ` +
     `If you already gave an audible reply, do not repeat it. ` +
-    `Otherwise guide the next step once (EN then JP): ${directive}`
+    `Otherwise guide the next step once (${LANG.pair}): ${directive}`
   );
 }
 
@@ -1903,9 +2324,20 @@ export function buildQuestRejectedToolMessage(
 
 const SECRET_BADGE_ANNOUNCE_LINE =
   `THE SECRET BADGE IS THE HIGHLIGHT — make it a BIG dramatic surprise reveal, your most excited voice of the whole mission. ` +
-  `Build it up (e.g. "Wait... something special happened!" / 「じゃじゃーん！」), then say exactly: "Congrats! You earned a secret badge!!" ` +
-  `and in Japanese 「おめでとう！シークレットバッジゲットだよ！めったに取れないスペシャルバッジだよ、すごすぎる！」. ` +
+  `Build it up ${LANG.secretBuildUp}, then say exactly: "Congrats! You earned a secret badge!!" ` +
+  LANG.secretBadgeJa +
   `Make the child feel this is rare and amazing.`;
+
+/** Mid-mission side-challenge success (the app already showed the badge). */
+export function buildSideChallengeSecretBadgeNudge() {
+  return (
+    `[App verdict] SECRET CHALLENGE COMPLETE — the child just earned a secret badge (the app already showed it on screen). ` +
+    `This is a BIG deal — your most excited voice! Build it up like a surprise ${LANG.secretBuildUp}, ` +
+    `then say exactly: "Congrats! You earned a secret badge!!" ` +
+    LANG.secretBadgeJa +
+    `Then continue the current mission step.`
+  );
+}
 
 export function buildQuestRecordedToolMessage(
   quest,
@@ -1928,13 +2360,13 @@ export function buildQuestRecordedToolMessage(
   const quote = userQuote ? `The user said: "${userQuote}". ` : "";
   if (secretBadge) {
     return (
-      `${quote}Quest recorded. Cheer the mission win briefly (1 short sentence, EN then JP), ` +
+      `${quote}Quest recorded. Cheer the mission win briefly (1 short sentence, ${LANG.pair}), ` +
       `then ${SECRET_BADGE_ANNOUNCE_LINE} ` +
       `Then END your turn. Do not repeat or add a second congratulations.`
     );
   }
   return (
-    `${quote}Quest recorded. Give ONE brief celebration (1–2 sentences, EN then JP) for "${quest?.goal || ""}", ` +
+    `${quote}Quest recorded. Give ONE brief celebration (1–2 sentences, ${LANG.pair}) for "${quest?.goal || ""}", ` +
     `then END your turn. Do not repeat or add a second congratulations.`
   );
 }
@@ -1944,14 +2376,14 @@ export function buildQuestFarewellNudge(quest, userQuote, { secretBadge = false 
   if (secretBadge) {
     return (
       `${quote}Quest complete! Cheer their Minecraft win ("${quest?.goal || ""}") in 1 short sentence ` +
-      `(English first, then casual Japanese), then ${SECRET_BADGE_ANNOUNCE_LINE} ` +
+      `(${LANG.firstCasual}), then ${SECRET_BADGE_ANNOUNCE_LINE} ` +
       `Then END your turn. Do NOT repeat or give a second congratulations.`
     );
   }
   return (
     `${quote}Quest complete! Say ONE short fun celebration (1–2 sentences, buddy hype): ` +
     `connect to their Minecraft win ("${quest?.goal || ""}"), ` +
-    `English first, then casual Japanese. ` +
+    `${LANG.firstCasual}. ` +
     `Then END your turn. Do NOT repeat or give a second congratulations.`
   );
 }
@@ -1993,6 +2425,105 @@ export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
 ■安全: 不適切な話はやんわり断って、ミッションに戻す。`;
 
+export const INTERMEDIATE_FREE_CHAT_PROMPT = `あなたは「ゲームカレッジの先生：ラーニー先生（中級）」です。対象は日本の小学生。英語・Minecraftともに中級レベル。先生というより、「やりたい」を応援する相棒です。
+■言語バランス（毎ターン必須）
+・基本は英語80％、日本語20％。この比率を毎ターン守る。
+・まず英語で話し、毎ターン必ず最後に日本語のひとことを添える（例:「いいね！」「すごい！」）。
+・英語だけのターンはNG。日本語だけのターンもNG。
+■最重要
+・ユーザーが日本語で話した場合のみ必ず文の中の重要な単語を英語にして教える。
+・例：ユーザーが「家つくった！」といった場合、「家は英語で house って言うんだよ。」と教える。
+・ユーザーが英語で話しているときはしなくてよい。
+■発音
+・英語は必ずネイティブ風発音で話す。
+■会話の進め方
+・英語を教えるのは3回に2回くらい。
+・残りは共感・応援・雑談を優先する。
+・質問は1ターン1つまで。
+・Why質問は禁止。
+・見えていない状況を推測しない。
+・実況しない。
+■間違い対応ルール
+・ゆっくり言い直しを示す。
+・同じミスが2回続いたら、短く区切って練習する。
+■英単語だけ言った場合
+・英語で短く褒める。
+・日本語でも褒める。
+・会話をつなぐ質問を1つだけする。
+■キャラクター
+・明るく元気。
+■禁止事項
+・下ネタ、性的内容、いじめ、差別、危険行為、自傷行為の話題には乗らない。
+・短く止めて、安全な話題（Minecraftや英語）に戻す。
+■音声入力の言語認識（最重要）
+・ユーザーの音声入力は必ず日本語または英語として解釈すること
+・日本語と英語以外の言語として認識しないこと
+・ユーザーが話している言語が不明な場合は日本語として扱うこと`;
+
+export const INTERMEDIATE_VOICE_BASE_PROMPT = `あなたはゲームカレッジの「ラーニー先生（中級）」— 日本の小学生とマイクラ英語ミッションを一緒にクリアする、やさしくて元気な相棒。堅い先生・講義口調はNG。ゲーム仲間として楽しくリードする。
+
+■キャラ: 明るい・フレンドリー・テンポよく。「Nice!」「Let's go!」を自然に。子どもが話しかけやすい雰囲気。
+■話し方（必須）: 基本は英語80%・日本語20% — **この比率を毎ターン守る**。まず英語で短く話し（かんたんな言葉・ネイティブ風発音）、**毎ターン必ず最後に日本語のひとことを添える**（例:「いいね！」「やってみよう！」）。英語だけのターンはNG。日本語だけで話し続けるのもNG。**同じターンで同じ文・お祝いを2回言わない。**
+■日本語への対応: 子どもが日本語で話したときだけ、文の中の重要な単語を英語にして教える（例:「家つくった！」→「家は英語で house って言うんだよ」）。英語で話しているときはしなくてよい。
+■記号（絶対）: 「〇〇」「◯◯」「…」などの穴あき記号は絶対にそのまま発音しない。英語では具体例に置き換える（例:「I made a sword!」）、日本語で穴あきを言うなら「まるまる」と言う。
+■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「マイクラで次に何する？」「できたら何て言う？」を楽しそうに案内。迷ったらすぐ具体例。雑談→フレンドリーに返してすぐステップへ。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。
+■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく訂正。日本語だけ→喜んで→英文を1回教えて一緒に言ってみよう。
+■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める（「Nice try!」）。フレーズは**ゆっくり・小さく区切って**言ってあげる。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない。子どもがいつも安心して楽しめるように。
+■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■怒った・しぶるとき: やさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
+■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド。
+■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
+■安全: 不適切な話はやんわり断って、ミッションに戻す。`;
+
+export const ADVANCED_FREE_CHAT_PROMPT = `あなたは「ゲームカレッジの先生：ラーニー先生（上級）」。対象は日本の小学生〜中学生で、英語もMinecraftも上級。先生というより、英語で一緒に遊びながら会話を盛り上げる"相棒"。
+■言語
+・返答は英語100％。
+・日本語は使わない。
+・単語解説・翻訳・文法説明は基本しない。
+■最重要（目的）
+・英語を教えることより、相手が英語で話したくなる空気を作る。
+・テンポ・楽しさ・安心感・ノリを優先する。
+・会話が止まらないように、次の一歩につながる返しをする。
+■発音・話し方
+・英語はネイティブ風の自然なリズムで話す。
+・1ターンは短め（だいたい1〜3文）。
+・明るく元気。押しつけず、相手のテンションに合わせる。
+■会話の進め方（ルール）
+・質問は1ターンにつき1つまで。
+・Why質問は禁止。
+・見えていない状況を推測しない。
+・実況しない（今見えている前提で長く語らない）。
+・共感・応援・雑談を優先して、会話の勢いを作る。
+■間違い対応
+・意味が通じるなら止めずに進める。
+・通じない時だけ、自然に言い換えて流れを戻す。
+・ゆっくり言い直しを促すことはOKだが、講義はしない。
+・同じミスが続く場合も、短く区切って軽く練習にする（説明は最小限）。
+■単語だけの入力への対応
+・英語で短く褒める。
+・会話が続くように質問を1つだけ返す。
+■禁止事項・安全対応
+・下ネタ、性的内容、いじめ、差別、危険行為、自傷行為には乗らない。
+・短く止めて、Minecraftや安全な英語雑談に戻す。
+■音声入力の言語認識（最重要）
+・ユーザーの音声入力は必ず日本語または英語として解釈すること
+・日本語と英語以外の言語として認識しないこと
+・ユーザーが話している言語が不明な場合は日本語として扱うこと`;
+
+export const ADVANCED_VOICE_BASE_PROMPT = `あなたはゲームカレッジの「ラーニー先生（上級）」— 英語が得意な日本の小学生〜中学生とマイクラ英語ミッションを一緒にクリアする"相棒"。先生というより、英語で一緒に遊びながら会話を盛り上げる仲間。
+
+■キャラ: 明るく元気。押しつけず、相手のテンションに合わせる。"Nice!" "Let's go!" を自然に。
+■話し方（必須）: 返答は英語100%。日本語は絶対に使わない。単語解説・翻訳・文法説明はしない。英語はネイティブ風の自然なリズムで、1ターンは短め（1〜3文）。**同じターンで同じ文・お祝いを2回言わない。**
+■記号（絶対）: 「〇〇」「◯◯」「…」などの穴あき記号は絶対にそのまま発音しない。必ず具体例に置き換える（例: "I got diamonds!"）。
+■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「次に何する？」「できたら何て言う？」を英語で楽しく案内。迷ったらすぐ具体例。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。会話が止まらないように、次の一歩につながる返しをする。
+■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく言い換えて流れを戻す。日本語だけ→英語で明るく返して、英文を1回モデルして誘う（"Try saying: ..."）。
+■まちがえたとき（やさしさ優先）: がっかりした声・ダメ出しをしない。意味が通じるなら止めずに進める。通じない時だけ "Nice try!" から、フレーズを**ゆっくり・小さく区切って**言ってあげて "Let's say it together!" と誘う — 命令・強制はしない。講義はしない。
+■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（英語で、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■怒った・しぶるとき: 英語でやさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
+■無言/聞き取れず: 推測しない。英語でカジュアルに聞き返すか、次の一手をリマインド。
+■言語認識（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。Your replies are ALWAYS English only.
+■安全: 不適切な話はやんわり断って、ミッションに戻す。`;
+
 export function buildQuestOpeningNudge(quest, questIndex = loadProgress()) {
   if (!quest) return "";
   const firstStep = quest.steps?.[0];
@@ -2006,10 +2537,10 @@ export function buildQuestOpeningNudge(quest, questIndex = loadProgress()) {
       : "";
   return (
     `${mission}\n` +
-    `You open the call — speak first (2–3 short fun sentences, audio). Warm buddy energy. English first, then Japanese.\n` +
+    `You open the call — speak first (2–3 short fun sentences, audio). Warm buddy energy. ${LANG.openerLangLine}\n` +
     `1) Hype the Minecraft action NOW: ${playLead}\n` +
     phraseLine +
-    `3) End cheerfully — e.g. 「やってみよう！」 / "Let's go!" — and listen.`
+    `3) End cheerfully — e.g. ${LANG.openerEnd} — and listen.`
   );
 }
 
@@ -2028,15 +2559,19 @@ export function buildQuestInstructions(basePrompt, quest, questIndex = null) {
 
   const block = [
     "",
-    `■ミッション ${missionNum}/${LESSON_1_QUESTS.length}: ${quest.titleEn || quest.title}`,
+    `■ミッション ${missionNum}/${ACTIVE_QUESTS.length}: ${quest.titleEn || quest.title}`,
     `■ゴール: ${quest.goal}`,
     "■ステップ（この順番で1つずつチャレンジ）:",
     ...stepLines,
     "■進め方: 1つずつ。楽しくナビ→マイクラの行動→成功時の英文を言わせる→アプリの判定を待つ。判定が来たらお祝い→次のチャレンジを声で案内。",
     "■判定（絶対）: ステップの達成判定はアプリが行う。[App verdict] STEP COMPLETE が来たステップだけが完了。自分でステップ完了・クリアを判断しない。判定が来ていないのに「できたね」「ステップクリア」と言わない。",
-    "■話し方: 英語→日本語。かんたん・元気・友だち口調。1回の返事は短く（ひと息で言える長さ）。堅い敬語・講義口調は避ける。",
+    LANG.speakStyleLine,
     "■禁止: ステップ残りでクリア宣言。complete_quest前のお祝い。次ミッションの話。同じ英文の連続リピート。子どもの怒り・拒否を完了とみなすこと。",
   ];
+
+  if (quest.aiNotes?.length) {
+    block.push(`■このミッションの注意: ${quest.aiNotes.join("／")}`);
+  }
 
   if (quest.quizFirst) {
     block.push(
@@ -2075,14 +2610,55 @@ export function userHintsStepSuccessInJapanese(text, step) {
   return hints.some((hint) => text.includes(hint));
 }
 
+/** Per-level prompt set (mission base prompt, free-chat prompt, spoken tone). */
+const LEVEL_PROMPTS = {
+  beginner: {
+    base: BEGINNER_VOICE_BASE_PROMPT,
+    freeChat: BEGINNER_FREE_CHAT_PROMPT,
+    tone: LEARNY_FRIENDLY_TONE,
+  },
+  intermediate: {
+    base: INTERMEDIATE_VOICE_BASE_PROMPT,
+    freeChat: INTERMEDIATE_FREE_CHAT_PROMPT,
+    tone: INTERMEDIATE_FRIENDLY_TONE,
+  },
+  advanced: {
+    base: ADVANCED_VOICE_BASE_PROMPT,
+    freeChat: ADVANCED_FREE_CHAT_PROMPT,
+    tone: ADVANCED_FRIENDLY_TONE,
+  },
+};
+
+export function getLevelBasePrompt() {
+  return LEVEL_PROMPTS[ACTIVE_LEVEL.id].base;
+}
+
+export function getLevelFreeChatPrompt() {
+  return LEVEL_PROMPTS[ACTIVE_LEVEL.id].freeChat;
+}
+
+/** UI metadata for the active level (label, lesson title, badge image, etc.). */
+export function getActiveLevelInfo() {
+  return {
+    id: ACTIVE_LEVEL.id,
+    headerLabel: ACTIVE_LEVEL.headerLabel,
+    lessonTitle: ACTIVE_LEVEL.lessonTitle,
+    mainBadgeId: ACTIVE_LEVEL.mainBadgeId,
+    badgeImage: ACTIVE_LEVEL.badgeImage,
+    firestoreField: ACTIVE_LEVEL.firestoreField,
+    questCount: ACTIVE_QUESTS.length,
+  };
+}
+
 export function buildSessionInstructions(selectedQuest, questIndex = null) {
-  const tone = `\n■トーン: ${LEARNY_FRIENDLY_TONE}`;
-  if (!selectedQuest) return `${BEGINNER_FREE_CHAT_PROMPT}${tone}`;
+  const prompts = LEVEL_PROMPTS[ACTIVE_LEVEL.id];
+  const tone = `\n■トーン: ${prompts.tone}`;
+  if (!selectedQuest) return `${prompts.freeChat}${tone}`;
   const idx =
     Number.isFinite(questIndex) && questIndex >= 0
       ? questIndex
       : getQuestIndex(selectedQuest);
-  return buildQuestInstructions(`${BEGINNER_VOICE_BASE_PROMPT}${tone}`, selectedQuest, idx);
+  return buildQuestInstructions(`${prompts.base}${tone}`, selectedQuest, idx);
 }
 
 /** Short per-turn directive — mission state + one action for Learny. */
@@ -2171,7 +2747,7 @@ export function buildChallengeResultNudge(
       ` When praising, react to the child's OWN words — never claim they said the example phrase if they used different words.`,
     next
       ? `Next challenge: ${next.label} — "${getStepSpokenPhrase(next)}". ` +
-        `If you have not reacted yet: cheer once (1 short sentence) and introduce the next challenge by voice (EN then JP). ` +
+        `If you have not reacted yet: cheer once (1 short sentence) and introduce the next challenge by voice (${LANG.pair}). ` +
         `If you already cheered, only introduce the next challenge once.`
       : `All steps recorded — call complete_quest now, then celebrate once.`,
     QUEST_TRACKER_NO_REPEAT,
@@ -2196,8 +2772,8 @@ export function buildChallengeEchoCoachNudge(
     `[App verdict] ${mission} The child has tried this challenge twice without the phrase being caught` +
     (utterance ? ` (last try: "${utterance}")` : "") +
     `. Do NOT say they failed and do NOT mark anything done — they are trying hard, so make them feel cared for. ` +
-    `Reassure them first (「だいじょうぶ、ゆっくりいこう！」), then say the phrase slowly ONCE, broken into small chunks: "${phrase}" — ` +
-    `and warmly invite them to repeat after you (「まねして言ってみて！」). Never sound frustrated, never force. ` +
-    `1–2 short sentences, EN then JP. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
+    `Reassure them first ${LANG.echoReassure}, then say the phrase slowly ONCE, broken into small chunks: "${phrase}" — ` +
+    `and warmly invite them to repeat after you ${LANG.echoInvite}. Never sound frustrated, never force. ` +
+    `1–2 short sentences, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
   );
 }
