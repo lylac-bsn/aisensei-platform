@@ -34,6 +34,10 @@ export class AudioStreamer {
     this.voiceGateHangoverMs = 2600;
     this.voiceGatePreRollChunks = 2; // ~512ms replayed on speech onset
     this.voiceGateMinThreshold = 0.01;
+    // Ambient noise (game audio on speakers) raises the adaptive floor; cap
+    // the resulting threshold so a child's normal voice can always open the
+    // gate — an uncapped threshold silently swallowed whole turns.
+    this.voiceGateMaxThreshold = 0.04;
     this.voiceGateFloorFactor = 3;
     this._gateNoiseFloor = 0.004;
     this._gateLastVoiceAt = 0;
@@ -128,9 +132,12 @@ export class AudioStreamer {
       sumSquares += inputData[i] * inputData[i];
     }
     const rms = Math.sqrt(sumSquares / inputData.length);
-    const threshold = Math.max(
-      this.voiceGateMinThreshold,
-      this._gateNoiseFloor * this.voiceGateFloorFactor
+    const threshold = Math.min(
+      this.voiceGateMaxThreshold,
+      Math.max(
+        this.voiceGateMinThreshold,
+        this._gateNoiseFloor * this.voiceGateFloorFactor
+      )
     );
 
     const now = Date.now();

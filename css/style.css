@@ -2630,6 +2630,171 @@ body.page-dashboard .user-dashboard {
     }
 }
 
+/* =================================
+   7b. Responsive dashboard layout
+   Keeps the dashboard usable on small, short, or scaled desktop screens.
+   Placed late in the file on purpose so these rules win the cascade.
+   ================================= */
+
+/* Re-assert the dashboard grid: generic .main-content-grid media rules above
+   (450px/700px two-panel layout) would otherwise override it below 1400px.
+   Also let the chat row fill whatever space is actually left under the
+   header, instead of relying on a hardcoded header height that breaks when
+   the header wraps taller (long names, OS display scaling, narrow windows). */
+.main-content-grid--dashboard {
+    grid-template-columns: minmax(0, 1.75fr) minmax(220px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: clamp(0.75rem, 1.5vw, 1.5rem);
+    padding: var(--dashboard-top-inset, clamp(1.25rem, 2.2vh, 1.75rem))
+             var(--dashboard-side-inset, clamp(1rem, 2vw, 1.75rem))
+             var(--dashboard-bottom-inset, clamp(1.75rem, 3.5vh, 2.75rem));
+}
+
+body.page-dashboard #app-content.chat-column,
+body:has(.main-content-grid--dashboard) #app-content.chat-column {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+}
+
+body.page-dashboard .user-dashboard {
+    height: auto;
+    min-height: 0;
+    max-height: 100%;
+}
+
+/* Sidebar scrolls instead of clipping when it is taller than the screen. */
+.user-dashboard {
+    justify-content: flex-start;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* The sidebar is now a scroll container, so panels anchored inside it would
+   scroll out of view. Show every panel as a fixed, centered modal instead
+   (missions / badges / instructions already worked this way). */
+.dashboard-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(380px, calc(100vw - 2rem));
+    max-height: min(calc(100dvh - 4rem), 520px);
+    z-index: 40;
+    animation: panel-pop-center 0.22s ease-out;
+}
+
+.dashboard-sidebar-stack {
+    /* Vertically centered when it fits; top-aligned + scrollable when not. */
+    margin: auto;
+    padding: 0.25rem 0;
+}
+
+/* Short screens: keep the action buttons (mission, phrases, ...) visible by
+   moving the tips note last — it becomes the part that scrolls off instead. */
+@media (max-height: 1020px) {
+    .dashboard-sidebar-stack .dashboard-tips-note {
+        order: 10;
+    }
+}
+
+/* Short screens: tighten the sidebar so everything is more likely to fit. */
+@media (max-height: 760px) {
+    .dashboard-sidebar-stack {
+        gap: 0.75rem;
+    }
+    .dashboard-tips-note {
+        padding: 0.85rem 0.9rem 0.75rem 1rem;
+    }
+    .dashboard-tips-note__list li {
+        line-height: 1.45;
+    }
+}
+
+/* Mid-size screens: keep two columns (a generic .main-content-grid rule
+   above would otherwise collapse the dashboard to one clipped column). */
+@media (max-width: 1024px) {
+    .main-content-grid--dashboard {
+        grid-template-columns: minmax(0, 1.6fr) minmax(200px, 250px);
+        gap: 1rem;
+    }
+    .header-welcome {
+        white-space: normal;
+    }
+}
+
+/* Narrow screens: stack chat above the sidebar and let the page scroll. */
+@media (max-width: 860px) {
+    /* Stack the header too; the centered pills would overlap the buttons. */
+    header.app-header .app-header__main {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 1.35rem 1.25rem;
+        min-height: auto;
+    }
+    header.app-header .header-brand {
+        align-self: flex-start;
+        height: 54px;
+    }
+    header.app-header .header-center {
+        position: static;
+        transform: none;
+        width: 100%;
+        max-width: none;
+        align-items: center;
+        text-align: center;
+        pointer-events: auto;
+    }
+    .header-welcome {
+        white-space: normal;
+        text-align: center;
+    }
+    header.app-header .header-status-row {
+        justify-content: center;
+    }
+    header.app-header .header-actions {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    body.page-dashboard,
+    body:has(.main-content-grid--dashboard) {
+        height: auto;
+        min-height: 100dvh;
+        overflow: auto;
+    }
+    body.page-dashboard #app-view,
+    body:has(.main-content-grid--dashboard) #app-view {
+        height: auto;
+        min-height: 100dvh;
+        overflow: visible;
+    }
+    .main-content-grid--dashboard {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: none;
+        gap: 1rem;
+    }
+    body.page-dashboard #app-content.chat-column,
+    body:has(.main-content-grid--dashboard) #app-content.chat-column {
+        height: min(72dvh, 640px);
+        min-height: 420px;
+        max-height: none;
+    }
+    body.page-dashboard .user-dashboard,
+    .main-content-grid--dashboard .user-dashboard {
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
+    }
+    .dashboard-sidebar-stack {
+        max-width: min(420px, 100%);
+        margin: 0 auto;
+    }
+}
+
 @media (max-width: 480px) {
     #login-view {
         grid-template-columns: 2fr 3fr;

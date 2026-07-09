@@ -1394,12 +1394,17 @@
         let chatMessages = [];
         let assistantThinkingRow = null;
         const MAX_MESSAGES = 20;
-        const NO_AUDIO_RECOVERY_FIRST_MS = 1600;
-        const NO_AUDIO_RECOVERY_RETRY_MS = 2800;
+        // Normal Live API first-audio latency is 1.5-3s (longer right after an
+        // app-injected nudge restarts generation). Firing recovery inside that
+        // window cancels a healthy in-flight reply and compounds the delay, so
+        // these must sit comfortably above real-world latency.
+        const NO_AUDIO_RECOVERY_FIRST_MS = 3500;
+        const NO_AUDIO_RECOVERY_RETRY_MS = 5000;
         const MAX_NO_AUDIO_RECOVERY_ATTEMPTS = 2;
         // Last resort after recovery nudges fail: assume the session is dead
-        // (socket open but server silent) and force a reconnect.
-        const DEAD_SESSION_RESTART_MS = 4000;
+        // (socket open but server silent) and force a reconnect. Reconnecting
+        // mid-conversation costs seconds of dead air, so keep it truly last.
+        const DEAD_SESSION_RESTART_MS = 8000;
         const POST_BARGE_IN_WATCHDOG_MS = 1800;
         const POST_BARGE_IN_RECOVERY_MS = 900;
         const STALE_ASSISTANT_OUTPUT_MS = 400;
@@ -2262,7 +2267,7 @@
 
             const elapsed = Date.now() - awaitingAssistantSince;
             const baseDelay = stepCompleted
-                ? 1500
+                ? 2500
                 : postBargeIn
                   ? POST_BARGE_IN_RECOVERY_MS
                   : unclear
@@ -2282,6 +2287,13 @@
                 // Model is already generating (just slow to reach audio) —
                 // injecting a nudge now would produce a duplicate reply.
                 if (assistantTurnOpen) {
+                    ensureNoAudioRecoveryScheduled({ unclear });
+                    return;
+                }
+                // A steering nudge we sent moments ago restarted generation;
+                // injecting again now would cancel that reply and start the
+                // interrupt cascade this watchdog is meant to prevent.
+                if (Date.now() - lastAppSteeringInjectAt < 3000) {
                     ensureNoAudioRecoveryScheduled({ unclear });
                     return;
                 }
@@ -2402,8 +2414,10 @@
             }
 
             const current = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0] || null;
+            // After ONE miss on the same step, the next try is judged leniently
+            // (verb+object keywords, sound-alike words OK) — fun over precision.
             const lenient = Boolean(
-                current && challengeMissStepId === current.id && challengeMissCount >= 2
+                current && challengeMissStepId === current.id && challengeMissCount >= 1
             );
             const newly = applyUtteranceToChallenge(activeQuest, utterance, activeQuestSessionIndex, {
                 lenient,
@@ -3738,6 +3752,12 @@
         }
 
         function buildSilenceProactivePrompt() {
+            const langTail =
+                LEVEL_INFO.id === 'advanced'
+                    ? 'English only'
+                    : LEVEL_INFO.id === 'intermediate'
+                      ? 'mostly EN, short JP tag'
+                      : 'EN then JP';
             let proactivePrompt =
                 "[Speak now] The child has been quiet for 30 seconds. " +
                 "You MUST respond with audible speech now (do not stay silent). " +
@@ -3746,10 +3766,11 @@
                 proactivePrompt =
                     `${buildActiveMissionHeader(activeQuest, activeQuestSessionIndex)}\n` +
                     proactivePrompt +
-                    "Gently check in about the current Minecraft step and English phrase — friendly buddy tone (1–2 sentences, EN then JP).";
+                    "The conversation paused, so NOW is the natural moment to gently invite them back to the mission — " +
+                    `casual and light ("By the way, wanna try the next step?"), never pushy (1–2 sentences, ${langTail}).`;
             } else {
                 proactivePrompt +=
-                    "Check in with one fun Minecraft tip — casual and upbeat (1–2 sentences, EN then JP).";
+                    `Check in with one fun Minecraft tip — casual and upbeat (1–2 sentences, ${langTail}).`;
             }
             return proactivePrompt;
         }
@@ -3881,14 +3902,16 @@
                         userTurnOverlappedAssistant = false;
                         const allowTurn = !isMuted || userBargeInThisTurn;
                         if (allowTurn) {
-                            const unclear = handleFinishedUserTranscript();
-                            if (!unclear) {
-                                const utterance = getLatestFinishedUserUtterance();
-                                if (overlappedAssistant && isLikelyAssistantEchoUtterance(utterance)) {
-                                    dbg('quest match skipped: likely mic echo of Learny', { utterance });
-                                } else {
-                                    maybeMatchQuestFromTranscript(true);
-                                }
+                            const utterance = getLatestFinishedUserUtterance();
+                            if (overlappedAssistant && isLikelyAssistantEchoUtterance(utterance)) {
+                                // Speaker echo of Learny's own voice, not a real
+                                // user turn. Skip the whole turn machinery —
+                                // arming recovery nudges here injected turns the
+                                // child never spoke and stalled the session.
+                                dbg('user turn skipped: likely mic echo of Learny', { utterance });
+                            } else {
+                                const unclear = handleFinishedUserTranscript();
+                                if (!unclear) maybeMatchQuestFromTranscript(true);
                             }
                         }
                         userBargeInThisTurn = false;
@@ -4061,7 +4084,11 @@
 
                 case MultimodalLiveResponseType.INTERRUPTED:
                     assistantTurnOpen = false;
-                    const appCausedInterrupt = Date.now() - lastAppSteeringInjectAt < 900;
+                    // The server's INTERRUPTED frame for our own steering inject
+                    // can arrive well over a second later; misreading it as a
+                    // child barge-in kills playback and leaves dead air. Real
+                    // barge-ins are handled separately via INPUT_TRANSCRIPTION.
+                    const appCausedInterrupt = Date.now() - lastAppSteeringInjectAt < 2000;
                     dbg('interrupted', { appCausedInterrupt });
                     if (!appCausedInterrupt) {
                         userBargeInThisTurn = true;

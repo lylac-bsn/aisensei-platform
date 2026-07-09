@@ -824,6 +824,32 @@ const STEP_REQUIRES_COMPLETION = new Set([
   "did_today",
 ]);
 
+/**
+ * Open-object steps — the child names THEIR OWN item ("I got 〇〇!", "I found
+ * 〇〇!"). Any content word counts as the object; the pattern-derived object
+ * allowlist must NOT gate these (a kid whose best loot is a sakura tree says
+ * "I found sakura tree!" and that has to tick).
+ */
+const STEP_OPEN_OBJECT = new Set([
+  // Intermediate
+  "report_change",
+  "found_useful",
+  "report_made_or_found",
+  // Advanced
+  "best_loot",
+  "did_today",
+]);
+
+/**
+ * Open-reason steps — the child gives ANY short reason/judgment ("It was
+ * useful!", "because it's cute!"). Fixed patterns still match first; a
+ * "because ..." clause or "it was/is <something>" also counts.
+ */
+const STEP_OPEN_REASON = new Set([
+  // Advanced
+  "why_good",
+]);
+
 /** Open-ended intent steps — "I want to / I will ..." IS the success phrase. */
 const STEP_ALLOWS_ASPIRATION = new Set([
   "decide_action",
@@ -1005,6 +1031,41 @@ function textHasAllowlistedObject(text, step) {
   }
   const words = textWords(text);
   return words.some((word) => objects.has(word));
+}
+
+/** Any non-filler, non-verb content word — the child named SOMETHING. */
+function textHasAnyContentObject(text, step) {
+  const verbs = stepCompletionVerbWords(step);
+  return textWords(text).some(
+    (word) => !FILLER_TOKENS.has(word) && !verbs.has(word) && !isVerbToken(word)
+  );
+}
+
+const LINKING_VERBS = new Set(["is", "was", "are", "were", "be", "been", "am"]);
+
+/** A real action verb from the step's completion list ("found", "placed" — not "was"/"is"). */
+function textHasActionCompletionVerb(text, step) {
+  const verbs = stepCompletionVerbWords(step);
+  if (!verbs.size) return false;
+  return textWords(text).some((word) => verbs.has(word) && !LINKING_VERBS.has(word));
+}
+
+const OPEN_REASON_SUBJECTS = new Set(["it", "its", "this", "that", "they", "these"]);
+const OPEN_REASON_LINKS = new Set(["is", "was", "are", "were", "looks", "looked"]);
+
+/** Free-form reason ("because it's cute", "it was pretty") for open-reason steps. */
+function matchesOpenReason(text) {
+  const words = textWords(text);
+  if (!words.length) return false;
+  const hasContent = words.some(
+    (word) => !FILLER_TOKENS.has(word) && !isVerbToken(word) && word !== "because"
+  );
+  if (!hasContent) return false;
+  if (words.includes("because")) return true;
+  return (
+    words.some((w) => OPEN_REASON_SUBJECTS.has(w)) &&
+    words.some((w) => OPEN_REASON_LINKS.has(w))
+  );
 }
 
 /** Words that negate an action — the child is saying it did NOT happen. */
@@ -1333,8 +1394,9 @@ function buildStepDirective(
   if (wrongAttempt) {
     return (
       `Wrong phrase — step NOT recorded. Do NOT say they got "${phrase}" right, but do NOT sound disappointed either. ` +
-      `Praise the try first (e.g. "${LANG.niceTry}"), then say "${phrase}" SLOWLY, broken into small chunks${coachHint}. ` +
-      `Invite softly — ${LANG.inviteTogetherExcl} — never pressure or demand a retry.`
+      `React to what THEY actually said first, and praise the try in fresh words — vary your phrasing every time, ` +
+      `never open with the same line (like "${LANG.niceTry}") twice in a call. Then weave "${phrase}" in naturally, slowly, in small chunks${coachHint}. ` +
+      `Invite softly — ${LANG.inviteTogetherExcl} — never pressure or demand a retry. Sound like a playful friend, not a script.`
     );
   }
 
@@ -1370,9 +1432,10 @@ function buildStepDirective(
   }
 
   return (
-    `Reply warmly to what they said (${LANG.pair}), then guide the next Minecraft move ` +
+    `Reply warmly to what they said (${LANG.pair}). If they brought up their own topic, chat about THAT first — ` +
+    `their topic always wins, keep the conversation fun and natural. Only when it fits smoothly, guide the next Minecraft move ` +
     `and the English to say: "${phrase}". ${LANG.sentencesRule} ` +
-    `Do NOT celebrate or say they got the phrase right unless the app recorded the step.`
+    `Never force the mission or the phrase. Do NOT celebrate or say they got the phrase right unless the app recorded the step.`
   );
 }
 
@@ -1393,7 +1456,8 @@ export function buildNoAudioRecoveryNudge(userUtterance = "", quest = null, ques
   return (
     `[Speak now] ${mission}` +
     (transcript ? `Child said: "${transcript}". ` : "") +
-    `Reply in 1–2 short friendly sentences (${LANG.pair}). Guide them to the NEXT step above.`
+    `Reply in 1–2 short friendly sentences (${LANG.pair}) to what THEY said — if they brought up their own topic, ` +
+    `chat about that and do NOT mention the mission. Only guide the next step if they asked what to do or said nothing.`
   );
 }
 
@@ -1406,6 +1470,160 @@ export function buildUnclearInputRepeatNudge(userUtterance = "", quest = null, q
   );
 }
 
+// ---------------------------------------------------------------------------
+// Phonetic tolerance — kids' speech gets mis-transcribed ("furnace" → "face" /
+// "phrase"). If a word SOUNDS like the target word, count it. Fun > precision.
+// ---------------------------------------------------------------------------
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function isSubsequence(short, long) {
+  let i = 0;
+  for (const ch of long) {
+    if (ch === short[i]) i++;
+    if (i === short.length) return true;
+  }
+  return i === short.length;
+}
+
+/** Rough sound skeleton: leading sound + consonants (STT noise collapses vowels). */
+function phoneticSkeleton(word) {
+  let w = (word || "")
+    .toLowerCase()
+    .replace(/['']/g, "")
+    .replace(/ph/g, "f")
+    .replace(/wh/g, "w")
+    .replace(/ck/g, "k")
+    .replace(/qu/g, "kw")
+    .replace(/x/g, "ks")
+    .replace(/c(?=[eiy])/g, "s")
+    .replace(/c/g, "k")
+    .replace(/z/g, "s")
+    .replace(/(.)\1+/g, "$1");
+  const first = w[0] || "";
+  const rest = w.slice(1).replace(/[aeiouyhw]/g, "").replace(/(.)\1+/g, "$1");
+  return first + rest;
+}
+
+/** True when two English words plausibly sound alike (STT confusion). */
+export function soundsSimilar(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length < 3 || b.length < 3) return false;
+  const sa = phoneticSkeleton(a);
+  const sb = phoneticSkeleton(b);
+  if (!sa || !sb || sa[0] !== sb[0]) return false;
+  if (sa === sb) return true;
+  if (levenshtein(sa, sb) <= 1) return true;
+  // Dropped syllables: one skeleton contained in the other ("face"→fs ⊂ frns).
+  const [short, long] = sa.length <= sb.length ? [sa, sb] : [sb, sa];
+  if (short.length >= 2 && isSubsequence(short, long)) return true;
+  return levenshtein(a, b) / Math.max(a.length, b.length) <= 0.34;
+}
+
+/** Small words that carry no meaning for fuzzy pattern matching. */
+const FUZZY_STOP_WORDS = new Set([
+  "i", "im", "my", "me", "it", "its", "this", "that", "these", "those",
+  "is", "was", "are", "am", "be", "been", "and", "or", "so", "to", "of",
+  "in", "on", "at", "for", "we", "you", "he", "she", "they", "let", "lets",
+  "please", "now", "yes", "ok", "okay", "there",
+]);
+
+/** Verbs not covered by VERB_FORMS that must still match exactly (too short to fuzz). */
+const FUZZY_EXACT_VERBS = new Set([
+  "have", "has", "had", "put", "place", "placed", "need", "needed",
+  "want", "wanted", "go", "went", "going", "say", "said", "think",
+]);
+
+function isVerbKey(word) {
+  return Object.prototype.hasOwnProperty.call(VERB_FORMS, word) || FUZZY_EXACT_VERBS.has(word);
+}
+
+function patternContentWords(pattern) {
+  return normalizeEnglishForMatching(pattern)
+    .split(/\s+/)
+    .filter((w) => w && w.length >= 2 && !FUZZY_STOP_WORDS.has(w));
+}
+
+/**
+ * Sound-alike step matching: every content word of one pattern (e.g. "made
+ * furnace") is heard in the utterance — verbs exactly (canonicalized, so
+ * made→make), nouns exactly OR as a similar-sounding word ("face"≈"furnace").
+ * Each key must consume a distinct utterance word, and only multi-word
+ * patterns qualify — single keywords are too easy to false-match.
+ */
+function matchesStepPhonetic(text, step) {
+  if (!text?.trim() || !step?.patterns?.length) return false;
+  if (!userTextHasEnglish(text)) return false;
+  if (textHasNegation(text)) return false;
+  if (
+    STEP_REQUIRES_COMPLETION.has(step.id) &&
+    !STEP_ALLOWS_ASPIRATION.has(step.id) &&
+    textHasAspiration(text)
+  ) {
+    return false;
+  }
+
+  // Pool of utterance words. Raw words join because normalization maps
+  // "two"→"2", hiding sound-alikes of "tool". Verb words are flagged: verbs
+  // may only be matched exactly, and never serve as fuzzy targets for nouns
+  // ("found" must not pass as "food").
+  const seen = new Set();
+  const pool = [];
+  const addWord = (word) => {
+    if (!word || seen.has(word)) return;
+    seen.add(word);
+    pool.push({ word, isVerbWord: isVerbKey(word) });
+  };
+  for (const w of textWords(text)) addWord(w);
+  for (const w of normalizeText(text).split(/\s+/)) addWord(w);
+  if (!pool.length) return false;
+
+  for (const pattern of step.patterns) {
+    if (!isEnglishPattern(pattern)) continue;
+    const keys = patternContentWords(pattern);
+    if (keys.length < 2) continue;
+
+    const used = new Set();
+    let allKeysHeard = true;
+    for (const key of keys) {
+      const keyIsVerb = isVerbKey(key);
+      const idx = pool.findIndex(({ word, isVerbWord }, i) => {
+        if (used.has(i)) return false;
+        if (word === key) return true;
+        if (keyIsVerb || isVerbWord) return false;
+        return soundsSimilar(word, key);
+      });
+      if (idx === -1) {
+        allKeysHeard = false;
+        break;
+      }
+      used.add(idx);
+    }
+    if (allKeysHeard) return true;
+  }
+  return false;
+}
+
 /**
  * Lenient step matching: the utterance passes if ANY clause of it contains the
  * step phrase (flexible wording) or the step's verb+object keywords. Guards
@@ -1415,7 +1633,9 @@ export function buildUnclearInputRepeatNudge(userUtterance = "", quest = null, q
 export function matchesStep(text, step) {
   if (!step?.patterns?.length) return false;
   const candidates = [text, ...splitIntoClauses(text)];
-  return candidates.some((chunk) => matchesStepChunk(chunk, step));
+  if (candidates.some((chunk) => matchesStepChunk(chunk, step))) return true;
+  // Wording didn't line up — accept if it SOUNDS like the phrase (STT noise).
+  return candidates.some((chunk) => matchesStepPhonetic(chunk, step));
 }
 
 function matchesStepChunk(text, step) {
@@ -1427,10 +1647,28 @@ function matchesStepChunk(text, step) {
   const patternMatched = step.patterns.some((pattern) =>
     matchesPhrase(text, pattern, { ignoreAspiration })
   );
-  const salientMatched = !patternMatched && matchesStepSalient(text, step);
-  if (!patternMatched && !salientMatched) return false;
+  const openReasonMatched =
+    !patternMatched && STEP_OPEN_REASON.has(step.id) && matchesOpenReason(text);
+  // Open-object report steps: action verb + ANY named object counts
+  // ("I placed a jukebox", "I found amethyst") — the kid reports their own thing.
+  const openObjectMatched =
+    !patternMatched &&
+    !openReasonMatched &&
+    STEP_OPEN_OBJECT.has(step.id) &&
+    textHasActionCompletionVerb(text, step) &&
+    textHasAnyContentObject(text, step);
+  const salientMatched =
+    !patternMatched && !openReasonMatched && !openObjectMatched &&
+    matchesStepSalient(text, step);
+  if (!patternMatched && !openReasonMatched && !openObjectMatched && !salientMatched) {
+    return false;
+  }
   if (STEP_REQUIRES_COMPLETION.has(step.id) && !textHasCompletionVerb(text, step)) return false;
-  if (
+  if (STEP_OPEN_OBJECT.has(step.id)) {
+    // Open-object steps: the kid names their OWN item — any content word
+    // counts ("I found sakura tree!"), but a bare verb ("I built") does not.
+    if (!textHasAnyContentObject(text, step)) return false;
+  } else if (
     STEP_REQUIRES_COMPLETION.has(step.id) &&
     getStepObjectAllowlist(step).size &&
     !textHasAllowlistedObject(text, step)
@@ -1452,8 +1690,22 @@ export function userMissedEnglishStepPhrase(text, step) {
   if (!stepRequiresEnglish(step)) return false;
   if (!userTextHasEnglish(text)) return false;
   if (matchesStep(text, step)) return false;
-  if (STEP_REQUIRES_COMPLETION.has(step.id) && textHasAspiration(text)) return false;
-  if (!textHasCompletionVerb(text, step)) return false;
+  // Desires, plans, and questions ("I want to build a house", "can we
+  // explore?") are the child talking, not a botched attempt at the step
+  // phrase — coach-correcting them made Learny feel pushy. Only steps whose
+  // target phrase itself is an aspiration treat "I want ..." as an attempt.
+  if (!STEP_ALLOWS_ASPIRATION.has(step.id) && textHasAspiration(text)) return false;
+  // Only count it as an attempt when the utterance actually reaches for the
+  // step phrase: it must use one of the step's completion verbs, or — for
+  // steps with no verb list — share a content word with the step patterns.
+  // Anything else is free conversation and must not trigger coaching.
+  const verbs = stepCompletionVerbWords(step);
+  if (verbs.size) {
+    const words = textWords(text);
+    if (!words.some((word) => verbs.has(word))) return false;
+  } else if (!textHasAllowlistedObject(text, step)) {
+    return false;
+  }
   if (textHasNonAllowlistedContentWord(text, step)) return true;
   if (STEP_REQUIRES_COMPLETION.has(step.id) && !textHasAllowlistedObject(text, step)) return true;
   return false;
@@ -1797,10 +2049,15 @@ export function matchesStepLenient(text, step) {
   if (textHasAspiration(text)) return false;
   if (isHostileOrOffTopicUtterance(text)) return false;
 
+  if (STEP_OPEN_REASON.has(step.id) && matchesOpenReason(text)) return true;
+
   const words = new Set(textWords(text));
 
   const objects = getStepObjectAllowlist(step);
-  const hasObject = !objects.size || [...words].some((w) => objects.has(w));
+  const hasObject =
+    !objects.size ||
+    (STEP_OPEN_OBJECT.has(step.id) && textHasAnyContentObject(text, step)) ||
+    [...words].some((w) => objects.has(w) || [...objects].some((o) => soundsSimilar(w, o)));
 
   const verbs = new Set(stepCompletionVerbWords(step));
   for (const kw of STEP_SALIENT_GROUPS[step.id]?.[0] || []) {
@@ -2125,15 +2382,14 @@ export function verifyAllStepsHeardInSession(
 }
 
 export function buildHostileRedirectNudge(quest, userUtterance = "", questIndex = loadProgress()) {
-  const next = getRemainingSteps(quest, questIndex)[0];
-  const directive = buildStepDirective(quest, next);
-  const mission = buildActiveMissionHeader(quest, questIndex);
   const transcript = (userUtterance || "").trim();
   return (
-    `[Speak now] ${mission} Child sounded upset or off-topic` +
+    `[Speak now] Child sounded upset or is talking about their own thing` +
     (transcript ? ` ("${transcript}")` : "") +
-    `. Respond kindly and casually (${LANG.pair}) — no lecturing — then gently bring them back to the Minecraft step. ` +
-    `${directive} Do NOT say mission complete or call complete_quest.`
+    `. This turn is FREE CHAT: respond kindly and casually (${LANG.pair}) to THEIR topic or feeling, ` +
+    `like a friend — no lecturing, and do NOT mention the mission, steps, or any English phrase to repeat. ` +
+    `Keep the chat fun and let them lead. ` +
+    `Do NOT say mission complete or call complete_quest.`
   );
 }
 
@@ -2201,8 +2457,9 @@ export function buildWrongStepPhraseCorrectionNudge(
     `[Correction] ${mission} Step NOT recorded — child did NOT say the correct phrase` +
     (transcript ? ` (said "${transcript}")` : "") +
     `. Do NOT say they got "${phrase}" right — but stay warm, never disappointed. ` +
-    `Praise the try (${LANG.pair}), then say "${phrase}" SLOWLY in small chunks and invite them to say it together ${LANG.inviteTogether}. ` +
-    `No pressure — if they struggle, reassure them ${LANG.slowOk}. ` +
+    `React to their words and praise the try in fresh words (${LANG.pair}) — vary your phrasing, never repeat a praise or correction line you already used this call — ` +
+    `then say "${phrase}" SLOWLY in small chunks and invite them to say it together ${LANG.inviteTogether}. ` +
+    `No pressure — if they struggle, reassure them ${LANG.slowOk}. Sound like a playful friend, not a script. ` +
     `Do NOT say mission complete / ミッションクリア. ${QUEST_TRACKER_NO_REPEAT}`
   );
 }
@@ -2416,9 +2673,10 @@ export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■キャラ: 明るい・フレンドリー・テンポよく。「やったー！」「すごい！」「いいね！」「Let's go!」を自然に。子どもが話しかけやすい雰囲気。
 ■話し方（必須）: 毎ターン「英語→日本語」。先に英語（かんたん・短く）、すぐ日本語（だよ・だね・しよう）。英語だけ・日本語だけ禁止。褒めるときはテンション高め（EN→JP）。**同じターンで同じ文・お祝いを2回言わない。**
 ■記号（絶対）: 「〇〇」「◯◯」「…」などの穴あき記号は絶対にそのまま発音しない。英語では具体例に置き換える（例:「I made a stone sword!」）、日本語で穴あきを言うなら「まるまる」と言う。
-■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「マイクラで次に何する？」「できたら何て言う？」を楽しそうに案内（EN→JP）。迷ったらすぐ具体例。雑談→フレンドリーに返して（EN→JP）すぐステップへ。
+■ミッションの進め方（最重要）: ミッション中でも会話は自由会話（フリートーク）と同じノリ。子どもが自分の話題を話したら、ミッションのことは一切出さずに、友だちとしてその話を楽しく続ける（何ターン続いてもOK）。ミッションに誘うのは「話がひと段落した」「次なにする？と聞かれた」「会話が止まった」ときだけ — そのときも「そういえば、ミッションの続きやってみる？」くらいやさしく。強制・急かしは絶対にしない。ミッションを進めるときはゲームのナビ役として楽しく案内（EN→JP）、迷ったらすぐ具体例。
 ■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく訂正。日本語だけ→喜んで（EN→JP）→英文を1回教えて一緒に言ってみよう。
-■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める（「Nice try! いいチャレンジ！」）。フレーズは**ゆっくり・小さく区切って**言ってあげる（例: "I made... a stone... tool!"）。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない（「ゆっくりでいいよ」「もう1回いこっか」）。子どもがいつも安心して楽しめるように。
+■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める — **毎回ちがう言い方で**（「Nice try!」ばかり繰り返さない。子どもが言った内容に反応してから褒める）。フレーズは**ゆっくり・小さく区切って**言ってあげる（例: "I made... a stone... tool!"）。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない（「ゆっくりでいいよ」「もう1回いこっか」）。子どもがいつも安心して楽しめるように。
+■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（EN→JP、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
 ■怒った・しぶるとき: やさしく受け止めて（EN→JP）、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド（EN→JP）。
@@ -2466,9 +2724,10 @@ export const INTERMEDIATE_VOICE_BASE_PROMPT = `あなたはゲームカレッジ
 ■話し方（必須）: 基本は英語80%・日本語20% — **この比率を毎ターン守る**。まず英語で短く話し（かんたんな言葉・ネイティブ風発音）、**毎ターン必ず最後に日本語のひとことを添える**（例:「いいね！」「やってみよう！」）。英語だけのターンはNG。日本語だけで話し続けるのもNG。**同じターンで同じ文・お祝いを2回言わない。**
 ■日本語への対応: 子どもが日本語で話したときだけ、文の中の重要な単語を英語にして教える（例:「家つくった！」→「家は英語で house って言うんだよ」）。英語で話しているときはしなくてよい。
 ■記号（絶対）: 「〇〇」「◯◯」「…」などの穴あき記号は絶対にそのまま発音しない。英語では具体例に置き換える（例:「I made a sword!」）、日本語で穴あきを言うなら「まるまる」と言う。
-■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「マイクラで次に何する？」「できたら何て言う？」を楽しそうに案内。迷ったらすぐ具体例。雑談→フレンドリーに返してすぐステップへ。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。
+■ミッションの進め方（最重要）: ミッション中でも会話は自由会話（フリートーク）と同じノリ。子どもが自分の話題を話したら、ミッションのことは一切出さずに、友だちとしてその話を楽しく続ける（何ターン続いてもOK）。ミッションに誘うのは「話がひと段落した」「次なにする？と聞かれた」「会話が止まった」ときだけ — そのときも軽くやさしく。強制・急かしは絶対にしない。ミッションを進めるときはゲームのナビ役として楽しく案内、迷ったらすぐ具体例。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。
 ■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく訂正。日本語だけ→喜んで→英文を1回教えて一緒に言ってみよう。
-■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める（「Nice try!」）。フレーズは**ゆっくり・小さく区切って**言ってあげる。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない。子どもがいつも安心して楽しめるように。
+■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める — **毎回ちがう言い方で**（「Nice try!」ばかり繰り返さない。子どもが言った内容に反応してから褒める）。フレーズは**ゆっくり・小さく区切って**言ってあげる。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない。子どもがいつも安心して楽しめるように。
+■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
 ■怒った・しぶるとき: やさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド。
@@ -2515,9 +2774,10 @@ export const ADVANCED_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■キャラ: 明るく元気。押しつけず、相手のテンションに合わせる。"Nice!" "Let's go!" を自然に。
 ■話し方（必須）: 返答は英語100%。日本語は絶対に使わない。単語解説・翻訳・文法説明はしない。英語はネイティブ風の自然なリズムで、1ターンは短め（1〜3文）。**同じターンで同じ文・お祝いを2回言わない。**
 ■記号（絶対）: 「〇〇」「◯◯」「…」などの穴あき記号は絶対にそのまま発音しない。必ず具体例に置き換える（例: "I got diamonds!"）。
-■ミッションの進め方（最重要）: ゲームのナビ役。毎ターン「次に何する？」「できたら何て言う？」を英語で楽しく案内。迷ったらすぐ具体例。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。会話が止まらないように、次の一歩につながる返しをする。
-■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく言い換えて流れを戻す。日本語だけ→英語で明るく返して、英文を1回モデルして誘う（"Try saying: ..."）。
-■まちがえたとき（やさしさ優先）: がっかりした声・ダメ出しをしない。意味が通じるなら止めずに進める。通じない時だけ "Nice try!" から、フレーズを**ゆっくり・小さく区切って**言ってあげて "Let's say it together!" と誘う — 命令・強制はしない。講義はしない。
+■ミッションの進め方（最重要）: ミッション中でも会話は自由会話（フリートーク）と同じノリ。子どもが自分の話題を話したら、ミッションのことは一切出さずに、友だちとしてその話を英語で楽しく続ける（何ターン続いてもOK）。ミッションに誘うのは「話がひと段落した」「What's next? と聞かれた」「会話が止まった」ときだけ — そのときも "By the way, wanna try the mission?" くらい軽く。強制・急かしは絶対にしない。ミッションを進めるときはゲームのナビ役として英語で楽しく案内、迷ったらすぐ具体例。質問は1ターン1つまで。Why質問は禁止。見えていない状況を推測しない。実況しない。会話が止まらないように、次の一歩につながる返しをする。
+■ステップ達成: そのステップの**正しい英文**だけOK（アプリが記録したときだけ祝う）。それ以外の単語・間違い→祝わない、やさしく言い換えて流れを戻す。日本語だけ→英語で明るく返して、英文を1回自然に混ぜて誘う（毎回言い方を変える）。
+■まちがえたとき（やさしさ優先）: がっかりした声・ダメ出しをしない。意味が通じるなら止めずに進める。通じない時だけ、まず子どもの言葉に反応して**毎回ちがう言い方で**軽く褒めてから（"Nice try!" ばかり繰り返さない）、フレーズを**ゆっくり・小さく区切って**言ってあげて誘う — 命令・強制はしない。講義はしない。
+■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（英語で、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
 ■怒った・しぶるとき: 英語でやさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。英語でカジュアルに聞き返すか、次の一手をリマインド。
@@ -2772,7 +3032,8 @@ export function buildChallengeEchoCoachNudge(
     `[App verdict] ${mission} The child has tried this challenge twice without the phrase being caught` +
     (utterance ? ` (last try: "${utterance}")` : "") +
     `. Do NOT say they failed and do NOT mark anything done — they are trying hard, so make them feel cared for. ` +
-    `Reassure them first ${LANG.echoReassure}, then say the phrase slowly ONCE, broken into small chunks: "${phrase}" — ` +
+    `Reassure them first ${LANG.echoReassure} — in different words than your last reply, never the same line twice — ` +
+    `then say the phrase slowly ONCE, broken into small chunks: "${phrase}" — ` +
     `and warmly invite them to repeat after you ${LANG.echoInvite}. Never sound frustrated, never force. ` +
     `1–2 short sentences, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
   );
