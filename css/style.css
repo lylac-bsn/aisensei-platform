@@ -1726,6 +1726,20 @@ body.page-dashboard .user-dashboard {
     display: none !important;
 }
 
+/* Mission countdown (voice-tab mission card) */
+.quest-banner-timer {
+    font-size: var(--text-md, 0.95rem);
+    font-weight: 800;
+    color: #2E7D32;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.quest-banner-timer.urgent {
+    color: #E65100;
+}
+
 .dashboard-panel[hidden] {
     display: none !important;
 }

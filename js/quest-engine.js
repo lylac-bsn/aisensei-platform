@@ -883,8 +883,10 @@ const STEP_SALIENT_GROUPS = {
   got_stones: [["get", "got", "have", "mine", "dig", "collect"], ["stone", "cobblestone"]],
   found_food: [["find", "found", "see"], ["food", "meat", "apple", "beef", "pork", "chicken"]],
   need_food: [["hungry", "hunger", "need", "want"], ["food", "eat"]],
-  // made_stone_tool intentionally has no salient group: only the exact
-  // "stone tool" patterns may pass (kid must say "I made a stone tool").
+  made_stone_tool: [
+    ["made", "crafted", "built", "created"],
+    ["tool", "pickaxe", "axe", "shovel", "sword"],
+  ],
   its_strong: [["strong"]],
   made_furnace: [["made", "crafted", "built", "created"], ["furnace"]],
   placed_furnace: [["put", "place", "placed"], ["here", "down", "there", "furnace"]],
@@ -1524,11 +1526,18 @@ function phoneticSkeleton(word) {
   return first + rest;
 }
 
+/** Pairs that sound vaguely alike but must never fuzzy-match (false STT ticks). */
+const PHONETIC_NEVER_SIMILAR = new Set([
+  "stone|strong",
+  "strong|stone",
+]);
+
 /** True when two English words plausibly sound alike (STT confusion). */
 export function soundsSimilar(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
   if (a.length < 3 || b.length < 3) return false;
+  if (PHONETIC_NEVER_SIMILAR.has(`${a}|${b}`)) return false;
   const sa = phoneticSkeleton(a);
   const sb = phoneticSkeleton(b);
   if (!sa || !sb || sa[0] !== sb[0]) return false;
@@ -1575,6 +1584,9 @@ function matchesStepPhonetic(text, step) {
   if (!text?.trim() || !step?.patterns?.length) return false;
   if (!userTextHasEnglish(text)) return false;
   if (textHasNegation(text)) return false;
+  if (step.id === "its_strong" && utteranceLooksLikeCraftReport(text)) {
+    return false;
+  }
   if (
     STEP_REQUIRES_COMPLETION.has(step.id) &&
     !STEP_ALLOWS_ASPIRATION.has(step.id) &&
@@ -1601,7 +1613,10 @@ function matchesStepPhonetic(text, step) {
   for (const pattern of step.patterns) {
     if (!isEnglishPattern(pattern)) continue;
     const keys = patternContentWords(pattern);
-    if (keys.length < 2) continue;
+    // Multi-word patterns need every key. Single long keyword targets
+    // ("ready", "useful") also allow a sound-alike — "im red" ≈ "I'm ready".
+    if (!keys.length) continue;
+    if (keys.length === 1 && (keys[0].length < 4 || isVerbKey(keys[0]))) continue;
 
     const used = new Set();
     let allKeysHeard = true;
@@ -1622,6 +1637,19 @@ function matchesStepPhonetic(text, step) {
     if (allKeysHeard) return true;
   }
   return false;
+}
+
+/** Craft-report lines ("I made a pickaxe") must not phonetically pass praise steps. */
+function utteranceLooksLikeCraftReport(text) {
+  const words = textWords(text);
+  if (!words.length) return false;
+  const craftVerbs = new Set(["made", "make", "crafted", "craft", "built", "build", "created", "create"]);
+  const craftObjects = new Set([
+    "tool", "tools", "pickaxe", "axe", "shovel", "sword", "stone", "table", "furnace",
+  ]);
+  const hasCraftVerb = words.some((w) => craftVerbs.has(w));
+  const hasCraftObject = words.some((w) => craftObjects.has(w));
+  return hasCraftVerb && hasCraftObject;
 }
 
 /**
@@ -1684,6 +1712,44 @@ function matchesStepChunk(text, step) {
   return true;
 }
 
+/**
+ * True when the utterance reaches for this step's phrase (completion verb,
+ * allowlisted object, or a sound-alike of a pattern content word — so
+ * "im red" counts as trying "I'm ready").
+ */
+function utteranceReachesForStep(text, step) {
+  if (!step?.patterns?.length || !text?.trim()) return false;
+  const words = textWords(text);
+  if (!words.length) return false;
+
+  const verbs = stepCompletionVerbWords(step);
+  if (verbs.size && words.some((word) => verbs.has(word))) return true;
+
+  const objects = getStepObjectAllowlist(step);
+  if (
+    [...objects].some((obj) =>
+      words.some((word) => word === obj || soundsSimilar(word, obj))
+    )
+  ) {
+    return true;
+  }
+
+  for (const pattern of step.patterns) {
+    if (!isEnglishPattern(pattern)) continue;
+    for (const key of patternContentWords(pattern)) {
+      if (
+        words.some(
+          (word) =>
+            word === key || (!isVerbKey(key) && soundsSimilar(word, key))
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** User tried the step phrase in English but wording did not match (wrong word, typo, etc.). */
 export function userMissedEnglishStepPhrase(text, step) {
   if (!step?.patterns?.length) return false;
@@ -1696,19 +1762,10 @@ export function userMissedEnglishStepPhrase(text, step) {
   // target phrase itself is an aspiration treat "I want ..." as an attempt.
   if (!STEP_ALLOWS_ASPIRATION.has(step.id) && textHasAspiration(text)) return false;
   // Only count it as an attempt when the utterance actually reaches for the
-  // step phrase: it must use one of the step's completion verbs, or — for
-  // steps with no verb list — share a content word with the step patterns.
-  // Anything else is free conversation and must not trigger coaching.
-  const verbs = stepCompletionVerbWords(step);
-  if (verbs.size) {
-    const words = textWords(text);
-    if (!words.some((word) => verbs.has(word))) return false;
-  } else if (!textHasAllowlistedObject(text, step)) {
-    return false;
-  }
-  if (textHasNonAllowlistedContentWord(text, step)) return true;
-  if (STEP_REQUIRES_COMPLETION.has(step.id) && !textHasAllowlistedObject(text, step)) return true;
-  return false;
+  // step phrase (verb, object, or sound-alike of a target word). Free chat
+  // must not arm miss-coaching. Once they reach and don't match → it's a miss.
+  if (!utteranceReachesForStep(text, step)) return false;
+  return true;
 }
 
 /** Drop English-only steps that lack an English utterance in this session. */
@@ -1725,6 +1782,9 @@ export function reconcileEnglishStepProof(
 
   for (const step of quest.steps) {
     if (!done.has(step.id) || !stepRequiresEnglish(step)) continue;
+    // Timer force-complete ticks are intentional — do not strip them for
+    // lacking a strict matchesStep proof.
+    if (isTimeoutPassedStep(questIndex, step.id)) continue;
     const proved = utterances.some(
       (u) =>
         matchesStep(u, step) &&
@@ -1929,6 +1989,17 @@ export function getLearnedPhrases() {
 let questSessionSteps = null;
 /** Step IDs already complete when the current call began (resume / partial progress). */
 let questSessionBaselineStepIds = null;
+/**
+ * Step IDs force-completed by the mission timer this call. Session-only —
+ * survives reconcileEnglishStepProof / verifyAllStepsHeardInSession without a
+ * strict matchesStep proof.
+ */
+let questSessionTimeoutPassIds = null;
+
+/** Per-mission voice-call time limit (all levels). Easy to tune later. */
+export const MISSION_TIME_LIMIT_MS = 3 * 60 * 1000;
+/** Soft warning when this much time remains. */
+export const MISSION_TIME_WARNING_MS = 30 * 1000;
 
 export function isQuestReplay(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) return false;
@@ -1943,11 +2014,57 @@ export function getSessionBaselineStepIds(questIndex) {
   return [];
 }
 
+function clearQuestSessionTimeoutPasses() {
+  questSessionTimeoutPassIds = null;
+}
+
+/** Record that this step was force-completed by the mission timer. */
+export function markTimeoutPassedStep(questIndex, stepId) {
+  if (!Number.isFinite(questIndex) || questIndex < 0 || !stepId) return;
+  if (!questSessionTimeoutPassIds || questSessionTimeoutPassIds.questIndex !== questIndex) {
+    questSessionTimeoutPassIds = { questIndex, stepIds: [] };
+  }
+  if (!questSessionTimeoutPassIds.stepIds.includes(stepId)) {
+    questSessionTimeoutPassIds.stepIds.push(stepId);
+  }
+}
+
+/** True when this step was force-completed by the mission timer this call. */
+export function isTimeoutPassedStep(questIndex, stepId) {
+  return Boolean(
+    questSessionTimeoutPassIds &&
+      questSessionTimeoutPassIds.questIndex === questIndex &&
+      questSessionTimeoutPassIds.stepIds.includes(stepId)
+  );
+}
+
+/**
+ * Mark every incomplete step done for a timer clear so isQuestStepsComplete
+ * is true. Tagged as timeout-pass so proof reconcile cannot strip them.
+ * @returns {string[]} newly force-completed step ids
+ */
+export function forceCompleteQuestStepsForTimeout(quest, questIndex = loadProgress()) {
+  if (!quest?.steps?.length || !Number.isFinite(questIndex) || questIndex < 0) return [];
+  const done = new Set(getEffectiveCompletedStepIds(questIndex));
+  const newly = [];
+  for (const step of quest.steps) {
+    if (done.has(step.id)) continue;
+    done.add(step.id);
+    newly.push(step.id);
+    markTimeoutPassedStep(questIndex, step.id);
+  }
+  if (newly.length) {
+    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
+  }
+  return newly;
+}
+
 /** Start a call session — step progress is tracked in memory for the active call. */
 export function beginQuestSession(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) {
     questSessionSteps = null;
     questSessionBaselineStepIds = null;
+    clearQuestSessionTimeoutPasses();
     return;
   }
   const stepIds = isQuestReplay(questIndex) ? [] : [...loadCompletedStepIds(questIndex)];
@@ -1956,6 +2073,8 @@ export function beginQuestSession(questIndex) {
     questIndex,
     stepIds,
   };
+  clearQuestSessionTimeoutPasses();
+  questSessionTimeoutPassIds = { questIndex, stepIds: [] };
 }
 
 export function endQuestSession() {
@@ -1964,11 +2083,15 @@ export function endQuestSession() {
   }
   questSessionSteps = null;
   questSessionBaselineStepIds = null;
+  clearQuestSessionTimeoutPasses();
 }
 
 export function resetQuestSessionSteps(questIndex) {
   if (questSessionSteps?.questIndex === questIndex) {
     questSessionSteps.stepIds = [];
+  }
+  if (questSessionTimeoutPassIds?.questIndex === questIndex) {
+    questSessionTimeoutPassIds.stepIds = [];
   }
 }
 
@@ -2063,7 +2186,16 @@ export function matchesStepLenient(text, step) {
   for (const kw of STEP_SALIENT_GROUPS[step.id]?.[0] || []) {
     for (const alt of expandTokenAlternates(kw)) verbs.add(alt);
   }
-  const hasVerb = !verbs.size || [...words].some((w) => verbs.has(w));
+  // Keyword-only steps (no completion-verb list, e.g. "ready"): allow
+  // sound-alikes of the keyword. Action verbs stay exact.
+  const strictCompletionVerbs = stepCompletionVerbWords(step);
+  const hasVerb =
+    !verbs.size ||
+    [...words].some((w) => {
+      if (verbs.has(w)) return true;
+      if (strictCompletionVerbs.size) return false;
+      return [...verbs].some((v) => soundsSimilar(w, v));
+    });
 
   return hasObject && hasVerb;
 }
@@ -2192,7 +2324,9 @@ export function matchesQuestSideChallenge(quest, text) {
  * Challenge matching for one utterance: a correct phrase passes ANYTIME,
  * regardless of which step Learny is currently directing — kids can say
  * step phrases in any order. The lenient (echo-coach) pass applies only to
- * the current step, i.e. the one whose attempts have been missed twice.
+ * the current step after missed attempts (close STT only — not free chat).
+ *
+ * @returns {{ stepIds: string[] }}
  */
 export function applyUtteranceToChallenge(
   quest,
@@ -2200,9 +2334,10 @@ export function applyUtteranceToChallenge(
   questIndex = loadProgress(),
   { lenient = false } = {}
 ) {
-  if (!quest?.steps?.length || !userText?.trim()) return [];
+  const empty = { stepIds: [] };
+  if (!quest?.steps?.length || !userText?.trim()) return empty;
   // Upset/hostile speech is never step proof, even if it contains step words.
-  if (isHostileOrOffTopicUtterance(userText)) return [];
+  if (isHostileOrOffTopicUtterance(userText)) return empty;
 
   const done = new Set(getEffectiveCompletedStepIds(questIndex));
   const current = quest.steps.find((s) => !done.has(s.id)) || null;
@@ -2232,7 +2367,7 @@ export function applyUtteranceToChallenge(
     saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
     recordLearnedSteps(quest, questIndex, newly);
   }
-  return newly;
+  return { stepIds: newly };
 }
 
 /** Mark newly matched steps from one utterance. */
@@ -2334,6 +2469,9 @@ export function isHostileOrOffTopicUtterance(text) {
 const PREMATURE_COMPLETE_RE = [
   /mission\s+complete/i,
   /completed\s+the\s+mission/i,
+  /cleared\s+(the\s+)?(current\s+)?mission/i,
+  /you\s+cleared/i,
+  /mission\s+is\s+cleared/i,
   /quest\s+complete/i,
   /you'?ve\s+completed/i,
   /you\s+completed\s+the/i,
@@ -2341,6 +2479,11 @@ const PREMATURE_COMPLETE_RE = [
   /クエストクリア/,
   /ミッションをクリア/,
   /クエストをクリア/,
+  /ミッションがクリア/,
+  /クリアした[よねよ！!]?/,
+  /クリアだ[よねよ！!]?/,
+  /今のミッション.{0,12}クリア/,
+  /ミッション.{0,8}クリア/,
 ];
 
 /** Learny claimed the mission is done (may be a hallucination). */
@@ -2367,18 +2510,27 @@ export function verifyAllStepsHeardInSession(
   if (!stepsToVerify.length) return true;
 
   const chunks = sessionTextsForMatching(sessionUserText, sessionUtterances);
-  if (!chunks.length) return false;
+  if (!chunks.length) {
+    // Timer force-complete can prove steps without a strict matchesStep chunk.
+    return (
+      Number.isFinite(questIndex) &&
+      stepsToVerify.every((step) => isTimeoutPassedStep(questIndex, step.id))
+    );
+  }
 
-  return stepsToVerify.every((step) =>
-    chunks.some((chunk) => {
+  return stepsToVerify.every((step) => {
+    if (Number.isFinite(questIndex) && isTimeoutPassedStep(questIndex, step.id)) {
+      return true;
+    }
+    return chunks.some((chunk) => {
       if (!matchesStep(chunk, step)) return false;
       if (!stepRequiresEnglish(step)) return true;
       return (
         userTextHasEnglish(chunk) &&
         (!isPrimarilyJapanese(chunk) || hasEnglishPatternMatch(chunk, step))
       );
-    })
-  );
+    });
+  });
 }
 
 export function buildHostileRedirectNudge(quest, userUtterance = "", questIndex = loadProgress()) {
@@ -2433,6 +2585,7 @@ export function assistantFalselyCreditsEnglishStep(
 
   for (const step of quest.steps) {
     if (!stepRequiresEnglish(step)) continue;
+    if (isTimeoutPassedStep(questIndex, step.id)) continue;
     const quoted = step.patterns.some((pattern) =>
       assistant.toLowerCase().includes(pattern.toLowerCase())
     );
@@ -2486,12 +2639,16 @@ export function buildPrematureCompleteCorrectionNudge(quest, questIndex = loadPr
   const remaining = getRemainingSteps(quest, questIndex);
   const next = remaining[0];
   const mission = buildActiveMissionHeader(quest, questIndex);
-  const directive = buildStepDirective(quest, next);
+  const phrase = next ? getStepSpokenPhrase(next) : "";
+  const nextLine = next
+    ? `Next challenge still open: ${next.label} — "${phrase}".`
+    : "Call complete_quest only after the app records all steps.";
   return (
-    `[Correction] ${mission} NOT complete — ${remaining.length} step(s) remain. ` +
-    `Do NOT say mission complete / ミッションクリア. ` +
-    `If you already gave an audible reply, do not repeat it. ` +
-    `Otherwise guide the next step once (${LANG.pair}): ${directive}`
+    `[App verdict] ${mission} MISSION NOT CLEARED — ${remaining.length} step(s) still open. ` +
+    `You wrongly told the child the mission was complete/cleared. ` +
+    `Correct yourself once, briefly and warmly (${LANG.pair}): the mission is still in progress. ${nextLine} ` +
+    `Do NOT say mission complete / cleared / クリア / ミッションクリア. Do NOT celebrate a clear. ` +
+    `Speak this correction aloud once even if you already replied. ${QUEST_TRACKER_NO_REPEAT}`
   );
 }
 
@@ -2678,6 +2835,7 @@ export const BEGINNER_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める — **毎回ちがう言い方で**（「Nice try!」ばかり繰り返さない。子どもが言った内容に反応してから褒める）。フレーズは**ゆっくり・小さく区切って**言ってあげる（例: "I made... a stone... tool!"）。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない（「ゆっくりでいいよ」「もう1回いこっか」）。子どもがいつも安心して楽しめるように。
 ■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（EN→JP、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■タイマー終了: アプリがミッションをクリアすることがある（[App verdict] TIME UP）。温かくお祝いして次へ進む。未完了ステップを争わない・失敗と言わない。
 ■怒った・しぶるとき: やさしく受け止めて（EN→JP）、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド（EN→JP）。
 ■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
@@ -2729,6 +2887,7 @@ export const INTERMEDIATE_VOICE_BASE_PROMPT = `あなたはゲームカレッジ
 ■まちがえたとき（最重要・やさしさ全開）: 絶対にがっかりした声・ダメ出しをしない。まずチャレンジしたことを褒める — **毎回ちがう言い方で**（「Nice try!」ばかり繰り返さない。子どもが言った内容に反応してから褒める）。フレーズは**ゆっくり・小さく区切って**言ってあげる。「一緒に言ってみよう！」と誘う — 命令・強制はしない。言えなくても急かさない。子どもがいつも安心して楽しめるように。
 ■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■タイマー終了: アプリがミッションをクリアすることがある（[App verdict] TIME UP）。温かくお祝いして次へ進む。未完了ステップを争わない・失敗と言わない。
 ■怒った・しぶるとき: やさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。カジュアルに聞き返すか、次の一手をリマインド。
 ■言語（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。You MUST speak ONLY English and Japanese. Never respond in any other language.
@@ -2779,6 +2938,7 @@ export const ADVANCED_VOICE_BASE_PROMPT = `あなたはゲームカレッジの�
 ■まちがえたとき（やさしさ優先）: がっかりした声・ダメ出しをしない。意味が通じるなら止めずに進める。通じない時だけ、まず子どもの言葉に反応して**毎回ちがう言い方で**軽く褒めてから（"Nice try!" ばかり繰り返さない）、フレーズを**ゆっくり・小さく区切って**言ってあげて誘う — 命令・強制はしない。講義はしない。
 ■ロボット禁止: 同じほめ言葉・同じ決まり文句をくり返さない。毎回言い方を変えて、台本ではなく友だちの会話に聞こえるように。
 ■ミッション完了: 全ステップ完了→complete_quest→お祝い1回（英語で、ワクワク！）。**complete_quest前に「クリア」「mission complete」は絶対言わない。**
+■Timer end: The app may clear a mission when the timer ends ([App verdict] TIME UP). Celebrate warmly and move on. Never argue that steps are unfinished or say they failed.
 ■怒った・しぶるとき: 英語でやさしく受け止めて、責めずにゲームに戻す。完了とは言わない。
 ■無言/聞き取れず: 推測しない。英語でカジュアルに聞き返すか、次の一手をリマインド。
 ■言語認識（絶対）: 子どもは日本語と英語しか話さない。中国語・韓国語など他言語に聞こえたら音声認識の間違い — その言語で解釈・返答せず、明るく聞き返す。Your replies are ALWAYS English only.
@@ -2824,9 +2984,9 @@ export function buildQuestInstructions(basePrompt, quest, questIndex = null) {
     "■ステップ（この順番で1つずつチャレンジ）:",
     ...stepLines,
     "■進め方: 1つずつ。楽しくナビ→マイクラの行動→成功時の英文を言わせる→アプリの判定を待つ。判定が来たらお祝い→次のチャレンジを声で案内。",
-    "■判定（絶対）: ステップの達成判定はアプリが行う。[App verdict] STEP COMPLETE が来たステップだけが完了。自分でステップ完了・クリアを判断しない。判定が来ていないのに「できたね」「ステップクリア」と言わない。",
+    "■判定（絶対）: ステップの達成判定はアプリが行う。[App verdict] STEP COMPLETE が来たステップだけが完了。自分でステップ完了・クリアを判断しない。判定が来ていないのに「できたね」「ステップクリア」「ミッションクリア」「cleared」と言わない。アプリの Progress / NEXT 表示に必ず従う。",
     LANG.speakStyleLine,
-    "■禁止: ステップ残りでクリア宣言。complete_quest前のお祝い。次ミッションの話。同じ英文の連続リピート。子どもの怒り・拒否を完了とみなすこと。",
+    "■禁止: ステップ残りでクリア宣言。complete_quest前のお祝い。次ミッションの話。同じ英文の連続リピート。子どもの怒り・拒否を完了とみなすこと。アプリが記録していないのにクリアと言うこと。",
   ];
 
   if (quest.aiNotes?.length) {
@@ -3002,14 +3162,43 @@ export function buildChallengeResultNudge(
 
   return [
     `[App verdict] ${mission}`,
-    `STEP COMPLETE — recorded: ${completed}.` +
+    `STEP COMPLETE — the app RECORDED this step as DONE: ${completed}.` +
       (utterance ? ` Child said: "${utterance}"` : "") +
-      ` When praising, react to the child's OWN words — never claim they said the example phrase if they used different words.`,
+      ` Speak NOW in one short reply: celebrate the success once (Cool! / You did it!),` +
+      ` do NOT say "nice try" / "almost", and do NOT ask them to repeat THIS step.`,
     next
-      ? `Next challenge: ${next.label} — "${getStepSpokenPhrase(next)}". ` +
-        `If you have not reacted yet: cheer once (1 short sentence) and introduce the next challenge by voice (${LANG.pair}). ` +
-        `If you already cheered, only introduce the next challenge once.`
+      ? `MORE steps remain — in the SAME short reply, immediately introduce the next challenge only: ` +
+        `${next.label} — "${getStepSpokenPhrase(next)}" (${LANG.pair}). ` +
+        `Do NOT end your turn after praise alone. Do NOT stay silent waiting for them.`
       : `All steps recorded — call complete_quest now, then celebrate once.`,
+    QUEST_TRACKER_NO_REPEAT,
+  ].join("\n");
+}
+
+/**
+ * After a step tick when Learny already celebrated — do NOT repeat praise;
+ * guide the child to the NEXT challenge phrase only.
+ */
+export function buildNextStepAfterCompleteNudge(
+  quest,
+  questIndex = loadProgress()
+) {
+  if (!quest) return "";
+  const next = getRemainingSteps(quest, questIndex)[0] || null;
+  if (!next) return "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const phrase = getStepSpokenPhrase(next);
+  const directive = buildStepDirective(quest, next, {
+    stepJustCompleted: true,
+    alreadyAudible: true,
+  });
+  return [
+    `[App verdict] ${mission}`,
+    `The app recorded the last step — do NOT celebrate again or repeat praise.`,
+    directive ||
+      `Guide ONLY the next challenge: ${next.label} — "${phrase}".`,
+    `Speak NOW (one short sentence, ${LANG.pair}): introduce the NEXT English phrase "${phrase}". ` +
+      `Do NOT wait silently. If you already introduced this next phrase in your last reply, stay silent.`,
     QUEST_TRACKER_NO_REPEAT,
   ].join("\n");
 }
@@ -3017,7 +3206,7 @@ export function buildChallengeResultNudge(
 /**
  * After 2+ missed attempts at the same challenge: no error loop — Learny
  * models the phrase slowly and invites an echo. The app then accepts a close
- * attempt (matchesStepLenient).
+ * attempt (matchesStepLenient — close STT only, not free chat).
  */
 export function buildChallengeEchoCoachNudge(
   quest,
@@ -3037,4 +3226,42 @@ export function buildChallengeEchoCoachNudge(
     `and warmly invite them to repeat after you ${LANG.echoInvite}. Never sound frustrated, never force. ` +
     `1–2 short sentences, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
   );
+}
+
+/**
+ * Soft warning when ~30s remain on the mission timer. Keep chatting; do not
+ * force the phrase or declare failure.
+ */
+export function buildMissionTimeoutWarningNudge(quest, questIndex = loadProgress()) {
+  if (!quest) return "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const next = getRemainingSteps(quest, questIndex)[0] || null;
+  const nextHint = next
+    ? ` If they want to keep trying, one soft invite is OK — next challenge: ${next.label}.`
+    : "";
+  return (
+    `[App verdict] ${mission} TIME CHECK — about 30 seconds left on this mission timer. ` +
+    `Softly mention they have a little time left (あと少し / one more try) then keep chatting warmly. ` +
+    `Do NOT say they failed. Do NOT force the English phrase. Do NOT call complete_quest.` +
+    nextHint +
+    ` 1 short sentence, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
+  );
+}
+
+/**
+ * Timer hit zero — app cleared the mission. Celebrate warmly; never say they
+ * failed or that steps are unfinished after TIME UP.
+ */
+export function buildMissionTimeoutCompleteNudge(quest, questIndex = loadProgress()) {
+  if (!quest) return "";
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  return [
+    `[App verdict] ${mission}`,
+    `TIME UP — the app CLEARED this mission because the timer ended. ` +
+      `Celebrate warmly that the mission is cleared (星ゲット！ / You did it!). ` +
+      `Do NOT say they failed, ran out of time badly, or that steps are unfinished. ` +
+      `Do NOT ask them to finish remaining English phrases. ` +
+      `Call complete_quest if you have not already, then one short farewell celebration (${LANG.pair}).`,
+    QUEST_TRACKER_NO_REPEAT,
+  ].join("\n");
 }

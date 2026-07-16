@@ -287,6 +287,13 @@ export const LESSON_1_QUESTS = [
           "made the stone tool",
           "crafted a stone tool",
           "built a stone tool",
+          "I made a stone pickaxe",
+          "made a stone pickaxe",
+          "I made a pickaxe",
+          "made a pickaxe",
+          "I made a stone axe",
+          "made a stone shovel",
+          "I made a stone sword",
         ],
         coachNote:
           "「I made a stone tool」= 石の道具を作った。made（メイド）= 作った、stone（ストーン）= 石、tool（トゥール）= 道具。剣でもシャベルでもツルハシでもOK！",

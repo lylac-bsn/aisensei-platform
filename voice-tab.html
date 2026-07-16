@@ -772,6 +772,22 @@
             white-space: nowrap;
             letter-spacing: 0.02em;
         }
+        .quest-banner-timer {
+            font-size: var(--text-md);
+            font-weight: 800;
+            color: #2E7D32;
+            letter-spacing: 0.02em;
+            line-height: 1.2;
+            font-variant-numeric: tabular-nums;
+        }
+        .quest-banner-timer.urgent {
+            color: #E65100;
+            animation: quest-timer-pulse 1s ease-in-out infinite;
+        }
+        @keyframes quest-timer-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.72; }
+        }
         .quest-banner.celebrating {
             border-color: #66BB6A;
             box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.25);
@@ -1170,6 +1186,7 @@
                 <div class="quest-card-status">
                     <div class="quest-stars" id="quest-stars" role="img" aria-label="クエスト進捗"></div>
                     <div class="quest-banner-progress" id="quest-banner-progress">0 / 10</div>
+                    <div class="quest-banner-timer" id="quest-banner-timer" hidden aria-live="polite"></div>
                 </div>
             </div>
         </div>
@@ -1310,6 +1327,11 @@
             applyUtteranceToChallenge,
             buildChallengeResultNudge,
             buildChallengeEchoCoachNudge,
+            MISSION_TIME_LIMIT_MS,
+            MISSION_TIME_WARNING_MS,
+            forceCompleteQuestStepsForTimeout,
+            buildMissionTimeoutWarningNudge,
+            buildMissionTimeoutCompleteNudge,
             isUnrecognizableUserInput,
             buildUnclearInputRepeatNudge,
             buildNoAudioRecoveryNudge,
@@ -1442,6 +1464,7 @@
         const questSteps = document.getElementById('quest-steps');
         const questBannerHint = document.getElementById('quest-banner-hint');
         const questBannerProgress = document.getElementById('quest-banner-progress');
+        const questBannerTimer = document.getElementById('quest-banner-timer');
         const questSegments = document.getElementById('quest-segments');
         const questStars = document.getElementById('quest-stars');
         const questModal = document.getElementById('quest-modal');
@@ -1501,8 +1524,13 @@
         // Learny models the phrase and the app accepts a close attempt.
         let challengeMissStepId = null;
         let challengeMissCount = 0;
+        // Per-mission countdown (3 min). Cleared on complete / disconnect / switch.
+        let missionTimerInterval = null;
+        let missionTimerEndsAt = 0;
+        let missionTimerWarningSent = false;
         // Quest 7 quiz: any coaching (miss nudge, echo coach, JP hint, hostile
         // redirect) counts as "help" and forfeits the hidden no-hint badge.
+        // Timeout clear also sets this so secret badges are never awarded.
         let questHintAssistUsed = false;
         // Set when the mission-7 no-hint badge was just awarded, so the
         // completion celebration also announces the secret badge.
@@ -1525,6 +1553,12 @@
         let lastSteeringNudgeTurnSeq = -1;
         let steeringNudgeSentThisTurn = false;
         let falseCreditCorrectionSentThisTurn = false;
+        let stateSyncCorrectionSentThisTurn = false;
+        // One no-audio / unclear recovery inject per child turn — chaining
+        // a second one produces the duplicate "もう一回言って" bubble.
+        let recoveryNudgeSentThisTurn = false;
+        // After step tick + Learny already celebrated, one next-step guide.
+        let nextStepGuideSentThisTurn = false;
         let assistantTurnOpen = false;
         let deferredSteeringNudges = [];
         let deferredSteeringFlushTimer = null;
@@ -1651,6 +1685,109 @@
             }
         }
 
+        function formatMissionCountdown(ms) {
+            const totalSec = Math.max(0, Math.ceil(ms / 1000));
+            const m = Math.floor(totalSec / 60);
+            const s = totalSec % 60;
+            return `残り ${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateMissionCountdownUI(remainingMs) {
+            if (!questBannerTimer) return;
+            if (
+                remainingMs == null ||
+                !Number.isFinite(remainingMs) ||
+                !questSessionActive ||
+                !activeQuest ||
+                questCompleting
+            ) {
+                questBannerTimer.hidden = true;
+                questBannerTimer.textContent = '';
+                questBannerTimer.classList.remove('urgent');
+                return;
+            }
+            questBannerTimer.hidden = false;
+            questBannerTimer.textContent = formatMissionCountdown(remainingMs);
+            questBannerTimer.classList.toggle(
+                'urgent',
+                remainingMs <= MISSION_TIME_WARNING_MS
+            );
+        }
+
+        function clearMissionTimer() {
+            if (missionTimerInterval) {
+                clearInterval(missionTimerInterval);
+                missionTimerInterval = null;
+            }
+            missionTimerEndsAt = 0;
+            missionTimerWarningSent = false;
+            updateMissionCountdownUI(null);
+        }
+
+        function startMissionTimer({ forceRestart = false } = {}) {
+            // Opening retries call announceQuestStart again — do not reset the clock.
+            if (
+                !forceRestart &&
+                missionTimerInterval &&
+                missionTimerEndsAt > Date.now()
+            ) {
+                return;
+            }
+            clearMissionTimer();
+            if (!activeQuest || !questSessionActive || activeQuestSessionIndex === null) {
+                return;
+            }
+            missionTimerEndsAt = Date.now() + MISSION_TIME_LIMIT_MS;
+            missionTimerWarningSent = false;
+            updateMissionCountdownUI(MISSION_TIME_LIMIT_MS);
+            missionTimerInterval = setInterval(() => {
+                const remaining = missionTimerEndsAt - Date.now();
+                updateMissionCountdownUI(remaining);
+                if (
+                    !missionTimerWarningSent &&
+                    remaining <= MISSION_TIME_WARNING_MS &&
+                    remaining > 0 &&
+                    client?.connected &&
+                    activeQuest &&
+                    !questCompleting
+                ) {
+                    missionTimerWarningSent = true;
+                    sendSteeringNudge(
+                        buildMissionTimeoutWarningNudge(
+                            activeQuest,
+                            activeQuestSessionIndex
+                        )
+                    );
+                }
+                if (remaining <= 0) {
+                    if (missionTimerInterval) {
+                        clearInterval(missionTimerInterval);
+                        missionTimerInterval = null;
+                    }
+                    handleMissionTimeout();
+                }
+            }, 1000);
+        }
+
+        /** Timer hit 0 — force-complete steps, award star, never secret badge. */
+        function handleMissionTimeout() {
+            if (questCompleting || !activeQuest || !questSessionActive) return;
+            if (activeQuestSessionIndex === null) return;
+
+            questHintAssistUsed = true;
+            const quest = activeQuest;
+            const idx = activeQuestSessionIndex;
+            forceCompleteQuestStepsForTimeout(quest, idx);
+            updateQuestBanner();
+            notifyParentProgress();
+            dbg('mission timeout force-complete', { questIndex: idx });
+
+            if (client?.connected) {
+                sendSteeringNudge(buildMissionTimeoutCompleteNudge(quest, idx));
+            }
+            onQuestComplete('timeout', '');
+        }
+
         function updateQuestBanner() {
             const quests = getQuests();
             const total = quests.length;
@@ -1669,6 +1806,7 @@
             }
 
             if (!selectedQuest) {
+                updateMissionCountdownUI(null);
                 updateEmptyState();
                 return;
             }
@@ -1695,6 +1833,11 @@
                     : `すべてのステップ完了！ ${selectedQuest.hint || ""}`;
             } else {
                 questBannerHint.textContent = selectedQuest.hint ? `ヒント：${selectedQuest.hint}` : "";
+            }
+            if (missionTimerEndsAt && questSessionActive && activeQuest && !questCompleting) {
+                updateMissionCountdownUI(missionTimerEndsAt - Date.now());
+            } else {
+                updateMissionCountdownUI(null);
             }
             updateEmptyState();
         }
@@ -1866,6 +2009,9 @@
             resetChallengeMissTracking();
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
+            stateSyncCorrectionSentThisTurn = false;
+            recoveryNudgeSentThisTurn = false;
+            nextStepGuideSentThisTurn = false;
             assistantTurnOpen = false;
             deferredSteeringNudges = [];
             pendingFalseCreditAssistantText = '';
@@ -2085,7 +2231,11 @@
         }
 
         function assistantOutputBusy() {
-            return assistantTurnOpen;
+            // Mid-reply only — not the 2.5s trailing window from assistantOutputActive.
+            // That trailing window wrongly kept the next user turn "busy" and deferred
+            // (then dropped) step-complete nudges.
+            if (assistantTurnOpen) return true;
+            return Boolean(audioPlayer?.getPlaybackMsRemaining?.() > 80);
         }
 
         function scheduleDeferredSteeringFlush(delayMs = 500) {
@@ -2097,28 +2247,29 @@
         }
 
         function flushDeferredSteeringNudges() {
-            if (assistantTurnOpen) {
-                scheduleDeferredSteeringFlush(400);
+            if (assistantOutputBusy()) {
+                scheduleDeferredSteeringFlush(300);
                 return;
             }
             deferredSteeringNudges = deferredSteeringNudges.filter(
                 (item) => item.turnSeq === lastUserTurnSeq
             );
-            // Learny already replied audibly to this turn — re-injecting a
-            // verdict/coaching nudge now would just make it repeat itself.
-            // Only corrections of what Learny actually said may still go out.
+            // One spoken reply per child turn: after she already spoke, only
+            // keep hard mission-state sync (false "ミッションクリア"). Drop
+            // celebrations, next-step guides, and coaches — those belong in
+            // the first package, not a second bubble.
             if (assistantAudibleThisTurn) {
-                const dropped = deferredSteeringNudges.filter(
-                    (item) => !item.options?.falseCreditCorrection
+                const keep = deferredSteeringNudges.filter(
+                    (item) => item.options?.stateSyncCorrection
                 );
-                if (dropped.length) {
-                    dbg('dropped stale deferred nudges (already replied)', {
-                        count: dropped.length,
+                if (deferredSteeringNudges.length > keep.length) {
+                    dbg('dropped deferred nudges after spoken reply', {
+                        dropped: deferredSteeringNudges.length - keep.length,
+                        keptStateSync: keep.length,
                     });
                 }
-                deferredSteeringNudges = deferredSteeringNudges.filter(
-                    (item) => item.options?.falseCreditCorrection
-                );
+                deferredSteeringNudges = keep;
+                if (!deferredSteeringNudges.length) return;
             }
             while (deferredSteeringNudges.length > 0) {
                 const item = deferredSteeringNudges.shift();
@@ -2126,13 +2277,44 @@
             }
         }
 
+        /**
+         * Deliver the single app speak-package for this child turn.
+         * Skips if Learny already started speaking (prefer one bubble).
+         */
+        function deliverSpeakPackage(packageText) {
+            if (!packageText?.trim() || !client?.connected) return false;
+            if (assistantAudibleThisTurn || assistantTurnOpen) {
+                dbg('speak package skipped (already speaking)');
+                return false;
+            }
+            // Cancel competing injects for this turn (recovery / stale queues).
+            deferredSteeringNudges = deferredSteeringNudges.filter(
+                (item) =>
+                    item.turnSeq === lastUserTurnSeq &&
+                    item.options?.stateSyncCorrection
+            );
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            clearDeadSessionRestartTimer();
+            return sendSteeringNudgeNow(packageText);
+        }
+
         function sendSteeringNudgeNow(
             text,
-            { recoveryRetry = false, falseCreditCorrection = false } = {}
+            {
+                recoveryRetry = false,
+                falseCreditCorrection = false,
+                stateSyncCorrection = false,
+                nextStepGuide = false,
+            } = {}
         ) {
             if (!text?.trim()) return false;
             if (falseCreditCorrection) {
                 if (falseCreditCorrectionSentThisTurn) return false;
+            } else if (stateSyncCorrection) {
+                if (stateSyncCorrectionSentThisTurn) return false;
+            } else if (nextStepGuide) {
+                if (nextStepGuideSentThisTurn) return false;
             } else if (!recoveryRetry && steeringNudgeSentThisTurn) {
                 return false;
             } else if (!recoveryRetry && lastSteeringNudgeTurnSeq === lastUserTurnSeq) {
@@ -2144,6 +2326,12 @@
                 if (falseCreditCorrection) {
                     falseCreditCorrectionSentThisTurn = true;
                     steeringNudgeSentThisTurn = true;
+                } else if (stateSyncCorrection) {
+                    stateSyncCorrectionSentThisTurn = true;
+                    steeringNudgeSentThisTurn = true;
+                } else if (nextStepGuide) {
+                    nextStepGuideSentThisTurn = true;
+                    steeringNudgeSentThisTurn = true;
                 } else if (!recoveryRetry) {
                     steeringNudgeSentThisTurn = true;
                 }
@@ -2154,19 +2342,34 @@
         /** At most one app-injected steering nudge per child turn (avoids double replies). */
         function sendSteeringNudge(
             text,
-            { recoveryRetry = false, falseCreditCorrection = false } = {}
+            {
+                recoveryRetry = false,
+                falseCreditCorrection = false,
+                stateSyncCorrection = false,
+                nextStepGuide = false,
+            } = {}
         ) {
             if (!text?.trim()) return false;
             if (assistantOutputBusy()) {
                 deferredSteeringNudges.push({
                     text,
-                    options: { recoveryRetry, falseCreditCorrection },
+                    options: {
+                        recoveryRetry,
+                        falseCreditCorrection,
+                        stateSyncCorrection,
+                        nextStepGuide,
+                    },
                     turnSeq: lastUserTurnSeq,
                 });
                 scheduleDeferredSteeringFlush(500);
                 return true;
             }
-            return sendSteeringNudgeNow(text, { recoveryRetry, falseCreditCorrection });
+            return sendSteeringNudgeNow(text, {
+                recoveryRetry,
+                falseCreditCorrection,
+                stateSyncCorrection,
+                nextStepGuide,
+            });
         }
 
         function assistantOutputActive() {
@@ -2200,6 +2403,9 @@
 
         function markAssistantTurnStarted() {
             hideAssistantThinking();
+            // She's generating — never inject a recovery on top (duplicate bubble).
+            clearNoAudioRecoveryTimer();
+            clearDeadSessionRestartTimer();
             if (assistantTurnOpen) return;
             assistantTurnOpen = true;
         }
@@ -2234,19 +2440,30 @@
             lastUserTurnSeq += 1;
             jpEchoRequestedTurnSeq = -1;
             assistantRespondedSinceLastUserTurn = false;
-            assistantAudibleThisTurn = false;
+            // Transcript often finishes AFTER Learny already started answering the
+            // same utterance. Preserve live output only (open turn / real playback).
+            // Do NOT use the 2.5s recent-audio window — that bled into the next
+            // user turn and broke miss-coach delivery.
+            const stillOutputting =
+                assistantTurnOpen || Boolean(audioPlayer?.getPlaybackMsRemaining?.() > 80);
+            if (!stillOutputting) {
+                assistantAudibleThisTurn = false;
+                assistantTurnOpen = false;
+                lastAssistantAudioAt = 0;
+            }
             awaitingAssistantReply = true;
             awaitingAssistantSince = Date.now();
             noAudioRecoveryAttempts = 0;
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
-            assistantTurnOpen = false;
+            stateSyncCorrectionSentThisTurn = false;
+            recoveryNudgeSentThisTurn = false;
+            nextStepGuideSentThisTurn = false;
             deferredSteeringNudges = [];
             pendingFalseCreditAssistantText = '';
             clearDeferredSteeringFlushTimer();
             clearNoAudioRecoveryTimer();
             userBargeInThisTurn = false;
-            lastAssistantAudioAt = 0;
             clearDeadSessionRestartTimer();
         }
 
@@ -2263,7 +2480,9 @@
             ) {
                 return;
             }
-            if (assistantAudibleThisTurn) return;
+            if (assistantAudibleThisTurn || assistantTurnOpen) return;
+            // Already asked her to speak this turn — don't inject again.
+            if (recoveryNudgeSentThisTurn) return;
 
             const elapsed = Date.now() - awaitingAssistantSince;
             const baseDelay = stepCompleted
@@ -2281,18 +2500,14 @@
 
             noAudioRecoveryTimer = setTimeout(() => {
                 noAudioRecoveryTimer = null;
-                if (assistantAudibleThisTurn || !client?.connected) return;
-                if (awaitingQuestFarewell || questCompleting) return;
-                if (!awaitingAssistantReply) return;
-                // Model is already generating (just slow to reach audio) —
-                // injecting a nudge now would produce a duplicate reply.
-                if (assistantTurnOpen) {
-                    ensureNoAudioRecoveryScheduled({ unclear });
+                if (assistantAudibleThisTurn || assistantTurnOpen || !client?.connected) {
                     return;
                 }
+                if (awaitingQuestFarewell || questCompleting) return;
+                if (!awaitingAssistantReply) return;
+                if (recoveryNudgeSentThisTurn) return;
                 // A steering nudge we sent moments ago restarted generation;
-                // injecting again now would cancel that reply and start the
-                // interrupt cascade this watchdog is meant to prevent.
+                // wait for that reply instead of stacking another inject.
                 if (Date.now() - lastAppSteeringInjectAt < 3000) {
                     ensureNoAudioRecoveryScheduled({ unclear });
                     return;
@@ -2302,17 +2517,18 @@
                 const isUnclear = isUnrecognizableUserInput(utterance);
                 const sent = sendNoAudioRecoveryNudge(utterance, isUnclear);
                 if (!sent) {
-                    ensureNoAudioRecoveryScheduled({ unclear: isUnclear });
+                    // Dedupe / busy — try once more later, not a full chain.
+                    if (!recoveryNudgeSentThisTurn) {
+                        ensureNoAudioRecoveryScheduled({ unclear: isUnclear });
+                    }
                     return;
                 }
 
                 noAudioRecoveryAttempts += 1;
-                if (
-                    noAudioRecoveryAttempts < MAX_NO_AUDIO_RECOVERY_ATTEMPTS &&
-                    !assistantAudibleThisTurn
-                ) {
-                    ensureNoAudioRecoveryScheduled({ unclear: isUnclear });
-                } else if (!assistantAudibleThisTurn) {
+                // Do NOT schedule a second recovery inject this turn — that
+                // produces the duplicate "もう一回言って" bubble. If she still
+                // never speaks, the dead-session watchdog reconnects.
+                if (!assistantAudibleThisTurn && !assistantTurnOpen) {
                     scheduleDeadSessionRestart();
                 }
             }, delay);
@@ -2352,8 +2568,10 @@
 
         function sendNoAudioRecoveryNudge(utterance = "", unclear = false) {
             if (!client?.connected || awaitingQuestFarewell || questCompleting) return false;
+            if (recoveryNudgeSentThisTurn) return false;
+            if (assistantAudibleThisTurn || assistantTurnOpen) return false;
 
-            const dedupeKey = `${unclear ? "u:" : "r:"}${noAudioRecoveryAttempts}:${utterance.trim().slice(0, 48) || "(empty)"}`;
+            const dedupeKey = `${unclear ? "u:" : "r:"}${utterance.trim().slice(0, 48) || "(empty)"}`;
             const dedupeWindow = unclear ? 8000 : 5000;
             const now = Date.now();
             if (lastRecoveryNudgeKey === dedupeKey && now - lastRecoveryNudgeAt < dedupeWindow) {
@@ -2365,8 +2583,11 @@
             const nudge = unclear
                 ? buildUnclearInputRepeatNudge(utterance, activeQuest, activeQuestSessionIndex)
                 : buildNoAudioRecoveryNudge(utterance, activeQuest, activeQuestSessionIndex);
-            const recoveryRetry = noAudioRecoveryAttempts > 0;
-            return sendSteeringNudgeNow(nudge, { recoveryRetry });
+            // Never use recoveryRetry to bypass the one-nudge guard — that
+            // was stacking a second identical "please repeat" bubble.
+            const sent = sendSteeringNudgeNow(nudge, { recoveryRetry: false });
+            if (sent) recoveryNudgeSentThisTurn = true;
+            return sent;
         }
 
         function resetChallengeMissTracking() {
@@ -2403,25 +2624,63 @@
         }
 
         /**
-         * Challenge-window handler — one deterministic path for every user
-         * utterance during a mission (voice or typed). The app is the referee:
-         * only the current step is armed, and Learny is told the verdict
-         * explicitly instead of having to guess what happened.
+         * One speak-intent per child turn. The app judges first, then delivers
+         * at most one package so Learny's first reply already celebrates /
+         * coaches / asks again — no second whisper after she speaks.
+         *
+         * @returns {{
+         *   stepIds: string[],
+         *   intent: string,
+         *   packageSent: boolean,
+         *   ownsSpokenTurn: boolean,
+         * }}
          */
-        function handleQuestUtterance(utterance) {
-            if (!activeQuest || questCompleting || activeQuestSessionIndex === null || !utterance?.trim()) {
-                return [];
+        function processChildTurn(utterance) {
+            const empty = {
+                stepIds: [],
+                intent: 'free',
+                packageSent: false,
+                ownsSpokenTurn: false,
+            };
+            if (!utterance?.trim()) return empty;
+
+            // 1) UNCLEAR — this package IS the reply.
+            if (isUnrecognizableUserInput(utterance)) {
+                const pkg = buildUnclearInputRepeatNudge(
+                    utterance,
+                    activeQuest,
+                    activeQuestSessionIndex
+                );
+                const sent = deliverSpeakPackage(pkg);
+                dbg('speak intent', { intent: 'unclear', sent });
+                return {
+                    stepIds: [],
+                    intent: 'unclear',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
-            const current = getRemainingSteps(activeQuest, activeQuestSessionIndex)[0] || null;
-            // After ONE miss on the same step, the next try is judged leniently
-            // (verb+object keywords, sound-alike words OK) — fun over precision.
+            if (
+                !activeQuest ||
+                questCompleting ||
+                activeQuestSessionIndex === null ||
+                awaitingQuestFarewell
+            ) {
+                return empty;
+            }
+
+            const current =
+                getRemainingSteps(activeQuest, activeQuestSessionIndex)[0] || null;
             const lenient = Boolean(
                 current && challengeMissStepId === current.id && challengeMissCount >= 1
             );
-            const newly = applyUtteranceToChallenge(activeQuest, utterance, activeQuestSessionIndex, {
-                lenient,
-            });
+            const { stepIds: newly } = applyUtteranceToChallenge(
+                activeQuest,
+                utterance,
+                activeQuestSessionIndex,
+                { lenient }
+            );
 
             if (newly.length) {
                 resetChallengeMissTracking();
@@ -2432,8 +2691,12 @@
                 dbg('challenge step complete', { newly, lenient });
             }
 
-            const secretBadgeEarned = maybeAwardSideChallengeBadge(utterance, newly.length > 0);
+            const secretBadgeEarned = maybeAwardSideChallengeBadge(
+                utterance,
+                newly.length > 0
+            );
 
+            // 2) MISSION_PASS — farewell celebration owns the spoken turn.
             if (
                 questSessionActive &&
                 !questCompleting &&
@@ -2441,29 +2704,68 @@
                 isQuestStepsComplete(activeQuest, activeQuestSessionIndex)
             ) {
                 tryAcceptQuestComplete('auto', utterance);
-                return newly;
+                dbg('speak intent', { intent: 'mission_pass' });
+                return {
+                    stepIds: newly,
+                    intent: 'mission_pass',
+                    packageSent: true,
+                    ownsSpokenTurn: true,
+                };
             }
 
-            if (!client?.connected) return newly;
+            if (!client?.connected) {
+                return {
+                    stepIds: newly,
+                    intent: newly.length ? 'step_pass' : 'free',
+                    packageSent: false,
+                    ownsSpokenTurn: false,
+                };
+            }
 
+            // 3) STEP_PASS — celebrate + next phrase in one package (if idle).
             if (newly.length) {
-                sendSteeringNudge(
-                    buildChallengeResultNudge(activeQuest, activeQuestSessionIndex, newly, utterance)
+                const pkg = buildChallengeResultNudge(
+                    activeQuest,
+                    activeQuestSessionIndex,
+                    newly,
+                    utterance
                 );
-                return newly;
+                const sent = deliverSpeakPackage(pkg);
+                dbg('speak intent', { intent: 'step_pass', sent });
+                return {
+                    stepIds: newly,
+                    intent: 'step_pass',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
+            // 4) SECRET / HOSTILE / MISS / JP hint / confused — one coach package.
             if (secretBadgeEarned) {
-                sendSteeringNudge(buildSideChallengeSecretBadgeNudge());
-                return newly;
+                const sent = deliverSpeakPackage(buildSideChallengeSecretBadgeNudge());
+                return {
+                    stepIds: newly,
+                    intent: 'secret',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
             if (isHostileOrOffTopicUtterance(utterance)) {
-                markQuestAssistGiven();
-                sendSteeringNudge(
-                    buildHostileRedirectNudge(activeQuest, utterance, activeQuestSessionIndex)
+                markQuestHelpGiven();
+                const sent = deliverSpeakPackage(
+                    buildHostileRedirectNudge(
+                        activeQuest,
+                        utterance,
+                        activeQuestSessionIndex
+                    )
                 );
-                return newly;
+                return {
+                    stepIds: newly,
+                    intent: 'hostile',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
             if (current && userMissedEnglishStepPhrase(utterance, current)) {
@@ -2473,39 +2775,82 @@
                     challengeMissStepId = current.id;
                     challengeMissCount = 1;
                 }
-                markQuestAssistGiven();
+                markQuestHelpGiven();
                 dbg('challenge miss', { step: current.id, count: challengeMissCount });
-                sendSteeringNudge(
+                const pkg =
                     challengeMissCount >= 2
-                        ? buildChallengeEchoCoachNudge(activeQuest, current, utterance, activeQuestSessionIndex)
+                        ? buildChallengeEchoCoachNudge(
+                              activeQuest,
+                              current,
+                              utterance,
+                              activeQuestSessionIndex
+                          )
                         : buildQuestStepGroundTruthNudge(
                               activeQuest,
                               utterance,
                               [],
                               activeQuestSessionIndex,
-                              assistantAudibleThisTurn,
+                              false,
                               { compact: true }
-                          )
-                );
-                return newly;
+                          );
+                const sent = deliverSpeakPackage(pkg);
+                return {
+                    stepIds: newly,
+                    intent: 'miss',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
             if (current && userHintsStepSuccessInJapanese(utterance, current)) {
-                markQuestAssistGiven();
-                sendSteeringNudge(
+                markQuestHelpGiven();
+                const sent = deliverSpeakPackage(
                     buildQuestStepGroundTruthNudge(
                         activeQuest,
                         utterance,
                         [],
                         activeQuestSessionIndex,
-                        assistantAudibleThisTurn,
+                        false,
                         { compact: true }
                     )
                 );
+                return {
+                    stepIds: newly,
+                    intent: 'jp_hint',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
             }
 
-            // Anything else is free banter — not judged, not nudged.
-            return newly;
+            if (
+                current &&
+                /何のこと|どういう意味|なにいって|何言って|なにのこと|わかんない|分からない|わからない|what\s+do\s+you\s+mean|huh\??$/i.test(
+                    utterance
+                )
+            ) {
+                const pkg = buildQuestStepGroundTruthNudge(
+                    activeQuest,
+                    utterance,
+                    [],
+                    activeQuestSessionIndex,
+                    assistantAudibleThisTurn
+                );
+                const sent = sendSteeringNudge(pkg, { stateSyncCorrection: true });
+                return {
+                    stepIds: newly,
+                    intent: 'confused',
+                    packageSent: Boolean(sent),
+                    ownsSpokenTurn: true,
+                };
+            }
+
+            // 5) FREE — natural reply to child text; no verdict inject.
+            return empty;
+        }
+
+        /** @deprecated use processChildTurn — kept for call sites that only need stepIds */
+        function handleQuestUtterance(utterance) {
+            return processChildTurn(utterance).stepIds;
         }
 
         function scheduleNoAudioRecovery(
@@ -2515,27 +2860,40 @@
             ensureNoAudioRecoveryScheduled({ unclear, postBargeIn, stepCompleted });
         }
 
+        /**
+         * Voice turn finished — judge once, deliver one package when needed.
+         * @returns {{ unclear: boolean, result: object }}
+         */
         function handleFinishedUserTranscript() {
             const utterance = getLatestFinishedUserUtterance();
             const afterBargeIn = postBargeInPending || userBargeInThisTurn;
             markUserTurnStarted();
             lastFinishedUserTranscriptAt = Date.now();
-            const unclear = isUnrecognizableUserInput(utterance);
-            dbg('user turn finished', { utterance, unclear, afterBargeIn });
+            showAssistantThinking();
 
-            // Only hand the turn back manually after a real barge-in — server VAD
-            // often misses end-of-speech there. On normal turns the extra
-            // activity_end/turn_complete conflicts with automatic VAD and can
-            // make the model skip its reply.
             if (afterBargeIn && client?.connected) {
                 dbg('signalUserTurnComplete (post barge-in)');
                 client.signalUserTurnComplete();
             }
             resolvePostBargeIn();
 
-            scheduleNoAudioRecovery(utterance, { unclear, postBargeIn: afterBargeIn });
-            showAssistantThinking();
-            return unclear;
+            const result = processChildTurn(utterance);
+            dbg('user turn finished', {
+                utterance,
+                intent: result.intent,
+                packageSent: result.packageSent,
+                afterBargeIn,
+            });
+
+            // Recovery only when we did NOT already own the spoken turn.
+            if (!result.ownsSpokenTurn && !result.packageSent) {
+                scheduleNoAudioRecovery(utterance, {
+                    unclear: false,
+                    postBargeIn: afterBargeIn,
+                    stepCompleted: result.stepIds.length > 0,
+                });
+            }
+            return { unclear: result.intent === 'unclear', result };
         }
 
         function getSessionUserText() {
@@ -3222,9 +3580,13 @@
             lastFinishedUserTranscriptAt = 0;
             resetChallengeMissTracking();
             questHintAssistUsed = false;
+            clearMissionTimer();
             clearDeadSessionRestartTimer();
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
+            stateSyncCorrectionSentThisTurn = false;
+            recoveryNudgeSentThisTurn = false;
+            nextStepGuideSentThisTurn = false;
             assistantTurnOpen = false;
             deferredSteeringNudges = [];
             pendingFalseCreditAssistantText = '';
@@ -3240,9 +3602,11 @@
             if (!client?.connected || !activeQuest || !questSessionActive || questOpeningSent) return;
             questOpeningSent = true;
             const nudge = buildQuestOpeningNudge(activeQuest, activeQuestSessionIndex);
-            if (!nudge) return;
-            sendClientText(nudge);
-            scheduleQuestOpeningRetry();
+            if (nudge) {
+                sendClientText(nudge);
+                scheduleQuestOpeningRetry();
+            }
+            startMissionTimer();
         }
 
         /**
@@ -3297,8 +3661,24 @@
             if (!questSessionActive || !activeQuest || questCompleting || awaitingQuestFarewell) return;
             if (!client?.connected) return;
             if (jpEchoRequestedTurnSeq === lastUserTurnSeq) return;
-            // A correction nudge is already making Learny speak again.
-            if (falseCreditCorrectionSentThisTurn) return;
+            // Never stack a second spoken turn after step pass / any inject.
+            if (
+                falseCreditCorrectionSentThisTurn ||
+                stateSyncCorrectionSentThisTurn ||
+                recoveryNudgeSentThisTurn ||
+                steeringNudgeSentThisTurn ||
+                lastStepCompletedTurnSeq === lastUserTurnSeq
+            ) {
+                return;
+            }
+            // Don't pile a language echo on top of a false "mission clear" claim —
+            // state sync must win.
+            if (
+                !isQuestStepsComplete(activeQuest, activeQuestSessionIndex) &&
+                assistantClaimsQuestComplete(assistantText)
+            ) {
+                return;
+            }
 
             const text = (assistantText || '').trim();
             if (!text) return;
@@ -3311,7 +3691,8 @@
             sendSteeringNudgeNow(
                 '[Language] Your last reply was English only — the child is a Japanese elementary kid. ' +
                     'Now say the same meaning in Japanese (short, casual, friendly). Do NOT repeat the English. ' +
-                    'Reminder: EVERY reply = English first, then Japanese right after.',
+                    'Reminder: EVERY reply = English first, then Japanese right after. ' +
+                    'Do NOT say the mission is cleared unless the app recorded it.',
                 { recoveryRetry: true }
             );
         }
@@ -3323,7 +3704,7 @@
                 questCompleting ||
                 awaitingQuestFarewell
             ) {
-                return;
+                return false;
             }
 
             const latestUser = getLatestUserTurnText();
@@ -3339,45 +3720,59 @@
                       activeQuestSessionIndex
                   );
             if (falseCredit) {
-                reconcileEnglishStepProof(
-                    activeQuest,
-                    activeQuestSessionIndex,
-                    getSessionUserUtterances()
-                );
-                updateQuestBanner();
-                if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return;
-                const now = Date.now();
-                if (now - lastPrematureCompleteCorrectionAt < 8000) return;
-                lastPrematureCompleteCorrectionAt = now;
-                const correctionNudge = userMissedEnglishStepPhrase(latestUser, falseCredit)
-                    ? buildWrongStepPhraseCorrectionNudge(
-                          activeQuest,
-                          falseCredit,
-                          latestUser,
-                          activeQuestSessionIndex
-                      )
-                    : buildJapaneseOnlyStepCorrectionNudge(
-                          activeQuest,
-                          falseCredit,
-                          latestUser,
-                          activeQuestSessionIndex
-                      );
-                sendSteeringNudge(correctionNudge, { falseCreditCorrection: true });
-                return;
+                // Soft false-credit "Oops" after she already spoke causes a
+                // confusing second bubble — skip that path when audible.
+                // Mission-clear lies are handled below and always corrected.
+                if (assistantAudibleThisTurn) {
+                    // fall through to premature-complete check
+                } else {
+                    reconcileEnglishStepProof(
+                        activeQuest,
+                        activeQuestSessionIndex,
+                        getSessionUserUtterances()
+                    );
+                    updateQuestBanner();
+                    if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return false;
+                    const now = Date.now();
+                    if (now - lastPrematureCompleteCorrectionAt < 8000) return false;
+                    lastPrematureCompleteCorrectionAt = now;
+                    const correctionNudge = userMissedEnglishStepPhrase(latestUser, falseCredit)
+                        ? buildWrongStepPhraseCorrectionNudge(
+                              activeQuest,
+                              falseCredit,
+                              latestUser,
+                              activeQuestSessionIndex
+                          )
+                        : buildJapaneseOnlyStepCorrectionNudge(
+                              activeQuest,
+                              falseCredit,
+                              latestUser,
+                              activeQuestSessionIndex
+                          );
+                    sendSteeringNudge(correctionNudge, { falseCreditCorrection: true });
+                    return true;
+                }
             }
 
             if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) {
-                return;
+                return false;
             }
-            if (!assistantClaimsQuestComplete(assistantText)) return;
-            if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return;
+            if (!assistantClaimsQuestComplete(assistantText)) return false;
+            if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return false;
 
             const now = Date.now();
-            if (now - lastPrematureCompleteCorrectionAt < 8000) return;
+            if (now - lastPrematureCompleteCorrectionAt < 5000) return false;
             lastPrematureCompleteCorrectionAt = now;
+            // Always correct false clears — even after she already spoke.
+            // Wrong "ミッションクリア" is worse than a brief sync bubble.
             sendSteeringNudge(
-                buildPrematureCompleteCorrectionNudge(activeQuest, activeQuestSessionIndex)
+                buildPrematureCompleteCorrectionNudge(
+                    activeQuest,
+                    activeQuestSessionIndex
+                ),
+                { stateSyncCorrection: true }
             );
+            return true;
         }
 
         function getLatestUserUtterance(includePartial = false) {
@@ -3418,6 +3813,10 @@
         function onQuestComplete(source, userQuote = '') {
             if (questCompleting || !activeQuest || !questSessionActive) return;
             questCompleting = true;
+            clearMissionTimer();
+            // Cancel any pending mid-step nudges — farewell celebration owns this turn.
+            deferredSteeringNudges = [];
+            clearDeferredSteeringFlushTimer();
 
             const completed = activeQuest;
             const completedIndex = activeQuestSessionIndex;
@@ -3477,10 +3876,13 @@
                 prepareNextQuestSession();
             }
 
-            if (client?.connected && source !== 'tool') {
-                scheduleFarewellNudgeIfNeeded(completed, userQuote);
-            } else if (source === 'tool') {
-                scheduleFarewellNudgeIfNeeded(completed, userQuote, { toolPath: true });
+            // Timeout already sent TIME UP celebration nudge — skip farewell backlog.
+            if (source === 'timeout') {
+                // no-op
+            } else if (client?.connected) {
+                promptMissionCompleteCelebration(completed, userQuote, {
+                    toolPath: source === 'tool',
+                });
             }
 
             questTeardownFallbackTimer = setTimeout(() => {
@@ -3491,41 +3893,81 @@
             }, 15000);
         }
 
-        function scheduleFarewellNudgeIfNeeded(completed, userQuote = '', { toolPath = false } = {}) {
+        /**
+         * Mission clear — one celebration package. Skip if she already spoke.
+         */
+        function promptMissionCompleteCelebration(
+            completed,
+            userQuote = '',
+            { toolPath = false } = {}
+        ) {
             if (farewellNudgeTimer) {
                 clearTimeout(farewellNudgeTimer);
                 farewellNudgeTimer = null;
             }
-            if (assistantAudibleThisTurn) {
-                farewellAssistantSeen = true;
+            const nudge = buildQuestFarewellNudge(completed, userQuote, {
+                secretBadge: questSecretBadgeJustAwarded,
+            });
+            if (!nudge || !client?.connected) return;
+
+            // Tool path: model may celebrate after complete_quest — short backup only.
+            if (toolPath) {
+                scheduleFarewellNudgeIfNeeded(completed, userQuote, {
+                    toolPath: true,
+                    delayMs: 1200,
+                });
                 return;
             }
-            const delayMs = toolPath ? 5000 : 4500;
+
+            // Already speaking / already celebrated — do not inject a second bubble.
+            if (assistantAudibleThisTurn || assistantTurnOpen || farewellAssistantSeen) {
+                farewellAssistantSeen = true;
+                dbg('mission-complete celebration skipped (already speaking)');
+                return;
+            }
+
+            // Immediate celebrate package (same rule as step_pass).
+            deferredSteeringNudges = [];
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            if (sendClientText(nudge, { steering: true })) {
+                dbg('mission-complete celebration sent immediately');
+                return;
+            }
+            scheduleFarewellNudgeIfNeeded(completed, userQuote, { delayMs: 400 });
+        }
+
+        function scheduleFarewellNudgeIfNeeded(
+            completed,
+            userQuote = '',
+            { toolPath = false, delayMs = null } = {}
+        ) {
+            if (farewellNudgeTimer) {
+                clearTimeout(farewellNudgeTimer);
+                farewellNudgeTimer = null;
+            }
+            const waitMs =
+                delayMs != null ? delayMs : toolPath ? 1200 : 400;
             farewellNudgeTimer = setTimeout(() => {
                 farewellNudgeTimer = null;
-                if (!awaitingQuestFarewell || farewellAssistantSeen || !client?.connected) return;
-                if (assistantAudibleThisTurn) {
+                if (!awaitingQuestFarewell || !client?.connected) return;
+                if (farewellAssistantSeen || assistantAudibleThisTurn || assistantTurnOpen) {
                     farewellAssistantSeen = true;
                     return;
                 }
                 sendClientText(
                     buildQuestFarewellNudge(completed, userQuote, {
                         secretBadge: questSecretBadgeJustAwarded,
-                    })
+                    }),
+                    { steering: true }
                 );
-            }, delayMs);
+            }, waitMs);
         }
 
+        /** @deprecated voice path uses handleFinishedUserTranscript → processChildTurn */
         function maybeMatchQuestFromTranscript(finished) {
-            if (!finished || !activeQuest || questCompleting || activeQuestSessionIndex === null) return;
-            const utterance = getLatestFinishedUserUtterance();
-            const newly = handleQuestUtterance(utterance);
-            if (newly.length) {
-                scheduleNoAudioRecovery(utterance, {
-                    stepCompleted: true,
-                    unclear: isUnrecognizableUserInput(utterance),
-                });
-            }
+            if (!finished) return;
+            handleFinishedUserTranscript();
         }
 
         questModalNext.addEventListener('click', () => {
@@ -3910,8 +4352,8 @@
                                 // child never spoke and stalled the session.
                                 dbg('user turn skipped: likely mic echo of Learny', { utterance });
                             } else {
-                                const unclear = handleFinishedUserTranscript();
-                                if (!unclear) maybeMatchQuestFromTranscript(true);
+                                // Judge + one speak package (covers unclear / step / miss).
+                                handleFinishedUserTranscript();
                             }
                         }
                         userBargeInThisTurn = false;
@@ -4037,8 +4479,12 @@
                         break;
                     }
                     if (pendingFalseCreditAssistantText) {
-                        maybeCorrectPrematureQuestCompleteClaim(pendingFalseCreditAssistantText);
-                        maybeRequestJapaneseEcho(pendingFalseCreditAssistantText);
+                        const synced = maybeCorrectPrematureQuestCompleteClaim(
+                            pendingFalseCreditAssistantText
+                        );
+                        if (!synced) {
+                            maybeRequestJapaneseEcho(pendingFalseCreditAssistantText);
+                        }
                         pendingFalseCreditAssistantText = '';
                     }
                     markAssistantTurnEnded();
@@ -4069,6 +4515,9 @@
                     }
                     if (
                         !assistantAudibleThisTurn &&
+                        !assistantTurnOpen &&
+                        !recoveryNudgeSentThisTurn &&
+                        !steeringNudgeSentThisTurn &&
                         awaitingAssistantReply &&
                         lastFinishedUserTranscriptAt &&
                         Date.now() - lastFinishedUserTranscriptAt < 12000
@@ -4171,6 +4620,7 @@
             clearNoAudioRecoveryTimer();
             resetChallengeMissTracking();
             if (!isAutoReconnect) {
+                clearMissionTimer();
                 endQuestSession();
             }
 
@@ -4359,14 +4809,12 @@
                 addMessage(text, 'user');
                 showAssistantThinking();
 
-                // Referee first: when it injects a verdict nudge (which already
-                // quotes the child's words), do NOT also send the raw text —
-                // two back-to-back turns make Learny answer twice.
-                const newly = handleQuestUtterance(text);
-                const nudgeHandledTurn =
-                    steeringNudgeSentThisTurn || deferredSteeringNudges.length > 0;
+                // One speak-intent: when the app owns the turn (package quotes
+                // the child), do NOT also send raw text — that causes doubles.
+                const result = processChildTurn(text);
+                const ownsTurn = result.ownsSpokenTurn || result.packageSent;
 
-                if (!nudgeHandledTurn && !sendClientText(text)) {
+                if (!ownsTurn && !sendClientText(text)) {
                     hideAssistantThinking();
                     awaitingAssistantReply = false;
                     addMessage('接続の準備中です。少し待ってからもう一度送ってね。', 'system');
@@ -4376,10 +4824,12 @@
                 chatInput.value = '';
                 lastFinishedUserTranscriptAt = Date.now();
 
-                scheduleNoAudioRecovery(text, {
-                    unclear: isUnrecognizableUserInput(text),
-                    stepCompleted: newly.length > 0,
-                });
+                if (!ownsTurn) {
+                    scheduleNoAudioRecovery(text, {
+                        unclear: false,
+                        stepCompleted: result.stepIds.length > 0,
+                    });
+                }
             }
         }
 
