@@ -1341,6 +1341,7 @@
             assistantFalselyCreditsEnglishStep,
             buildJapaneseOnlyStepCorrectionNudge,
             buildWrongStepPhraseCorrectionNudge,
+            buildNoStepCreditChatNudge,
             userMissedEnglishStepPhrase,
             reconcileEnglishStepProof,
             matchesQuestSideChallenge,
@@ -1524,7 +1525,7 @@
         // Learny models the phrase and the app accepts a close attempt.
         let challengeMissStepId = null;
         let challengeMissCount = 0;
-        // Per-mission countdown (3 min). Cleared on complete / disconnect / switch.
+        // Per-mission countdown (5 min). Cleared on complete / disconnect / switch.
         let missionTimerInterval = null;
         let missionTimerEndsAt = 0;
         let missionTimerWarningSent = false;
@@ -2255,9 +2256,9 @@
                 (item) => item.turnSeq === lastUserTurnSeq
             );
             // One spoken reply per child turn: after she already spoke, only
-            // keep hard mission-state sync (false "ミッションクリア"). Drop
-            // celebrations, next-step guides, and coaches — those belong in
-            // the first package, not a second bubble.
+            // keep hard state sync (false mission clear / false step pass).
+            // Drop celebrations, next-step guides, and coaches — those belong
+            // in the first package, not a second bubble.
             if (assistantAudibleThisTurn) {
                 const keep = deferredSteeringNudges.filter(
                     (item) => item.options?.stateSyncCorrection
@@ -2844,7 +2845,23 @@
                 };
             }
 
-            // 5) FREE — natural reply to child text; no verdict inject.
+            // 5) FREE — reply to their words, but forbid inventing a step pass.
+            // Without this, Gemini often celebrates a pass the app never recorded.
+            if (questSessionActive) {
+                const pkg = buildNoStepCreditChatNudge(
+                    activeQuest,
+                    utterance,
+                    activeQuestSessionIndex
+                );
+                const sent = deliverSpeakPackage(pkg);
+                dbg('speak intent', { intent: 'free', sent });
+                return {
+                    stepIds: newly,
+                    intent: 'free',
+                    packageSent: sent,
+                    ownsSpokenTurn: true,
+                };
+            }
             return empty;
         }
 
@@ -3720,38 +3737,37 @@
                       activeQuestSessionIndex
                   );
             if (falseCredit) {
-                // Soft false-credit "Oops" after she already spoke causes a
-                // confusing second bubble — skip that path when audible.
-                // Mission-clear lies are handled below and always corrected.
-                if (assistantAudibleThisTurn) {
-                    // fall through to premature-complete check
-                } else {
-                    reconcileEnglishStepProof(
-                        activeQuest,
-                        activeQuestSessionIndex,
-                        getSessionUserUtterances()
-                    );
-                    updateQuestBanner();
-                    if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return false;
-                    const now = Date.now();
-                    if (now - lastPrematureCompleteCorrectionAt < 8000) return false;
-                    lastPrematureCompleteCorrectionAt = now;
-                    const correctionNudge = userMissedEnglishStepPhrase(latestUser, falseCredit)
-                        ? buildWrongStepPhraseCorrectionNudge(
-                              activeQuest,
-                              falseCredit,
-                              latestUser,
-                              activeQuestSessionIndex
-                          )
-                        : buildJapaneseOnlyStepCorrectionNudge(
-                              activeQuest,
-                              falseCredit,
-                              latestUser,
-                              activeQuestSessionIndex
-                          );
-                    sendSteeringNudge(correctionNudge, { falseCreditCorrection: true });
-                    return true;
-                }
+                // Always correct false step-pass claims — even after she already
+                // spoke (state sync). Wrong "you passed" is worse than a brief
+                // second bubble; falseCreditCorrection was dropped when audible.
+                reconcileEnglishStepProof(
+                    activeQuest,
+                    activeQuestSessionIndex,
+                    getSessionUserUtterances()
+                );
+                updateQuestBanner();
+                if (completeQuestRejectedTurnSeq === lastUserTurnSeq) return false;
+                const now = Date.now();
+                if (now - lastPrematureCompleteCorrectionAt < 8000) return false;
+                lastPrematureCompleteCorrectionAt = now;
+                const jpOnlyFalseCredit =
+                    userHintsStepSuccessInJapanese(latestUser, falseCredit) &&
+                    !userMissedEnglishStepPhrase(latestUser, falseCredit);
+                const correctionNudge = jpOnlyFalseCredit
+                    ? buildJapaneseOnlyStepCorrectionNudge(
+                          activeQuest,
+                          falseCredit,
+                          latestUser,
+                          activeQuestSessionIndex
+                      )
+                    : buildWrongStepPhraseCorrectionNudge(
+                          activeQuest,
+                          falseCredit,
+                          latestUser,
+                          activeQuestSessionIndex
+                      );
+                sendSteeringNudge(correctionNudge, { stateSyncCorrection: true });
+                return true;
             }
 
             if (isQuestStepsComplete(activeQuest, activeQuestSessionIndex)) {

@@ -226,7 +226,7 @@ check("quest complete check", engine.isQuestStepsComplete(q0, 0));
 // --- Mission timer force-complete (replaces effort-pass) ---
 {
   store.clear();
-  check("timer: limit is 3 minutes", engine.MISSION_TIME_LIMIT_MS === 3 * 60 * 1000);
+  check("timer: limit is 5 minutes", engine.MISSION_TIME_LIMIT_MS === 5 * 60 * 1000);
   check("timer: warning is 30s", engine.MISSION_TIME_WARNING_MS === 30 * 1000);
 
   engine.beginQuestSession(0);

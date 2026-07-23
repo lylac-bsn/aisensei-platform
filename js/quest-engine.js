@@ -1997,7 +1997,7 @@ let questSessionBaselineStepIds = null;
 let questSessionTimeoutPassIds = null;
 
 /** Per-mission voice-call time limit (all levels). Easy to tune later. */
-export const MISSION_TIME_LIMIT_MS = 3 * 60 * 1000;
+export const MISSION_TIME_LIMIT_MS = 5 * 60 * 1000;
 /** Soft warning when this much time remains. */
 export const MISSION_TIME_WARNING_MS = 30 * 1000;
 
@@ -2559,7 +2559,11 @@ export function assistantFalselyCreditsEnglishStep(
   const remaining = getRemainingSteps(quest, questIndex);
   const next = remaining[0];
   const praiseOrCredit =
-    /great job|awesome|well done|good job|nice one|perfect|you said|you got it|you did it|mission complete|ミッションクリア|すごい|おめでとう|できたね|やったね|言えた|言ってくれ|って言って/i.test(
+    /great job|awesome|well done|good job|nice one|perfect|you said|you got it|you did it|you found|you made|you got|you passed|that's (it|right)|step (complete|cleared|done)|cleared|mission complete|ミッションクリア|すごい|おめでとう|できたね|やったね|言えた|言ってくれ|って言って|ぱっちり|クリア|正解|合格/i.test(
+      assistant
+    );
+  const creditsPhraseWithoutQuote =
+    /said it (right|correctly|perfectly)|got (it|the phrase|the english)|you said (it|that) (right|perfectly|correctly)|english (right|correct)|phrase (right|correct)|言えたね|英語で言えた|ちゃんと言えた|ぱっちり言|ステップクリア|ステップできた/i.test(
       assistant
     );
 
@@ -2575,6 +2579,20 @@ export function assistantFalselyCreditsEnglishStep(
       const tail = normalizeEnglishForMatching(pattern).split(/\s+/).slice(-1)[0];
       return tail.length >= 4 && assistant.toLowerCase().includes(tail);
     });
+    const quotesSpokenPhrase = (() => {
+      const phrase = getStepSpokenPhrase(next);
+      if (!phrase) return false;
+      const norm = normalizeEnglishForMatching(phrase);
+      const key = norm.split(/\s+/).filter((w) => w.length >= 4).slice(-2).join(" ");
+      return key && normalizeEnglishForMatching(assistant).includes(key);
+    })();
+    // False credit if she praised/credited the current step while the app
+    // did not match the child's utterance — even if the child was free-chatting
+    // (not only when userMissedEnglishStepPhrase arms).
+    if (creditsPhraseWithoutQuote) return next;
+    if (praiseOrCredit && (quotesExpected || quotesSpokenPhrase)) {
+      return next;
+    }
     if (userMissedEnglishStepPhrase(latest, next) && (praiseOrCredit || quotesExpected)) {
       return next;
     }
@@ -2607,13 +2625,12 @@ export function buildWrongStepPhraseCorrectionNudge(
   const mission = buildActiveMissionHeader(quest, questIndex);
   const transcript = (userUtterance || "").trim();
   return (
-    `[Correction] ${mission} Step NOT recorded — child did NOT say the correct phrase` +
-    (transcript ? ` (said "${transcript}")` : "") +
-    `. Do NOT say they got "${phrase}" right — but stay warm, never disappointed. ` +
-    `React to their words and praise the try in fresh words (${LANG.pair}) — vary your phrasing, never repeat a praise or correction line you already used this call — ` +
-    `then say "${phrase}" SLOWLY in small chunks and invite them to say it together ${LANG.inviteTogether}. ` +
-    `No pressure — if they struggle, reassure them ${LANG.slowOk}. Sound like a playful friend, not a script. ` +
-    `Do NOT say mission complete / ミッションクリア. ${QUEST_TRACKER_NO_REPEAT}`
+    `[App verdict] ${mission} STEP NOT RECORDED — the app did NOT tick this step` +
+    (transcript ? ` (child said: "${transcript}")` : "") +
+    `. You wrongly told them they passed / said "${phrase}" correctly. ` +
+    `Correct yourself once, briefly and warmly (${LANG.pair}): the step is still open. ` +
+    `Do NOT repeat that they succeeded. Invite them to try "${phrase}" slowly if it fits — no pressure. ` +
+    `Speak this correction aloud once even if you already replied. ${QUEST_TRACKER_NO_REPEAT}`
   );
 }
 
@@ -2627,11 +2644,36 @@ export function buildJapaneseOnlyStepCorrectionNudge(
   const mission = buildActiveMissionHeader(quest, questIndex);
   const transcript = (userUtterance || "").trim();
   return (
-    `[Correction] ${mission} Child spoke Japanese only` +
+    `[App verdict] ${mission} STEP NOT RECORDED — Japanese only` +
     (transcript ? ` ("${transcript}")` : "") +
-    `. Do NOT say they said the English phrase or mark the step done. ` +
-    `Cheer what they did in Minecraft (${LANG.pair}), then say "${phrase}" SLOWLY in small chunks and gently invite them to try it in English ${LANG.inviteTogether} — no pressure. ` +
-    `Do NOT say mission complete / ミッションクリア.`
+    `. You wrongly credited the English phrase. Correct once (${LANG.pair}): step still open. ` +
+    `Cheer what they did, then invite "${phrase}" in English — no pressure. ` +
+    `Speak this correction aloud once even if you already replied. Do NOT say mission complete.`
+  );
+}
+
+/**
+ * Mission free-chat turn: reply to the child, but never invent a step pass.
+ */
+export function buildNoStepCreditChatNudge(
+  quest,
+  userUtterance = "",
+  questIndex = loadProgress()
+) {
+  if (!quest) return "";
+  const utterance = (userUtterance || "").trim();
+  const mission = buildActiveMissionHeader(quest, questIndex);
+  const next = getRemainingSteps(quest, questIndex)[0] || null;
+  const nextHint = next
+    ? ` If they ask what to do next, soft invite only: ${next.label} — "${getStepSpokenPhrase(next)}".`
+    : "";
+  return (
+    `[App verdict] ${mission} No step recorded this turn.` +
+    (utterance ? ` Child said: "${utterance}".` : "") +
+    ` Reply once to what THEY said — if it's their own topic, chat as a friend and do NOT mention the mission.` +
+    ` Do NOT say they passed a step, got the English phrase right, "You did it" for a challenge, or mission clear.` +
+    nextHint +
+    ` One short reply, ${LANG.pair}. ${QUEST_TRACKER_NO_REPEAT}`
   );
 }
 
