@@ -663,6 +663,26 @@ export function getLessonBadgeSlots() {
   return [...getMainBadgeSlots(), ...getHiddenBadgeSlots()];
 }
 
+/** Catalog of all grantable badges (main + secret definitions). */
+export function getBadgeCatalog() {
+  return [
+    ...MAIN_BADGE_SLOTS.map((b) => ({
+      id: b.id,
+      label: b.label,
+      desc: b.desc,
+      kind: "main",
+      level: null,
+    })),
+    ...HIDDEN_BADGES.map((b) => ({
+      id: b.id,
+      label: b.earnedLabel,
+      desc: b.desc,
+      kind: "secret",
+      level: b.level,
+    })),
+  ];
+}
+
 /** Snapshot for Firestore sync and admin dashboard. */
 export function buildProgressSnapshot() {
   const totalQuests = ACTIVE_QUESTS.length;

@@ -501,6 +501,208 @@
             padding: 2rem 1rem;
         }
 
+        .progress-legend {
+            font-size: 0.78rem;
+            color: #888;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .progress-header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.35rem;
+        }
+
+        .progress-skip-pill {
+            font-size: 0.72rem;
+            font-weight: 700;
+            background: #fff3e0;
+            color: #e65100;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+        }
+
+        .progress-level-block {
+            margin: 0.85rem 0;
+            padding: 0.75rem;
+            background: #fafafa;
+            border-radius: 12px;
+            border: 1px solid #eee;
+        }
+
+        .progress-level-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.5rem;
+            margin-bottom: 0.55rem;
+            flex-wrap: wrap;
+        }
+
+        .progress-level-header h4 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .progress-level-meta {
+            font-size: 0.72rem;
+            color: #888;
+        }
+
+        .progress-mission-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 0.4rem;
+        }
+
+        .progress-mission-cell {
+            display: grid;
+            grid-template-columns: auto auto 1fr;
+            grid-template-rows: auto auto;
+            gap: 0.1rem 0.35rem;
+            align-items: center;
+            padding: 0.4rem 0.45rem;
+            border-radius: 8px;
+            background: #f0f0f0;
+            font-size: 0.7rem;
+            border: 1px solid transparent;
+        }
+
+        .progress-mission-cell.starred { background: #e8f5e9; border-color: #a5d6a7; }
+        .progress-mission-cell.skipped { background: #fff3e0; border-color: #ffcc80; }
+        .progress-mission-cell.current { background: #fff8e1; border-color: #ffd54f; }
+        .progress-mission-cell.unlocked { background: #e3f2fd; }
+        .progress-mission-cell.locked { opacity: 0.55; }
+
+        .progress-mission-cell-mark { font-weight: 800; }
+        .progress-mission-cell-num { font-weight: 700; color: #666; }
+        .progress-mission-cell-title {
+            grid-column: 1 / -1;
+            color: #546e7a;
+            line-height: 1.25;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .progress-skip-count {
+            grid-column: 1 / -1;
+            font-size: 0.68rem;
+            font-weight: 800;
+            color: #e65100;
+        }
+
+        .progress-level-now {
+            margin: 0.5rem 0 0;
+            font-size: 0.75rem;
+            color: #555;
+        }
+
+        .progress-level-now.muted { color: #999; }
+
+        .progress-detail-block {
+            margin-top: 0.75rem;
+            font-size: 0.82rem;
+        }
+
+        .progress-detail-block summary {
+            cursor: pointer;
+            font-weight: 700;
+            color: var(--primary-red);
+            padding: 0.35rem 0;
+        }
+
+        .progress-badge-board-head {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #666;
+            margin-bottom: 0.45rem;
+        }
+
+        .progress-badge-chip-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 0.4rem;
+        }
+
+        .progress-badge-chip {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            padding: 0.5rem;
+            border-radius: 10px;
+            background: #f5f5f5;
+            border: 1px solid #e0e0e0;
+        }
+
+        .progress-badge-chip.earned {
+            background: #e8f5e9;
+            border-color: #81c784;
+        }
+
+        .progress-badge-chip-label { font-weight: 700; font-size: 0.78rem; }
+        .progress-badge-chip-kind { font-size: 0.65rem; color: #888; }
+
+        .progress-badge-btn {
+            margin-top: 0.25rem;
+            border: none;
+            border-radius: 6px;
+            padding: 0.25rem 0.45rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .progress-badge-btn.grant { background: #1976d2; color: #fff; }
+        .progress-badge-btn.revoke { background: #fff; color: #c62828; border: 1px solid #ef9a9a; }
+
+        .progress-load-activity {
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 8px;
+            padding: 0.45rem 0.75rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .progress-activity-list {
+            list-style: none;
+            margin: 0.5rem 0 0;
+            padding: 0;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .progress-activity-item {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.15rem 0.5rem;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.75rem;
+        }
+
+        .progress-activity-type { font-weight: 800; color: #333; }
+        .progress-activity-item.type-skip .progress-activity-type { color: #e65100; }
+        .progress-activity-item.type-star .progress-activity-type { color: #f9a825; }
+        .progress-activity-item.type-badge .progress-activity-type { color: #2e7d32; }
+        .progress-activity-detail { color: #555; }
+        .progress-activity-meta {
+            grid-column: 1 / -1;
+            color: #999;
+            font-size: 0.68rem;
+        }
+
+        .progress-activity-empty,
+        .progress-empty-inline {
+            color: #888;
+            font-size: 0.78rem;
+            margin: 0.35rem 0;
+        }
+
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
@@ -1427,7 +1629,7 @@
         <div id="tab-progress" class="admin-tab-panel" role="tabpanel" hidden>
             <div class="progress-panel">
                 <h2>&#127891; 生徒の学習進捗</h2>
-                <p class="progress-panel-desc">Beginner レッスン1のミッション・スター・フレーズ・バッジを確認できます。生徒がログインして学習すると自動更新されます。</p>
+                <p class="progress-panel-desc">全レベルのミッション（★クリア / ↷スキップ）、スキップ回数、バッジ付与、アクティビティ履歴を確認・操作できます。</p>
                 <div class="search-bar">
                     <span class="search-icon">&#128269;</span>
                     <input type="text" id="progress-search" placeholder="名前で検索..." autocomplete="off">
@@ -1449,7 +1651,9 @@
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
         import { getFirestore, collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-functions.js";
-        import { renderProgressDashboard } from "./js/admin-progress.js";
+        import { renderProgressDashboard, renderActivityTimeline } from "./js/admin-progress.js";
+        import { fetchUserActivity, logUserActivity, ACTIVITY_TYPES } from "./js/activity-log.js";
+        import { adminGrantBadge, adminRevokeBadge } from "./js/progress-sync.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -1533,6 +1737,9 @@
                         beginnerProgress: data.beginnerProgress || null,
                         intermediateProgress: data.intermediateProgress || null,
                         advancedProgress: data.advancedProgress || null,
+                        lessonBadges: data.lessonBadges || null,
+                        badgeRevocations: data.badgeRevocations || null,
+                        skipStats: data.skipStats || null,
                         progressUpdatedAt: data.progressUpdatedAt || null
                     });
                 });
@@ -1575,6 +1782,54 @@
             const query = document.getElementById('progress-search')?.value || '';
             container.innerHTML = renderProgressDashboard(usersData, query);
         }
+
+        document.getElementById('progress-dashboard')?.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const userId = btn.dataset.userId;
+            if (!userId) return;
+
+            if (action === 'load-activity') {
+                const mount = btn.closest('.progress-activity-mount');
+                if (!mount) return;
+                mount.innerHTML = '<p class="progress-activity-empty"><span class="spinner"></span> 読み込み中...</p>';
+                const events = await fetchUserActivity(db, userId, 100);
+                mount.innerHTML = renderActivityTimeline(events);
+                return;
+            }
+
+            if (action === 'grant-badge' || action === 'revoke-badge') {
+                const badgeId = btn.dataset.badgeId;
+                if (!badgeId) return;
+                btn.disabled = true;
+                try {
+                    if (action === 'grant-badge') {
+                        const ok = await adminGrantBadge(db, userId, badgeId);
+                        if (!ok) throw new Error('grant failed');
+                        await logUserActivity(db, userId, {
+                            type: ACTIVITY_TYPES.BADGE,
+                            badgeId,
+                            source: 'admin',
+                        });
+                        showToast('バッジを付与しました', 'success');
+                    } else {
+                        const ok = await adminRevokeBadge(db, userId, badgeId);
+                        if (!ok) throw new Error('revoke failed');
+                        await logUserActivity(db, userId, {
+                            type: ACTIVITY_TYPES.BADGE_REVOKE,
+                            badgeId,
+                            source: 'admin',
+                        });
+                        showToast('バッジを取り消しました', 'success');
+                    }
+                    await loadUsers();
+                } catch (err) {
+                    showToast('バッジ操作に失敗しました', 'error');
+                    btn.disabled = false;
+                }
+            }
+        });
 
         window.clearProgressSearch = function() {
             const input = document.getElementById('progress-search');
@@ -2121,6 +2376,9 @@
                     beginnerProgress: data.beginnerProgress || null,
                     intermediateProgress: data.intermediateProgress || null,
                     advancedProgress: data.advancedProgress || null,
+                    lessonBadges: data.lessonBadges || null,
+                    badgeRevocations: data.badgeRevocations || null,
+                    skipStats: data.skipStats || null,
                     progressUpdatedAt: data.progressUpdatedAt || null
                 });
             });

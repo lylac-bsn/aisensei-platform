@@ -24,17 +24,41 @@ service cloud.firestore {
         // remainingTime must be a number >= 0
         && request.resource.data.remainingTime is number
         && request.resource.data.remainingTime >= 0
-        // Optional beginner quest progress sync from student app
+        // Quest progress sync from student app
         && (!('beginnerProgress' in request.resource.data)
             || request.resource.data.beginnerProgress is map)
+        && (!('intermediateProgress' in request.resource.data)
+            || request.resource.data.intermediateProgress is map)
+        && (!('advancedProgress' in request.resource.data)
+            || request.resource.data.advancedProgress is map)
         && (!('progressUpdatedAt' in request.resource.data)
-            || request.resource.data.progressUpdatedAt is timestamp);
+            || request.resource.data.progressUpdatedAt is timestamp)
+        && (!('lessonBadges' in request.resource.data)
+            || request.resource.data.lessonBadges is list)
+        && (!('badgeRevocations' in request.resource.data)
+            || request.resource.data.badgeRevocations is list)
+        && (!('skipStats' in request.resource.data)
+            || request.resource.data.skipStats is map);
 
       // Users cannot create or delete their own documents
       allow create, delete: if false;
 
       // --- Admin: full read/write ---
       allow read, write: if isAdmin();
+
+      // Activity feed: skips, stars, badges, resets
+      match /activity/{eventId} {
+        allow read: if isAdmin()
+          || (request.auth != null && request.auth.uid == userId);
+
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.type is string
+          && request.resource.data.source == 'client'
+          && request.resource.data.keys().hasAll(['type', 'source', 'at']);
+
+        allow create, update, delete: if isAdmin();
+      }
     }
 
     // Allow admins to list all users (collection-level query)

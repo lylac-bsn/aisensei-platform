@@ -5,6 +5,8 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { initProgressSync, scheduleProgressSync } from "./progress-sync.js";
+import { logUserActivity } from "./activity-log.js";
+import { getActiveLevelInfo } from "./quest-engine.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -154,11 +156,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.data?.type === 'gc_quest_progress_update' && currentUser) {
             scheduleProgressSync(db, currentUser.uid);
         }
+        if (e.data?.type === 'gc_activity_event' && currentUser) {
+            logUserActivity(db, currentUser.uid, e.data.event || {});
+        }
     });
 
     window.addEventListener('learny-progress-changed', () => {
         if (currentUser) {
             scheduleProgressSync(db, currentUser.uid);
+        }
+    });
+
+    window.addEventListener('learny-activity', (e) => {
+        if (currentUser) {
+            const detail = e.detail || {};
+            logUserActivity(db, currentUser.uid, {
+                ...detail,
+                level: detail.level || getActiveLevelInfo().id,
+            });
         }
     });
 

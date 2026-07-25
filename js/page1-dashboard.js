@@ -697,6 +697,11 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     refreshProgressPanels();
     closePanel();
     window.dispatchEvent(new Event("learny-progress-changed"));
+    window.dispatchEvent(
+      new CustomEvent("learny-activity", {
+        detail: { type: "reset", level: getActiveLevelInfo().id },
+      })
+    );
   }
 
   async function requestStartOver() {

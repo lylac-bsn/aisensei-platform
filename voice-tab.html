@@ -1950,6 +1950,11 @@
                 if (!result.ok) return;
 
                 notifyParentProgress();
+                notifyParentActivity({
+                    type: "skip",
+                    questIndex: idx,
+                    questTitle: skippedQuest?.titleEn || skippedQuest?.title || "",
+                });
                 notifySelectedQuestUpdate();
                 updateQuestBanner();
                 dbg('mission skipped', result);
@@ -2063,6 +2068,23 @@
         function notifyParentProgress() {
             try {
                 window.parent.postMessage({ type: "gc_quest_progress_update" }, "*");
+            } catch {
+                // ignore cross-origin
+            }
+        }
+
+        function notifyParentActivity(event) {
+            try {
+                window.parent.postMessage(
+                    {
+                        type: "gc_activity_event",
+                        event: {
+                            ...event,
+                            level: event.level || LEVEL_INFO.id,
+                        },
+                    },
+                    "*"
+                );
             } catch {
                 // ignore cross-origin
             }
@@ -2839,6 +2861,7 @@
             recordLessonBadge(id);
             addMessage('✨🎖️✨ シークレットバッジをゲットした！めったに取れないスペシャルバッジだよ！バッジコレクションを見てみよう！', 'system');
             notifyParentProgress();
+            notifyParentActivity({ type: "badge", badgeId: id });
             dbg('hidden badge earned', { id });
             return true;
         }
@@ -4114,8 +4137,17 @@
                 lessonDone = wasFrontier && unlockedLesson;
                 isNewClear = wasFrontier;
                 awardQuestStar(completedIndex, true);
+                notifyParentActivity({
+                    type: "star",
+                    questIndex: completedIndex,
+                    questTitle: completed?.titleEn || completed?.title || "",
+                });
                 if (isLevelFullyStarred()) {
                     recordLessonBadge(LEVEL_INFO.mainBadgeId);
+                    notifyParentActivity({
+                        type: "badge",
+                        badgeId: LEVEL_INFO.mainBadgeId,
+                    });
                 }
                 if (lessonDone) {
                     setSelectedQuestIndex(completedIndex);
