@@ -772,21 +772,28 @@
             white-space: nowrap;
             letter-spacing: 0.02em;
         }
-        .quest-banner-timer {
-            font-size: var(--text-md);
-            font-weight: 800;
+        .quest-skip-btn {
+            appearance: none;
+            border: 1.5px solid #C8E6C9;
+            background: #fff;
             color: #2E7D32;
-            letter-spacing: 0.02em;
+            font-family: inherit;
+            font-size: var(--text-xs);
+            font-weight: 700;
             line-height: 1.2;
-            font-variant-numeric: tabular-nums;
+            padding: 6px 10px;
+            border-radius: 999px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
         }
-        .quest-banner-timer.urgent {
-            color: #E65100;
-            animation: quest-timer-pulse 1s ease-in-out infinite;
+        .quest-skip-btn:hover:not(:disabled) {
+            background: #E8F5E9;
+            border-color: #81C784;
         }
-        @keyframes quest-timer-pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.72; }
+        .quest-skip-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
         .quest-banner.celebrating {
             border-color: #66BB6A;
@@ -1008,6 +1015,119 @@
             color: var(--text-secondary);
         }
 
+        /* ===== Skip confirmation modal ===== */
+        .skip-confirm-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 260;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(26, 26, 46, 0.45);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .skip-confirm-overlay.active {
+            display: flex;
+            animation: skip-confirm-fade 0.22s ease-out;
+        }
+        @keyframes skip-confirm-fade {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .skip-confirm-card {
+            position: relative;
+            width: min(100%, 340px);
+            padding: 28px 24px 22px;
+            border-radius: 22px;
+            background:
+                radial-gradient(120% 80% at 50% -10%, #FFF8E7 0%, transparent 55%),
+                linear-gradient(180deg, #FFFFFF 0%, #FFFCF6 100%);
+            box-shadow:
+                0 18px 48px rgba(26, 26, 46, 0.22),
+                0 0 0 1px rgba(255, 193, 7, 0.18);
+            text-align: center;
+            animation: skip-confirm-pop 0.32s cubic-bezier(0.34, 1.45, 0.64, 1);
+        }
+        @keyframes skip-confirm-pop {
+            from { opacity: 0; transform: translateY(12px) scale(0.94); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .skip-confirm-icon {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 14px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(145deg, #FFE082 0%, #FFB300 100%);
+            box-shadow: 0 8px 20px rgba(255, 179, 0, 0.35);
+            color: #5D4037;
+        }
+        .skip-confirm-icon svg {
+            width: 28px;
+            height: 28px;
+        }
+        .skip-confirm-card h2 {
+            margin: 0 0 8px;
+            font-size: clamp(1.15rem, 1.05rem + 0.4vw, 1.35rem);
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: 0.01em;
+        }
+        .skip-confirm-card p {
+            margin: 0 0 20px;
+            font-size: var(--text-sm);
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+        .skip-confirm-note {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: -8px auto 18px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #FFF3E0;
+            color: #E65100;
+            font-size: var(--text-xs);
+            font-weight: 700;
+        }
+        .skip-confirm-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .skip-confirm-btn {
+            border: none;
+            border-radius: 12px;
+            padding: 13px 16px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.12s ease, filter 0.12s ease, background 0.12s ease;
+        }
+        .skip-confirm-btn:active {
+            transform: scale(0.98);
+        }
+        .skip-confirm-btn.confirm {
+            background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
+            color: #fff;
+            box-shadow: 0 6px 16px rgba(251, 140, 0, 0.35);
+        }
+        .skip-confirm-btn.confirm:hover {
+            filter: brightness(1.05);
+        }
+        .skip-confirm-btn.cancel {
+            background: #F5F0E6;
+            color: var(--text-secondary);
+        }
+        .skip-confirm-btn.cancel:hover {
+            background: #EFE8DA;
+        }
+
         /* ===== Quest transition loading ===== */
         .quest-loading-overlay {
             display: none;
@@ -1186,7 +1306,9 @@
                 <div class="quest-card-status">
                     <div class="quest-stars" id="quest-stars" role="img" aria-label="クエスト進捗"></div>
                     <div class="quest-banner-progress" id="quest-banner-progress">0 / 10</div>
-                    <div class="quest-banner-timer" id="quest-banner-timer" hidden aria-live="polite"></div>
+                    <button type="button" class="quest-skip-btn" id="quest-skip-btn" disabled hidden>
+                        スキップ
+                    </button>
                 </div>
             </div>
         </div>
@@ -1228,6 +1350,25 @@
                 <button type="button" class="quest-modal-btn primary" id="quest-modal-next">次のクエスト</button>
                 <button type="button" class="quest-modal-btn secondary" id="quest-modal-done">ここで終わる</button>
                 <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">バッジを受け取る</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skip confirmation -->
+    <div class="skip-confirm-overlay" id="skip-confirm-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="skip-confirm-title">
+        <div class="skip-confirm-card">
+            <div class="skip-confirm-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14"/>
+                    <path d="m13 6 6 6-6 6"/>
+                </svg>
+            </div>
+            <h2 id="skip-confirm-title">このミッションをスキップする？</h2>
+            <p id="skip-confirm-body">つぎのミッションへ進みます。</p>
+            <div class="skip-confirm-note">スター・バッジはもらえません</div>
+            <div class="skip-confirm-actions">
+                <button type="button" class="skip-confirm-btn confirm" id="skip-confirm-yes">スキップして次へ</button>
+                <button type="button" class="skip-confirm-btn cancel" id="skip-confirm-no">やっぱりやめる</button>
             </div>
         </div>
     </div>
@@ -1327,11 +1468,13 @@
             applyUtteranceToChallenge,
             buildChallengeResultNudge,
             buildChallengeEchoCoachNudge,
-            MISSION_TIME_LIMIT_MS,
-            MISSION_TIME_WARNING_MS,
-            forceCompleteQuestStepsForTimeout,
-            buildMissionTimeoutWarningNudge,
-            buildMissionTimeoutCompleteNudge,
+            hasQuestStar,
+            getStarCount,
+            loadStarredQuestIds,
+            recordQuestStar,
+            canSkipQuest,
+            applyMissionSkip,
+            isLevelFullyStarred,
             isUnrecognizableUserInput,
             buildUnclearInputRepeatNudge,
             buildNoAudioRecoveryNudge,
@@ -1406,6 +1549,10 @@
         let lastSilenceUserSpeechAt = 0;
         let lastSilenceAssistantDoneAt = 0;
         let lastSilencePromptAt = 0;
+        // Rotate silence check-in styles so 30s nudges don't sound identical.
+        let silenceCheckInVariant = 0;
+        let lastSilenceBanText = '';
+        let silenceRetryTimer = null;
         const SILENCE_WATCH_INTERVAL_MS = 3000;
         let isAutoReconnecting = false;
         // Live API session-resumption handle for the CURRENT session; lets us
@@ -1465,7 +1612,11 @@
         const questSteps = document.getElementById('quest-steps');
         const questBannerHint = document.getElementById('quest-banner-hint');
         const questBannerProgress = document.getElementById('quest-banner-progress');
-        const questBannerTimer = document.getElementById('quest-banner-timer');
+        const questSkipBtn = document.getElementById('quest-skip-btn');
+        const skipConfirmOverlay = document.getElementById('skip-confirm-overlay');
+        const skipConfirmYes = document.getElementById('skip-confirm-yes');
+        const skipConfirmNo = document.getElementById('skip-confirm-no');
+        const skipConfirmBody = document.getElementById('skip-confirm-body');
         const questSegments = document.getElementById('quest-segments');
         const questStars = document.getElementById('quest-stars');
         const questModal = document.getElementById('quest-modal');
@@ -1525,13 +1676,10 @@
         // Learny models the phrase and the app accepts a close attempt.
         let challengeMissStepId = null;
         let challengeMissCount = 0;
-        // Per-mission countdown (5 min). Cleared on complete / disconnect / switch.
-        let missionTimerInterval = null;
-        let missionTimerEndsAt = 0;
-        let missionTimerWarningSent = false;
+        // Skip handoff in flight — disable double-taps.
+        let missionSkipInFlight = false;
         // Quest 7 quiz: any coaching (miss nudge, echo coach, JP hint, hostile
         // redirect) counts as "help" and forfeits the hidden no-hint badge.
-        // Timeout clear also sets this so secret badges are never awarded.
         let questHintAssistUsed = false;
         // Set when the mission-7 no-hint badge was just awarded, so the
         // completion celebration also announces the secret badge.
@@ -1643,36 +1791,44 @@
 
         function renderQuestStars() {
             const total = getQuests().length;
-            const earned = loadProgress();
+            const starred = new Set(loadStarredQuestIds());
+            const earned = getStarCount();
             questStars.innerHTML = '';
 
             for (let i = 0; i < total; i++) {
                 const star = document.createElement('span');
                 star.className = 'quest-star';
                 star.dataset.index = String(i);
-                star.setAttribute('aria-label', `クエスト${i + 1}${i < earned ? '、クリア' : ''}`);
+                const filled = starred.has(i);
+                star.setAttribute(
+                    'aria-label',
+                    `クエスト${i + 1}${filled ? '、クリア' : ''}`
+                );
                 star.innerHTML = STAR_SVG;
-                if (i < earned) {
-                    star.classList.add('filled');
-                }
+                if (filled) star.classList.add('filled');
                 questStars.appendChild(star);
             }
 
             renderQuestSegments(earned, total);
             questBannerProgress.textContent = `${earned} / ${total}`;
+            updateQuestSkipButton();
         }
 
         function awardQuestStar(starIndex, animate = true) {
             const star = questStars.querySelector(`.quest-star[data-index="${starIndex}"]`);
-            if (!star || star.classList.contains('filled')) return;
+            if (!star || star.classList.contains('filled')) {
+                renderQuestStars();
+                return;
+            }
 
             star.classList.add('filled');
             star.setAttribute('aria-label', `クエスト${starIndex + 1}、クリア`);
 
-            const earned = starIndex + 1;
+            const earned = getStarCount();
             const total = getQuests().length;
             renderQuestSegments(earned, total);
             questBannerProgress.textContent = `${earned} / ${total}`;
+            updateQuestSkipButton();
 
             if (animate) {
                 star.classList.remove('pop-in');
@@ -1686,113 +1842,156 @@
             }
         }
 
-        function formatMissionCountdown(ms) {
-            const totalSec = Math.max(0, Math.ceil(ms / 1000));
-            const m = Math.floor(totalSec / 60);
-            const s = totalSec % 60;
-            return `残り ${m}:${String(s).padStart(2, '0')}`;
+        function getSkipCandidateIndex() {
+            if (questSessionActive && activeQuestSessionIndex !== null) {
+                return activeQuestSessionIndex;
+            }
+            return getSelectedQuestIndex();
         }
 
-        function updateMissionCountdownUI(remainingMs) {
-            if (!questBannerTimer) return;
-            if (
-                remainingMs == null ||
-                !Number.isFinite(remainingMs) ||
-                !questSessionActive ||
-                !activeQuest ||
-                questCompleting
-            ) {
-                questBannerTimer.hidden = true;
-                questBannerTimer.textContent = '';
-                questBannerTimer.classList.remove('urgent');
-                return;
-            }
-            questBannerTimer.hidden = false;
-            questBannerTimer.textContent = formatMissionCountdown(remainingMs);
-            questBannerTimer.classList.toggle(
-                'urgent',
-                remainingMs <= MISSION_TIME_WARNING_MS
-            );
+        function updateQuestSkipButton() {
+            if (!questSkipBtn) return;
+            const idx = getSkipCandidateIndex();
+            const enabled =
+                !missionSkipInFlight &&
+                !questCompleting &&
+                !awaitingQuestFarewell &&
+                !questHandoffActive &&
+                actionState !== 'connecting' &&
+                canSkipQuest(idx);
+            questSkipBtn.hidden = !enabled;
+            questSkipBtn.disabled = !enabled;
+            questSkipBtn.title = enabled
+                ? 'このミッションをスキップして次へ進む'
+                : '';
         }
 
-        function clearMissionTimer() {
-            if (missionTimerInterval) {
-                clearInterval(missionTimerInterval);
-                missionTimerInterval = null;
-            }
-            missionTimerEndsAt = 0;
-            missionTimerWarningSent = false;
-            updateMissionCountdownUI(null);
+        function hideSkipConfirmDialog() {
+            if (!skipConfirmOverlay) return;
+            skipConfirmOverlay.classList.remove('active');
+            skipConfirmOverlay.setAttribute('aria-hidden', 'true');
         }
 
-        function startMissionTimer({ forceRestart = false } = {}) {
-            // Opening retries call announceQuestStart again — do not reset the clock.
-            if (
-                !forceRestart &&
-                missionTimerInterval &&
-                missionTimerEndsAt > Date.now()
-            ) {
-                return;
-            }
-            clearMissionTimer();
-            if (!activeQuest || !questSessionActive || activeQuestSessionIndex === null) {
-                return;
-            }
-            missionTimerEndsAt = Date.now() + MISSION_TIME_LIMIT_MS;
-            missionTimerWarningSent = false;
-            updateMissionCountdownUI(MISSION_TIME_LIMIT_MS);
-            missionTimerInterval = setInterval(() => {
-                const remaining = missionTimerEndsAt - Date.now();
-                updateMissionCountdownUI(remaining);
-                if (
-                    !missionTimerWarningSent &&
-                    remaining <= MISSION_TIME_WARNING_MS &&
-                    remaining > 0 &&
-                    client?.connected &&
-                    activeQuest &&
-                    !questCompleting
-                ) {
-                    missionTimerWarningSent = true;
-                    sendSteeringNudge(
-                        buildMissionTimeoutWarningNudge(
-                            activeQuest,
-                            activeQuestSessionIndex
-                        )
-                    );
+        /** Fancy in-app confirm — replaces window.confirm for skip. */
+        function showSkipConfirmDialog(missionLabel = '') {
+            return new Promise((resolve) => {
+                if (!skipConfirmOverlay) {
+                    resolve(false);
+                    return;
                 }
-                if (remaining <= 0) {
-                    if (missionTimerInterval) {
-                        clearInterval(missionTimerInterval);
-                        missionTimerInterval = null;
+                if (skipConfirmBody) {
+                    skipConfirmBody.textContent = missionLabel
+                        ? `「${missionLabel}」をスキップして、つぎのミッションへ進みます。`
+                        : 'つぎのミッションへ進みます。';
+                }
+                const finish = (ok) => {
+                    hideSkipConfirmDialog();
+                    skipConfirmYes?.removeEventListener('click', onYes);
+                    skipConfirmNo?.removeEventListener('click', onNo);
+                    skipConfirmOverlay?.removeEventListener('click', onBackdrop);
+                    document.removeEventListener('keydown', onKey);
+                    resolve(ok);
+                };
+                const onYes = () => finish(true);
+                const onNo = () => finish(false);
+                const onBackdrop = (e) => {
+                    if (e.target === skipConfirmOverlay) finish(false);
+                };
+                const onKey = (e) => {
+                    if (e.key === 'Escape') finish(false);
+                };
+                skipConfirmYes?.addEventListener('click', onYes);
+                skipConfirmNo?.addEventListener('click', onNo);
+                skipConfirmOverlay.addEventListener('click', onBackdrop);
+                document.addEventListener('keydown', onKey);
+                skipConfirmOverlay.classList.add('active');
+                skipConfirmOverlay.setAttribute('aria-hidden', 'false');
+                skipConfirmNo?.focus?.();
+            });
+        }
+
+        /**
+         * Confirmed skip: unlock next without star/badge, then auto-start next
+         * (or lesson-done UI without main badge).
+         */
+        async function skipCurrentMission() {
+            if (missionSkipInFlight) return;
+            const idx = getSkipCandidateIndex();
+            if (!canSkipQuest(idx)) return;
+
+            const quest = getQuests()[idx] || null;
+            const missionLabel = quest?.titleEn || quest?.title || '';
+            const confirmed = await showSkipConfirmDialog(missionLabel);
+            if (!confirmed) return;
+
+            missionSkipInFlight = true;
+            updateQuestSkipButton();
+
+            const skippedQuest = quest;
+            const wasInSession =
+                questSessionActive ||
+                actionState === 'active' ||
+                actionState === 'connecting';
+
+            try {
+                clearQuestTeardownTimers();
+                awaitingQuestFarewell = false;
+                pendingQuestTeardown = null;
+                questCompleting = false;
+                deferredSteeringNudges = [];
+                clearDeferredSteeringFlushTimer();
+                cancelPendingNextQuestSession();
+                clearNoAudioRecoveryTimer();
+                stopSilenceWatch();
+                resetSilenceWatchState();
+
+                const result = applyMissionSkip(idx);
+                if (!result.ok) return;
+
+                notifyParentProgress();
+                notifySelectedQuestUpdate();
+                updateQuestBanner();
+                dbg('mission skipped', result);
+
+                if (result.lessonDone) {
+                    if (wasInSession) {
+                        questSessionActive = false;
+                        activeQuest = null;
+                        activeQuestSessionIndex = null;
+                        disconnectAPI(false, false);
                     }
-                    handleMissionTimeout();
+                    actionState = 'idle';
+                    updateActionUI();
+                    showQuestModal(skippedQuest, true, { fromSkip: true });
+                    return;
                 }
-            }, 1000);
-        }
 
-        /** Timer hit 0 — force-complete steps, award star, never secret badge. */
-        function handleMissionTimeout() {
-            if (questCompleting || !activeQuest || !questSessionActive) return;
-            if (activeQuestSessionIndex === null) return;
-
-            questHintAssistUsed = true;
-            const quest = activeQuest;
-            const idx = activeQuestSessionIndex;
-            forceCompleteQuestStepsForTimeout(quest, idx);
-            updateQuestBanner();
-            notifyParentProgress();
-            dbg('mission timeout force-complete', { questIndex: idx });
-
-            if (client?.connected) {
-                sendSteeringNudge(buildMissionTimeoutCompleteNudge(quest, idx));
+                activeQuest = null;
+                activeQuestSessionIndex = null;
+                await beginNextQuestHandoff(skippedQuest, {
+                    playReadySound: true,
+                    skipped: true,
+                });
+            } catch (error) {
+                console.error('skipCurrentMission failed', error);
+                missionSkipInFlight = false;
+                actionState = 'idle';
+                updateActionUI();
+                updateQuestBanner();
+                addMessage(
+                    'スキップのあと、次のミッションを始められませんでした。右上の「はじめる」を押してね。',
+                    'system'
+                );
+            } finally {
+                missionSkipInFlight = false;
+                updateQuestSkipButton();
             }
-            onQuestComplete('timeout', '');
         }
 
         function updateQuestBanner() {
             const quests = getQuests();
             const total = quests.length;
-            const earned = loadProgress();
+            const earned = getStarCount();
             const selectedIndex =
                 questSessionActive && activeQuestSessionIndex !== null
                     ? activeQuestSessionIndex
@@ -1807,8 +2006,8 @@
             }
 
             if (!selectedQuest) {
-                updateMissionCountdownUI(null);
                 updateEmptyState();
+                updateQuestSkipButton();
                 return;
             }
 
@@ -1835,11 +2034,7 @@
             } else {
                 questBannerHint.textContent = selectedQuest.hint ? `ヒント：${selectedQuest.hint}` : "";
             }
-            if (missionTimerEndsAt && questSessionActive && activeQuest && !questCompleting) {
-                updateMissionCountdownUI(missionTimerEndsAt - Date.now());
-            } else {
-                updateMissionCountdownUI(null);
-            }
+            updateQuestSkipButton();
             updateEmptyState();
         }
 
@@ -3014,19 +3209,38 @@
             questModalConnectLoadingToken = 0;
         }
 
-        function showQuestModal(completedQuest, lessonDone) {
+        function showQuestModal(completedQuest, lessonDone, { fromSkip = false } = {}) {
             questModalInner.classList.remove('lesson-complete', 'mission-complete');
             if (lessonDone) {
                 questModalInner.classList.add('lesson-complete');
                 questModalCelebrate.hidden = false;
                 launchQuestConfetti();
-                questModalTitle.textContent = 'レッスンクリアおめでとう！';
-                questModalBody.textContent = '';
-                questModalBody.hidden = true;
-                questModalNext.style.display = 'none';
-                questModalDone.style.display = 'none';
-                questModalReset.style.display = 'block';
-                questModalReset.textContent = 'バッジを受け取る';
+                const fullyStarred = isLevelFullyStarred();
+                if (fromSkip || !fullyStarred) {
+                    questModalTitle.textContent = fromSkip
+                        ? 'ミッションをスキップして進みました'
+                        : 'レッスンのミッションを進みきりました！';
+                    questModalBody.hidden = false;
+                    questModalBody.textContent = fullyStarred
+                        ? ''
+                        : 'スターがまだないミッションは、あとからもう一度チャレンジできるよ。';
+                    questModalNext.style.display = 'none';
+                    questModalDone.style.display = 'block';
+                    questModalDone.textContent = 'とじる';
+                    questModalReset.style.display = fullyStarred ? 'block' : 'none';
+                    if (fullyStarred) {
+                        questModalReset.textContent = 'バッジを受け取る';
+                        questModalDone.style.display = 'none';
+                    }
+                } else {
+                    questModalTitle.textContent = 'レッスンクリアおめでとう！';
+                    questModalBody.textContent = '';
+                    questModalBody.hidden = true;
+                    questModalNext.style.display = 'none';
+                    questModalDone.style.display = 'none';
+                    questModalReset.style.display = 'block';
+                    questModalReset.textContent = 'バッジを受け取る';
+                }
                 questSfx.playLessonComplete();
             } else {
                 questModalInner.classList.remove('lesson-complete', 'mission-complete');
@@ -3059,13 +3273,15 @@
             }
         }
 
-        function showQuestToast(completedQuest) {
+        function showQuestToast(completedQuest, { skipped = false } = {}) {
             const nextQuest = getSelectedQuest();
-            const earned = loadProgress();
+            const earned = getStarCount();
             const total = getQuests().length;
             questBanner.classList.add('celebrating');
-            questBannerNum.textContent = '✓';
-            questBannerTitleEn.textContent = `${completedQuest?.titleEn || completedQuest?.title || 'クエスト'} クリア！`;
+            questBannerNum.textContent = skipped ? '→' : '✓';
+            questBannerTitleEn.textContent = skipped
+                ? `${completedQuest?.titleEn || completedQuest?.title || 'クエスト'} スキップ`
+                : `${completedQuest?.titleEn || completedQuest?.title || 'クエスト'} クリア！`;
             questBannerGoal.textContent = nextQuest
                 ? `次は：${nextQuest.goal}！！`
                 : 'よくできました！';
@@ -3178,12 +3394,11 @@
         function scheduleQuestTeardownAfterFarewell() {
             if (!awaitingQuestFarewell || !farewellAssistantSeen) return;
             clearQuestTeardownTimers();
-            const chars = getAssistantTextSinceFarewell();
+            // Called after TURN_COMPLETE — model speech is done; only wait for
+            // any buffered audio to finish. The old chars*85 formula often sat
+            // on "次のミッションを準備中" for 5–9s after she already finished.
             const audioMs = audioPlayer?.getEstimatedPlaybackMsRemaining?.() || 0;
-            const delay = Math.min(
-                9000,
-                Math.max(3200, chars * 85 + 2000, audioMs + 1200)
-            );
+            const delay = Math.min(2500, Math.max(300, audioMs + 350));
             const teardown = pendingQuestTeardown;
             if (teardown?.lessonDone) {
                 showQuestLoading(
@@ -3191,11 +3406,15 @@
                     'バッジを準備しています…'
                 );
             } else if (teardown?.isNewClear) {
-                showQuestLoading(
-                    'ミッションクリア！',
-                    '次のミッションを準備しています…'
-                );
+                // Only show the overlay once we're near handoff (short wait).
+                if (delay <= 600) {
+                    showQuestLoading(
+                        'ミッションクリア！',
+                        '次のミッションを準備しています…'
+                    );
+                }
             }
+            dbg('quest teardown scheduled', { delay, audioMs });
             questTeardownTimer = setTimeout(finalizeQuestTeardown, delay);
         }
 
@@ -3443,12 +3662,14 @@
             throw lastError || new Error('Connect failed');
         }
 
-        async function beginNextQuestHandoff(completed, { playReadySound = true, pauseBeforeConnect = 0, skipInitialDisconnect = false } = {}) {
+        async function beginNextQuestHandoff(completed, { playReadySound = true, pauseBeforeConnect = 0, skipInitialDisconnect = false, skipped = false } = {}) {
             let loadingToken;
             if (questLoadingOverlay?.classList.contains('active')) {
                 loadingToken = questLoadingToken;
                 if (questLoadingTitle) {
-                    questLoadingTitle.textContent = '次のミッションを準備中…';
+                    questLoadingTitle.textContent = skipped
+                        ? '次のミッションを準備中…'
+                        : '次のミッションを準備中…';
                 }
                 if (questLoadingSub) {
                     questLoadingSub.textContent = 'ラーニー先生を呼び出しています';
@@ -3460,7 +3681,7 @@
                     'ラーニー先生を呼び出しています'
                 );
             }
-            showQuestToast(completed);
+            showQuestToast(completed, { skipped });
             setQuestBannerTransitioning(true);
             questHandoffActive = true;
             clearChatOnNextStart = true;
@@ -3597,7 +3818,6 @@
             lastFinishedUserTranscriptAt = 0;
             resetChallengeMissTracking();
             questHintAssistUsed = false;
-            clearMissionTimer();
             clearDeadSessionRestartTimer();
             steeringNudgeSentThisTurn = false;
             falseCreditCorrectionSentThisTurn = false;
@@ -3623,7 +3843,6 @@
                 sendClientText(nudge);
                 scheduleQuestOpeningRetry();
             }
-            startMissionTimer();
         }
 
         /**
@@ -3829,32 +4048,38 @@
         function onQuestComplete(source, userQuote = '') {
             if (questCompleting || !activeQuest || !questSessionActive) return;
             questCompleting = true;
-            clearMissionTimer();
             // Cancel any pending mid-step nudges — farewell celebration owns this turn.
             deferredSteeringNudges = [];
             clearDeferredSteeringFlushTimer();
 
             const completed = activeQuest;
             const completedIndex = activeQuestSessionIndex;
-            const currentProgress = loadProgress();
-            const isNewClear = completedIndex === currentProgress;
+            const wasFrontier = completedIndex === loadProgress();
+            const alreadyStarred = hasQuestStar(completedIndex);
             let lessonDone = false;
+            let isNewClear = false;
 
-            if (isNewClear) {
+            if (!alreadyStarred && Number.isFinite(completedIndex) && completedIndex >= 0) {
                 recordLearnedSteps(
                     completed,
                     completedIndex,
                     completed.steps.map((s) => s.id)
                 );
-                const nextIndex = currentProgress + 1;
-                saveProgress(nextIndex);
+                recordQuestStar(completedIndex);
+                const nextUnlock = Math.max(loadProgress(), completedIndex + 1);
+                saveProgress(nextUnlock);
                 clearStepProgress(completedIndex);
-                lessonDone = nextIndex >= getQuests().length;
-                awardQuestStar(nextIndex - 1, true);
-                if (lessonDone) {
+                const unlockedLesson = nextUnlock >= getQuests().length;
+                // Only treat as "lesson done handoff" when finishing the frontier.
+                lessonDone = wasFrontier && unlockedLesson;
+                isNewClear = wasFrontier;
+                awardQuestStar(completedIndex, true);
+                if (isLevelFullyStarred()) {
                     recordLessonBadge(LEVEL_INFO.mainBadgeId);
+                }
+                if (lessonDone) {
                     setSelectedQuestIndex(completedIndex);
-                } else {
+                } else if (wasFrontier) {
                     selectNextQuestAfterComplete();
                 }
             } else {
@@ -3889,13 +4114,10 @@
                 cancelPendingNextQuestSession();
             } else {
                 questSfx.playQuestComplete();
-                prepareNextQuestSession();
+                if (isNewClear) prepareNextQuestSession();
             }
 
-            // Timeout already sent TIME UP celebration nudge — skip farewell backlog.
-            if (source === 'timeout') {
-                // no-op
-            } else if (client?.connected) {
+            if (client?.connected) {
                 promptMissionCompleteCelebration(completed, userQuote, {
                     toolPath: source === 'tool',
                 });
@@ -4069,6 +4291,7 @@
             }
 
             notifyCallState();
+            updateQuestSkipButton();
         }
 
         function toggleMute() {
@@ -4209,6 +4432,16 @@
             return !isUnrecognizableUserInput(t);
         }
 
+        function getLatestAssistantSpeechText() {
+            for (let i = chatMessages.length - 1; i >= 0; i--) {
+                const m = chatMessages[i];
+                if (m.type === 'assistant' && m.text?.trim() && !m.isThinking) {
+                    return m.text.trim();
+                }
+            }
+            return '';
+        }
+
         function buildSilenceProactivePrompt() {
             const langTail =
                 LEVEL_INFO.id === 'advanced'
@@ -4216,19 +4449,42 @@
                     : LEVEL_INFO.id === 'intermediate'
                       ? 'mostly EN, short JP tag'
                       : 'EN then JP';
+
+            const missionVariants = [
+                'Give a tiny Minecraft tip for the next step, then a light invite — brand-new wording.',
+                'React like a friend who noticed the quiet: one playful observation, then a soft invite.',
+                'Offer a mini cheer plus one concrete next action — fresh phrasing only.',
+                'Ask one curious yes/no about Minecraft, then soft-bridge to the mission if it fits.',
+            ];
+            const freeVariants = [
+                'Share one NEW fun Minecraft tip you have not used this call.',
+                'Ask one playful question about their world — keep it light and fresh.',
+                'Offer a tiny playful challenge with new words.',
+            ];
+
+            const inMission =
+                questSessionActive && activeQuest && !awaitingQuestFarewell;
+            const variants = inMission ? missionVariants : freeVariants;
+            const variant = variants[silenceCheckInVariant % variants.length];
+
+            // Soft anti-repeat only — a hard FORBIDDEN quote of her last line
+            // made the model freeze and stay silent.
+            const banLine = lastSilenceBanText
+                ? ` Vary your wording — do not reuse this earlier check-in: "${lastSilenceBanText.slice(0, 70)}".`
+                : ' Use fresh wording — not a line you already used this call.';
+
             let proactivePrompt =
-                "[Speak now] The child has been quiet for 30 seconds. " +
-                "You MUST respond with audible speech now (do not stay silent). " +
-                "Do NOT repeat anything you already said this session. ";
-            if (questSessionActive && activeQuest && !awaitingQuestFarewell) {
+                '[Speak now] The child has been quiet for 30 seconds. ' +
+                'You MUST speak aloud now with ONE short friendly check-in (do not stay silent).' +
+                banLine;
+
+            if (inMission) {
                 proactivePrompt =
                     `${buildActiveMissionHeader(activeQuest, activeQuestSessionIndex)}\n` +
                     proactivePrompt +
-                    "The conversation paused, so NOW is the natural moment to gently invite them back to the mission — " +
-                    `casual and light ("By the way, wanna try the next step?"), never pushy (1–2 sentences, ${langTail}).`;
+                    ` ${variant} Never pushy (1–2 sentences, ${langTail}).`;
             } else {
-                proactivePrompt +=
-                    `Check in with one fun Minecraft tip — casual and upbeat (1–2 sentences, ${langTail}).`;
+                proactivePrompt += ` ${variant} (1–2 sentences, ${langTail}).`;
             }
             return proactivePrompt;
         }
@@ -4247,6 +4503,12 @@
             lastSilenceUserSpeechAt = 0;
             lastSilenceAssistantDoneAt = Date.now();
             lastSilencePromptAt = 0;
+            silenceCheckInVariant = 0;
+            lastSilenceBanText = '';
+            if (silenceRetryTimer) {
+                clearTimeout(silenceRetryTimer);
+                silenceRetryTimer = null;
+            }
         }
 
         function markSilenceWatchUserActivity() {
@@ -4255,6 +4517,15 @@
 
         function markSilenceWatchAssistantDone() {
             lastSilenceAssistantDoneAt = Date.now();
+            // Remember only recent silence check-in replies for soft anti-repeat.
+            if (lastSilencePromptAt && Date.now() - lastSilencePromptAt < 25000) {
+                const latest = getLatestAssistantSpeechText();
+                if (latest) lastSilenceBanText = latest.slice(0, 90);
+            }
+            if (silenceRetryTimer) {
+                clearTimeout(silenceRetryTimer);
+                silenceRetryTimer = null;
+            }
         }
 
         function silenceWatchQuietMs() {
@@ -4267,14 +4538,44 @@
                 stopSilenceWatch();
                 return;
             }
+            // Only block while she is mid-output. Do NOT check
+            // assistantAudibleThisTurn — that flag stays true after her last
+            // reply until the child speaks, which permanently muted check-ins.
+            if (assistantTurnOpen || assistantOutputBusy()) {
+                return;
+            }
 
             const quietMs = silenceWatchQuietMs();
             const sincePromptMs = Date.now() - lastSilencePromptAt;
             if (quietMs < SILENCE_PROMPT_MS || sincePromptMs < SILENCE_PROMPT_MS) return;
 
             lastSilencePromptAt = Date.now();
-            lastSilenceAssistantDoneAt = Date.now();
-            sendClientText(buildSilenceProactivePrompt());
+            const prompt = buildSilenceProactivePrompt();
+            silenceCheckInVariant += 1;
+
+            // client_content turn so Live API must reply with speech.
+            if (!sendClientText(prompt)) {
+                lastSilencePromptAt = 0;
+                return;
+            }
+
+            dbg('silence check-in sent', {
+                variant: silenceCheckInVariant - 1,
+                ban: lastSilenceBanText.slice(0, 60),
+            });
+
+            // If this check-in produces no audio, allow one quicker retry
+            // instead of waiting another full 30s of dead air.
+            if (silenceRetryTimer) clearTimeout(silenceRetryTimer);
+            silenceRetryTimer = setTimeout(() => {
+                silenceRetryTimer = null;
+                if (!canRunSilenceWatch()) return;
+                if (assistantTurnOpen || assistantOutputBusy()) return;
+                // No audible reply to the check-in — unlock a retry soon.
+                lastSilencePromptAt = 0;
+                lastSilenceAssistantDoneAt = Date.now() - SILENCE_PROMPT_MS;
+                dbg('silence check-in produced no audio — retry armed');
+            }, 6000);
         }
 
         function startSilenceWatch() {
@@ -4636,7 +4937,6 @@
             clearNoAudioRecoveryTimer();
             resetChallengeMissTracking();
             if (!isAutoReconnect) {
-                clearMissionTimer();
                 endQuestSession();
             }
 
@@ -4855,6 +5155,9 @@
         btnAction.addEventListener('click', () => handleActionButton());
         btnMute.addEventListener('click', () => toggleMute());
         btnSend.addEventListener('click', sendMessage);
+        questSkipBtn?.addEventListener('click', () => {
+            skipCurrentMission();
+        });
 
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();

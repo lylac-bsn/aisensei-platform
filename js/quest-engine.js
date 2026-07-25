@@ -63,6 +63,10 @@ export const PROGRESS_KEY = `${ACTIVE_LEVEL.keyPrefix}questIndex`;
 export const STEP_PROGRESS_KEY = `${ACTIVE_LEVEL.keyPrefix}stepProgress`;
 export const SELECTED_QUEST_KEY = `${ACTIVE_LEVEL.keyPrefix}selectedQuest`;
 export const LEARNED_PHRASES_KEY = `${ACTIVE_LEVEL.keyPrefix}learnedPhrases`;
+/** Mission indices that earned a star (real clear only — not skip). */
+export const STARRED_QUESTS_KEY = `${ACTIVE_LEVEL.keyPrefix}starredQuests`;
+/** Mission indices the child skipped (stuck signal for future admin). */
+export const SKIPPED_QUESTS_KEY = `${ACTIVE_LEVEL.keyPrefix}skippedQuests`;
 /** Shared across ALL levels — one badge collection for the whole account. */
 export const LESSON_BADGES_KEY = "gc_beginner_lessonBadges";
 
@@ -258,6 +262,8 @@ export function resetProgress() {
     localStorage.removeItem(STEP_PROGRESS_KEY);
     localStorage.removeItem(SELECTED_QUEST_KEY);
     localStorage.removeItem(LEARNED_PHRASES_KEY);
+    localStorage.removeItem(STARRED_QUESTS_KEY);
+    localStorage.removeItem(SKIPPED_QUESTS_KEY);
     // Badge collection is SHARED across levels — remove only this level's
     // badges so restarting one level never wipes the others' badges.
     const raw = localStorage.getItem(LESSON_BADGES_KEY);
@@ -268,6 +274,160 @@ export function resetProgress() {
   } catch {
     // ignore
   }
+}
+
+function normalizeIndexList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [
+    ...new Set(
+      raw
+        .map((n) => parseInt(n, 10))
+        .filter((n) => Number.isFinite(n) && n >= 0)
+    ),
+  ].sort((a, b) => a - b);
+}
+
+function loadIndexList(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+    return normalizeIndexList(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+function saveIndexList(key, ids) {
+  try {
+    localStorage.setItem(key, JSON.stringify(normalizeIndexList(ids)));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Starred missions for this level. Migrates legacy progress: before skip
+ * existed, questIndex alone meant "stars earned", so seed [0..progress-1].
+ */
+export function loadStarredQuestIds() {
+  const stored = loadIndexList(STARRED_QUESTS_KEY);
+  if (stored !== null) return stored;
+  const progress = loadProgress();
+  const seeded = [];
+  for (let i = 0; i < Math.min(progress, ACTIVE_QUESTS.length); i++) {
+    seeded.push(i);
+  }
+  saveIndexList(STARRED_QUESTS_KEY, seeded);
+  return seeded;
+}
+
+export function hasQuestStar(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0) return false;
+  return loadStarredQuestIds().includes(questIndex);
+}
+
+export function getStarCount() {
+  return loadStarredQuestIds().filter((i) => i < ACTIVE_QUESTS.length).length;
+}
+
+/** Record a real clear star. Also clears any skip flag for that mission. */
+export function recordQuestStar(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0 || questIndex >= ACTIVE_QUESTS.length) {
+    return false;
+  }
+  const starred = loadStarredQuestIds();
+  if (!starred.includes(questIndex)) {
+    starred.push(questIndex);
+    saveIndexList(STARRED_QUESTS_KEY, starred);
+  }
+  clearQuestSkipOnStar(questIndex);
+  return true;
+}
+
+export function loadSkippedQuestIds() {
+  return loadIndexList(SKIPPED_QUESTS_KEY) || [];
+}
+
+export function recordQuestSkip(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0 || questIndex >= ACTIVE_QUESTS.length) {
+    return false;
+  }
+  if (hasQuestStar(questIndex)) return false;
+  const skipped = loadSkippedQuestIds();
+  if (!skipped.includes(questIndex)) {
+    skipped.push(questIndex);
+    saveIndexList(SKIPPED_QUESTS_KEY, skipped);
+  }
+  return true;
+}
+
+export function clearQuestSkipOnStar(questIndex) {
+  const skipped = loadSkippedQuestIds().filter((i) => i !== questIndex);
+  saveIndexList(SKIPPED_QUESTS_KEY, skipped);
+}
+
+/** Skip is for not-yet-starred unlocked missions (not free chat). */
+export function canSkipQuest(questIndex) {
+  if (!Number.isFinite(questIndex) || questIndex < 0) return false;
+  if (!isQuestUnlocked(questIndex)) return false;
+  if (hasQuestStar(questIndex)) return false;
+  return true;
+}
+
+/**
+ * Unlock next without a star. Clears step progress so a later retry is fresh.
+ * @returns {{ skippedIndex: number, nextIndex: number|null, lessonDone: boolean }}
+ */
+export function applyMissionSkip(questIndex) {
+  if (!canSkipQuest(questIndex)) {
+    return { skippedIndex: questIndex, nextIndex: null, lessonDone: false, ok: false };
+  }
+  recordQuestSkip(questIndex);
+  clearStepProgress(questIndex);
+  const unlockTo = Math.max(loadProgress(), questIndex + 1);
+  saveProgress(unlockTo);
+  const lessonDone = unlockTo >= ACTIVE_QUESTS.length;
+  const nextIndex = lessonDone ? null : questIndex + 1;
+  if (nextIndex !== null) {
+    setSelectedQuestIndex(nextIndex);
+  }
+  return { skippedIndex: questIndex, nextIndex, lessonDone, ok: true };
+}
+
+function loadStarredQuestIdsForLevel(levelId) {
+  const level = LEVELS[levelId];
+  if (!level) return [];
+  const key = `${level.keyPrefix}starredQuests`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) {
+      // Legacy: questIndex alone meant stars for that level.
+      const progressRaw = localStorage.getItem(`${level.keyPrefix}questIndex`);
+      const progress = progressRaw === null ? 0 : parseInt(progressRaw, 10);
+      if (!Number.isFinite(progress) || progress <= 0) return [];
+      const seeded = [];
+      for (let i = 0; i < Math.min(progress, level.quests.length); i++) {
+        seeded.push(i);
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify(seeded));
+      } catch {
+        // ignore
+      }
+      return seeded;
+    }
+    return normalizeIndexList(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+/** True when every mission in the level has a real-clear star. */
+export function isLevelFullyStarred(levelId = ACTIVE_LEVEL.id) {
+  const level = LEVELS[levelId];
+  if (!level?.quests?.length) return false;
+  const starred = new Set(loadStarredQuestIdsForLevel(levelId));
+  return level.quests.every((_, i) => starred.has(i));
 }
 
 export function getSelectedQuestIndex() {
@@ -300,12 +460,17 @@ export function ensureDefaultMissionSelected() {
       setSelectedQuestIndex(loadProgress());
       return getSelectedQuestIndex();
     }
-    // Stale selection pinned to an already-cleared mission (e.g. saved when
+    // Stale selection pinned to an already-starred mission (e.g. saved when
     // the lesson ended at mission 5, before missions 6-10 existed): on page
-    // load, advance to the current mission. In-session replay picks from the
-    // mission panel are unaffected.
+    // load, advance to the current frontier. Skipped (unstarred) missions
+    // stay selectable so kids can retry after refresh.
     const selected = getSelectedQuestIndex();
-    if (!isLessonComplete() && selected !== null && selected < loadProgress()) {
+    if (
+      !isLessonComplete() &&
+      selected !== null &&
+      hasQuestStar(selected) &&
+      selected < loadProgress()
+    ) {
       setSelectedQuestIndex(loadProgress());
     }
     return getSelectedQuestIndex();
@@ -395,11 +560,10 @@ export function loadEarnedLessonBadges() {
     const raw = localStorage.getItem(LESSON_BADGES_KEY);
     const stored = raw ? JSON.parse(raw) : [];
     const earned = new Set(Array.isArray(stored) ? stored : []);
-    // Main lesson badges are derived from each level's own progress, so the
-    // shared collection stays accurate on every page. A stale stored copy
-    // (e.g. earned when the lesson had fewer missions) is dropped.
+    // Main lesson badges require every mission starred (real clears), not
+    // merely unlock-frontier complete (skip must not grant the badge).
     for (const level of Object.values(LEVELS)) {
-      if (isLevelLessonComplete(level.id)) {
+      if (isLevelFullyStarred(level.id)) {
         earned.add(level.mainBadgeId);
       } else {
         earned.delete(level.mainBadgeId);
@@ -407,7 +571,7 @@ export function loadEarnedLessonBadges() {
     }
     return [...earned];
   } catch {
-    return isLessonComplete() ? [ACTIVE_LEVEL.mainBadgeId] : [];
+    return isLevelFullyStarred() ? [ACTIVE_LEVEL.mainBadgeId] : [];
   }
 }
 
@@ -482,7 +646,9 @@ export function getLessonBadgeSlots() {
 export function buildProgressSnapshot() {
   const totalQuests = ACTIVE_QUESTS.length;
   const questIndex = loadProgress();
-  const starsEarned = Math.min(questIndex, totalQuests);
+  const starredQuestIds = loadStarredQuestIds();
+  const skippedQuestIds = loadSkippedQuestIds();
+  const starsEarned = getStarCount();
   const lessonComplete = isLessonComplete();
   const selectedIndex = getSelectedQuestIndex();
   const phrases = getLearnedPhrases();
@@ -504,7 +670,15 @@ export function buildProgressSnapshot() {
     missionIndex = selectedIndex;
     missionTitleEn = ACTIVE_QUESTS[selectedIndex].titleEn || "";
     missionGoal = ACTIVE_QUESTS[selectedIndex].goal || "";
-    missionStatus = selectedIndex === questIndex ? "いまのミッション" : "復習中";
+    if (hasQuestStar(selectedIndex)) {
+      missionStatus = "復習中";
+    } else if (skippedQuestIds.includes(selectedIndex)) {
+      missionStatus = "スキップ済み（再チャレンジ可）";
+    } else if (selectedIndex === questIndex) {
+      missionStatus = "いまのミッション";
+    } else {
+      missionStatus = "チャレンジ中";
+    }
   } else if (questIndex < totalQuests) {
     missionIndex = questIndex;
     missionTitleEn = ACTIVE_QUESTS[questIndex].titleEn || "";
@@ -519,8 +693,11 @@ export function buildProgressSnapshot() {
     lessonTitle: ACTIVE_LEVEL.lessonTitle,
     questIndex,
     starsEarned,
+    starredQuestIds,
+    skippedQuestIds,
     totalQuests,
     lessonComplete,
+    fullyStarred: isLevelFullyStarred(),
     selectedQuestIndex: selectedIndex,
     missionIndex,
     missionNumber: missionIndex !== null ? missionIndex + 1 : null,
@@ -1782,9 +1959,6 @@ export function reconcileEnglishStepProof(
 
   for (const step of quest.steps) {
     if (!done.has(step.id) || !stepRequiresEnglish(step)) continue;
-    // Timer force-complete ticks are intentional — do not strip them for
-    // lacking a strict matchesStep proof.
-    if (isTimeoutPassedStep(questIndex, step.id)) continue;
     const proved = utterances.some(
       (u) =>
         matchesStep(u, step) &&
@@ -1989,21 +2163,10 @@ export function getLearnedPhrases() {
 let questSessionSteps = null;
 /** Step IDs already complete when the current call began (resume / partial progress). */
 let questSessionBaselineStepIds = null;
-/**
- * Step IDs force-completed by the mission timer this call. Session-only —
- * survives reconcileEnglishStepProof / verifyAllStepsHeardInSession without a
- * strict matchesStep proof.
- */
-let questSessionTimeoutPassIds = null;
-
-/** Per-mission voice-call time limit (all levels). Easy to tune later. */
-export const MISSION_TIME_LIMIT_MS = 5 * 60 * 1000;
-/** Soft warning when this much time remains. */
-export const MISSION_TIME_WARNING_MS = 30 * 1000;
 
 export function isQuestReplay(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) return false;
-  return questIndex < loadProgress();
+  return hasQuestStar(questIndex);
 }
 
 /** Step IDs that were already done before this call (for session phrase verification). */
@@ -2014,57 +2177,11 @@ export function getSessionBaselineStepIds(questIndex) {
   return [];
 }
 
-function clearQuestSessionTimeoutPasses() {
-  questSessionTimeoutPassIds = null;
-}
-
-/** Record that this step was force-completed by the mission timer. */
-export function markTimeoutPassedStep(questIndex, stepId) {
-  if (!Number.isFinite(questIndex) || questIndex < 0 || !stepId) return;
-  if (!questSessionTimeoutPassIds || questSessionTimeoutPassIds.questIndex !== questIndex) {
-    questSessionTimeoutPassIds = { questIndex, stepIds: [] };
-  }
-  if (!questSessionTimeoutPassIds.stepIds.includes(stepId)) {
-    questSessionTimeoutPassIds.stepIds.push(stepId);
-  }
-}
-
-/** True when this step was force-completed by the mission timer this call. */
-export function isTimeoutPassedStep(questIndex, stepId) {
-  return Boolean(
-    questSessionTimeoutPassIds &&
-      questSessionTimeoutPassIds.questIndex === questIndex &&
-      questSessionTimeoutPassIds.stepIds.includes(stepId)
-  );
-}
-
-/**
- * Mark every incomplete step done for a timer clear so isQuestStepsComplete
- * is true. Tagged as timeout-pass so proof reconcile cannot strip them.
- * @returns {string[]} newly force-completed step ids
- */
-export function forceCompleteQuestStepsForTimeout(quest, questIndex = loadProgress()) {
-  if (!quest?.steps?.length || !Number.isFinite(questIndex) || questIndex < 0) return [];
-  const done = new Set(getEffectiveCompletedStepIds(questIndex));
-  const newly = [];
-  for (const step of quest.steps) {
-    if (done.has(step.id)) continue;
-    done.add(step.id);
-    newly.push(step.id);
-    markTimeoutPassedStep(questIndex, step.id);
-  }
-  if (newly.length) {
-    saveEffectiveCompletedStepIds(questIndex, orderedStepIds(quest, done));
-  }
-  return newly;
-}
-
 /** Start a call session — step progress is tracked in memory for the active call. */
 export function beginQuestSession(questIndex) {
   if (!Number.isFinite(questIndex) || questIndex < 0) {
     questSessionSteps = null;
     questSessionBaselineStepIds = null;
-    clearQuestSessionTimeoutPasses();
     return;
   }
   const stepIds = isQuestReplay(questIndex) ? [] : [...loadCompletedStepIds(questIndex)];
@@ -2073,8 +2190,6 @@ export function beginQuestSession(questIndex) {
     questIndex,
     stepIds,
   };
-  clearQuestSessionTimeoutPasses();
-  questSessionTimeoutPassIds = { questIndex, stepIds: [] };
 }
 
 export function endQuestSession() {
@@ -2083,15 +2198,11 @@ export function endQuestSession() {
   }
   questSessionSteps = null;
   questSessionBaselineStepIds = null;
-  clearQuestSessionTimeoutPasses();
 }
 
 export function resetQuestSessionSteps(questIndex) {
   if (questSessionSteps?.questIndex === questIndex) {
     questSessionSteps.stepIds = [];
-  }
-  if (questSessionTimeoutPassIds?.questIndex === questIndex) {
-    questSessionTimeoutPassIds.stepIds = [];
   }
 }
 
@@ -2510,27 +2621,18 @@ export function verifyAllStepsHeardInSession(
   if (!stepsToVerify.length) return true;
 
   const chunks = sessionTextsForMatching(sessionUserText, sessionUtterances);
-  if (!chunks.length) {
-    // Timer force-complete can prove steps without a strict matchesStep chunk.
-    return (
-      Number.isFinite(questIndex) &&
-      stepsToVerify.every((step) => isTimeoutPassedStep(questIndex, step.id))
-    );
-  }
+  if (!chunks.length) return false;
 
-  return stepsToVerify.every((step) => {
-    if (Number.isFinite(questIndex) && isTimeoutPassedStep(questIndex, step.id)) {
-      return true;
-    }
-    return chunks.some((chunk) => {
+  return stepsToVerify.every((step) =>
+    chunks.some((chunk) => {
       if (!matchesStep(chunk, step)) return false;
       if (!stepRequiresEnglish(step)) return true;
       return (
         userTextHasEnglish(chunk) &&
         (!isPrimarilyJapanese(chunk) || hasEnglishPatternMatch(chunk, step))
       );
-    });
-  });
+    })
+  );
 }
 
 export function buildHostileRedirectNudge(quest, userUtterance = "", questIndex = loadProgress()) {
@@ -2603,7 +2705,6 @@ export function assistantFalselyCreditsEnglishStep(
 
   for (const step of quest.steps) {
     if (!stepRequiresEnglish(step)) continue;
-    if (isTimeoutPassedStep(questIndex, step.id)) continue;
     const quoted = step.patterns.some((pattern) =>
       assistant.toLowerCase().includes(pattern.toLowerCase())
     );
@@ -3268,42 +3369,4 @@ export function buildChallengeEchoCoachNudge(
     `and warmly invite them to repeat after you ${LANG.echoInvite}. Never sound frustrated, never force. ` +
     `1–2 short sentences, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
   );
-}
-
-/**
- * Soft warning when ~30s remain on the mission timer. Keep chatting; do not
- * force the phrase or declare failure.
- */
-export function buildMissionTimeoutWarningNudge(quest, questIndex = loadProgress()) {
-  if (!quest) return "";
-  const mission = buildActiveMissionHeader(quest, questIndex);
-  const next = getRemainingSteps(quest, questIndex)[0] || null;
-  const nextHint = next
-    ? ` If they want to keep trying, one soft invite is OK — next challenge: ${next.label}.`
-    : "";
-  return (
-    `[App verdict] ${mission} TIME CHECK — about 30 seconds left on this mission timer. ` +
-    `Softly mention they have a little time left (あと少し / one more try) then keep chatting warmly. ` +
-    `Do NOT say they failed. Do NOT force the English phrase. Do NOT call complete_quest.` +
-    nextHint +
-    ` 1 short sentence, ${LANG.pair}. ${QUEST_TRACKER_SPEAK_IF_SILENT}`
-  );
-}
-
-/**
- * Timer hit zero — app cleared the mission. Celebrate warmly; never say they
- * failed or that steps are unfinished after TIME UP.
- */
-export function buildMissionTimeoutCompleteNudge(quest, questIndex = loadProgress()) {
-  if (!quest) return "";
-  const mission = buildActiveMissionHeader(quest, questIndex);
-  return [
-    `[App verdict] ${mission}`,
-    `TIME UP — the app CLEARED this mission because the timer ended. ` +
-      `Celebrate warmly that the mission is cleared (星ゲット！ / You did it!). ` +
-      `Do NOT say they failed, ran out of time badly, or that steps are unfinished. ` +
-      `Do NOT ask them to finish remaining English phrases. ` +
-      `Call complete_quest if you have not already, then one short farewell celebration (${LANG.pair}).`,
-    QUEST_TRACKER_NO_REPEAT,
-  ].join("\n");
 }

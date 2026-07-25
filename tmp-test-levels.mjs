@@ -223,61 +223,51 @@ for (const p of phrases) {
 check("all M1 steps tick from canonical phrases", ticked.length === q0.steps.length);
 check("quest complete check", engine.isQuestStepsComplete(q0, 0));
 
-// --- Mission timer force-complete (replaces effort-pass) ---
+// --- Skip unlocks next without star; real clear awards star ---
 {
   store.clear();
-  check("timer: limit is 5 minutes", engine.MISSION_TIME_LIMIT_MS === 5 * 60 * 1000);
-  check("timer: warning is 30s", engine.MISSION_TIME_WARNING_MS === 30 * 1000);
+  const total = quests.length;
+  check("skip: can skip mission 0 at start", engine.canSkipQuest(0));
+  check("skip: cannot skip locked mission 1", !engine.canSkipQuest(1));
 
-  engine.beginQuestSession(0);
-  const before = engine.loadProgress();
-  check("timer: start at progress 0", before === 0);
+  const skip0 = engine.applyMissionSkip(0);
+  check("skip: ok", skip0.ok === true);
+  check("skip: unlocks next", engine.loadProgress() === 1);
+  check("skip: no star for skipped", !engine.hasQuestStar(0));
+  check("skip: recorded in skipped list", engine.loadSkippedQuestIds().includes(0));
+  check("skip: star count still 0", engine.getStarCount() === 0);
+  check("skip: mission 1 unlocked", engine.isQuestUnlocked(1));
+  check("skip: selected next", engine.getSelectedQuestIndex() === 1);
+  check("skip: can still skip unstarred earlier mission", engine.canSkipQuest(0));
 
-  // Off-topic English must NOT tick a step (no effort-pass)
-  const offTopic = engine.applyUtteranceToChallenge(q0, "playing with my dog", 0, {
-    lenient: true,
-  });
-  check("timer: off-topic does not tick", offTopic.stepIds.length === 0);
+  // Real clear of skipped mission awards star and clears skip flag
+  engine.recordQuestStar(0);
+  check("skip: later clear adds star", engine.hasQuestStar(0));
+  check("skip: skip flag cleared on star", !engine.loadSkippedQuestIds().includes(0));
+  check("skip: cannot skip starred mission", !engine.canSkipQuest(0));
 
-  const forced = engine.forceCompleteQuestStepsForTimeout(q0, 0);
-  check("timer: force-complete marks remaining steps", forced.length === q0.steps.length);
-  check("timer: quest steps complete after force", engine.isQuestStepsComplete(q0, 0));
-  check(
-    "timer: first step tagged timeout-pass",
-    engine.isTimeoutPassedStep(0, q0.steps[0].id)
-  );
-
-  const removed = engine.reconcileEnglishStepProof(q0, 0, ["playing with my dog"]);
-  check("timer: reconcile keeps timeout ticks", removed.length === 0);
-  check(
-    "timer: verify session honors timeout-pass",
-    engine.verifyAllStepsHeardInSession(q0, "", 0, [])
-  );
-
-  // Progress / star advance (mirrors onQuestComplete isNewClear path)
-  if (engine.isQuestStepsComplete(q0, 0) && before === 0) {
-    engine.saveProgress(1);
-    engine.clearStepProgress(0);
+  // Skip last → lesson done unlock without full stars / main badge
+  store.clear();
+  for (let i = 0; i < total - 1; i++) {
+    engine.recordQuestStar(i);
+    engine.saveProgress(i + 1);
   }
-  check("timer: progress advanced after timeout clear", engine.loadProgress() === 1);
+  const skipLast = engine.applyMissionSkip(total - 1);
+  check("skip last: ok", skipLast.ok === true && skipLast.lessonDone === true);
+  check("skip last: lesson complete unlock", engine.isLessonComplete());
+  check("skip last: not fully starred", !engine.isLevelFullyStarred());
+  check("skip last: no main badge", !engine.loadEarnedLessonBadges().includes("lesson1"));
 
-  // Secret / side badges still need real matchers — timeout path sets
-  // questHintAssistUsed in the UI; engine matcher must stay strict.
-  const lootQuest = quests.find((q) => (q.steps || []).some((s) => s.id === "best_loot"));
-  if (lootQuest?.sideChallenge?.id === "hidden_diamond_adv") {
-    check(
-      "timer: wrong loot no diamond badge",
-      !engine.matchesQuestSideChallenge(lootQuest, "I found sakura tree")
-    );
-  }
+  // Snapshot exposes skipped ids for future admin
+  const snap = engine.buildProgressSnapshot();
+  check("skip: snapshot has skippedQuestIds", Array.isArray(snap.skippedQuestIds));
+  check("skip: snapshot starsEarned from stars", snap.starsEarned === engine.getStarCount());
 
-  const warnNudge = engine.buildMissionTimeoutWarningNudge(q0, 0);
-  const doneNudge = engine.buildMissionTimeoutCompleteNudge(q0, 0);
-  check("timer: warning nudge mentions time", /30|あと少し|TIME CHECK/i.test(warnNudge));
-  check("timer: complete nudge is TIME UP", /TIME UP/i.test(doneNudge));
-  check("timer: complete nudge celebrates clear", /CLEARED|cleared|星ゲット/i.test(doneNudge));
-
-  engine.endQuestSession();
+  // Legacy migrate: progress without starred key seeds stars
+  store.clear();
+  store.set(engine.PROGRESS_KEY, "3");
+  const migrated = engine.loadStarredQuestIds();
+  check("migrate: seeds 0..2 from progress", JSON.stringify(migrated) === "[0,1,2]");
 }
 
 // --- Phonetic still ticks; off-topic still does not ---
@@ -353,29 +343,40 @@ check("quest complete check", engine.isQuestStepsComplete(q0, 0));
 
 // --- Badge collection sharing + reset scoping ---
 store.clear();
-// Simulate: beginner complete (10 missions), this level complete, badges earned.
+// Simulate: beginner fully starred (10 missions), this level fully starred.
+const beginnerStarred = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const levelStarred = Array.from({ length: quests.length }, (_, i) => i);
 store.set("gc_beginner_lesson1_questIndex", "10");
+store.set("gc_beginner_lesson1_starredQuests", JSON.stringify(beginnerStarred));
 store.set(`gc_${level}_lesson1_questIndex`, String(quests.length));
+store.set(`gc_${level}_lesson1_starredQuests`, JSON.stringify(levelStarred));
 store.set(
   "gc_beginner_lessonBadges",
   JSON.stringify(["hidden_furnace", "hidden_iron", "hidden_prep_int", "hidden_diamond_adv"])
 );
 let earned = engine.loadEarnedLessonBadges();
 check("beginner main badge derived", earned.includes("lesson1"));
-check(`${level} main badge derived`, earned.includes(level));
+check(`${level} main badge derived`, earned.includes(level === "beginner" ? "lesson1" : level));
 check("hidden badges kept", earned.includes("hidden_furnace") && earned.includes("hidden_prep_int"));
 
 // Reset THIS level: other levels' badges must survive.
 engine.resetProgress();
 earned = engine.loadEarnedLessonBadges();
-check("beginner badge survives reset", earned.includes("lesson1"));
-check(`${level} main badge gone after reset`, !earned.includes(level));
+if (level === "beginner") {
+  check("beginner badge cleared by own reset", !earned.includes("lesson1"));
+} else {
+  check("beginner badge survives reset", earned.includes("lesson1"));
+}
+check(`${level} main badge gone after reset`, !earned.includes(level === "beginner" ? "lesson1" : level));
 if (level === "intermediate") {
   check("own hidden badge removed", !earned.includes("hidden_prep_int"));
   check("other-level hidden badges survive", earned.includes("hidden_furnace") && earned.includes("hidden_diamond_adv"));
-} else {
+} else if (level === "advanced") {
   check("own hidden badge removed", !earned.includes("hidden_diamond_adv"));
   check("other-level hidden badges survive", earned.includes("hidden_furnace") && earned.includes("hidden_prep_int"));
+} else {
+  check("own hidden badge removed", !earned.includes("hidden_furnace"));
+  check("other-level hidden badges survive", earned.includes("hidden_prep_int") && earned.includes("hidden_diamond_adv"));
 }
 check("beginner progress key untouched", store.get("gc_beginner_lesson1_questIndex") === "10");
 check(`${level} progress key cleared`, !store.has(`gc_${level}_lesson1_questIndex`));

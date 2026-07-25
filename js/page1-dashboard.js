@@ -1,5 +1,7 @@
 import {
   loadProgress,
+  getStarCount,
+  hasQuestStar,
   loadCompletedStepIds,
   getQuests,
   getSelectedQuestIndex,
@@ -42,7 +44,7 @@ function postToVoiceTab(message) {
 }
 
 function getCompletedQuestCount() {
-  return loadProgress();
+  return getStarCount();
 }
 
 function getTotalQuests() {
@@ -265,10 +267,10 @@ function renderStarsPanel(container) {
   container.innerHTML = `
     <div class="dashboard-stars-summary">
       <div class="dashboard-stars-big">${earned} / ${total}</div>
-      <p class="dashboard-stars-desc">クリアしたクエスト数がスターになります！</p>
+      <p class="dashboard-stars-desc">クリアしたクエスト数がスターになります！スキップではスターはつきません。</p>
       <div class="dashboard-stars-row" aria-hidden="true">
         ${Array.from({ length: total }, (_, i) =>
-          `<span class="dashboard-star-icon${i < earned ? " filled" : ""}">★</span>`
+          `<span class="dashboard-star-icon${hasQuestStar(i) ? " filled" : ""}">★</span>`
         ).join("")}
       </div>
     </div>`;
@@ -321,8 +323,8 @@ function renderMissionsPanel(container) {
   quests.forEach((quest, index) => {
     const unlocked = isQuestUnlocked(index);
     const isSelected = selected === index;
-    const isCurrent = !lessonDone && index === progress;
-    const isCompleted = index < progress || lessonDone;
+    const isCurrent = !lessonDone && index === progress && !hasQuestStar(index);
+    const isCompleted = hasQuestStar(index);
 
     let statusClass = "";
     let badge = "";
@@ -335,6 +337,8 @@ function renderMissionsPanel(container) {
       badge = '<span class="mission-select-badge">いまのミッション</span>';
     } else if (isCompleted) {
       badge = '<span class="mission-select-badge mission-select-badge--done">クリア</span>';
+    } else if (unlocked && index < progress) {
+      badge = '<span class="mission-select-badge">スキップ</span>';
     }
 
     html += `<li class="mission-select-item${statusClass}"${
@@ -353,10 +357,98 @@ function renderMissionsPanel(container) {
 
   html += `</ul>`;
   if (lessonDone) {
-    html += `<p class="mission-select-note">すべてのミッションをクリアしました！</p>`;
+    html += `<p class="mission-select-note">すべてのミッションを進めました！スターがまだのミッションはもう一度チャレンジできるよ。</p>`;
   }
 
   container.innerHTML = html;
+}
+
+const REFRESH_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.9"/><path d="M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg>`;
+
+function ensureLearnyConfirmOverlay() {
+  let overlay = document.getElementById("learny-confirm-overlay");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "learny-confirm-overlay";
+  overlay.className = "learny-confirm-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "learny-confirm-title");
+  overlay.innerHTML = `
+    <div class="learny-confirm-card">
+      <div class="learny-confirm-icon" aria-hidden="true">${REFRESH_ICON_SVG}</div>
+      <h2 id="learny-confirm-title"></h2>
+      <p id="learny-confirm-body"></p>
+      <div class="learny-confirm-note" id="learny-confirm-note" hidden></div>
+      <div class="learny-confirm-actions">
+        <button type="button" class="learny-confirm-btn confirm" id="learny-confirm-yes"></button>
+        <button type="button" class="learny-confirm-btn cancel" id="learny-confirm-no"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+/**
+ * Fancy in-app confirm for the parent dashboard (replaces window.confirm).
+ * @returns {Promise<boolean>}
+ */
+function showLearnyConfirm({
+  title = "よろしいですか？",
+  body = "",
+  note = "",
+  confirmLabel = "OK",
+  cancelLabel = "やっぱりやめる",
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = ensureLearnyConfirmOverlay();
+    const titleEl = overlay.querySelector("#learny-confirm-title");
+    const bodyEl = overlay.querySelector("#learny-confirm-body");
+    const noteEl = overlay.querySelector("#learny-confirm-note");
+    const yesBtn = overlay.querySelector("#learny-confirm-yes");
+    const noBtn = overlay.querySelector("#learny-confirm-no");
+
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.textContent = body;
+    if (noteEl) {
+      if (note) {
+        noteEl.hidden = false;
+        noteEl.textContent = note;
+      } else {
+        noteEl.hidden = true;
+        noteEl.textContent = "";
+      }
+    }
+    if (yesBtn) yesBtn.textContent = confirmLabel;
+    if (noBtn) noBtn.textContent = cancelLabel;
+
+    const finish = (ok) => {
+      overlay.classList.remove("active");
+      overlay.setAttribute("aria-hidden", "true");
+      yesBtn?.removeEventListener("click", onYes);
+      noBtn?.removeEventListener("click", onNo);
+      overlay.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+      resolve(ok);
+    };
+    const onYes = () => finish(true);
+    const onNo = () => finish(false);
+    const onBackdrop = (e) => {
+      if (e.target === overlay) finish(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") finish(false);
+    };
+
+    yesBtn?.addEventListener("click", onYes);
+    noBtn?.addEventListener("click", onNo);
+    overlay.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+    noBtn?.focus?.();
+  });
 }
 
 export function initPage1Dashboard({ isVoiceTab = true } = {}) {
@@ -607,10 +699,14 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     window.dispatchEvent(new Event("learny-progress-changed"));
   }
 
-  function requestStartOver() {
-    const ok = window.confirm(
-      "最初からやり直しますか？スターとフレーズの記録もリセットされます。"
-    );
+  async function requestStartOver() {
+    const ok = await showLearnyConfirm({
+      title: "最初からやり直す？",
+      body: "ミッションの進み具合がリセットされます。",
+      note: "スターとフレーズの記録も消えます",
+      confirmLabel: "最初からやり直す",
+      cancelLabel: "やっぱりやめる",
+    });
     if (!ok) return;
 
     const onCall = callState === "active" || callState === "connecting";
