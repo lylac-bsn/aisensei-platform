@@ -1496,6 +1496,7 @@
             getLevelFreeChatPrompt,
             getActiveLevelInfo,
             buildSideChallengeSecretBadgeNudge,
+            PRIVATE_COACH_NOTE,
         } from './js/quest-engine.js';
         import { resolveProxyUrl, US_CLOUD_PROXY_URL, TOKYO_CLOUD_PROXY_URL } from './js/proxy-config.js';
         import { QuestSfx } from './js/quest-sfx.js';
@@ -2474,14 +2475,39 @@
         }
 
         /**
-         * Deliver the single app speak-package for this child turn.
-         * Skips if Learny already started speaking (prefer one bubble).
+         * Cut off a free/meta reply so a step/mission verdict can own the turn.
+         * Marks the interrupt as app-caused so the INTERRUPTED handler won't
+         * treat it as a child barge-in.
          */
-        function deliverSpeakPackage(packageText) {
+        function interruptAssistantForAppVerdict() {
+            dbg('interrupt for app verdict');
+            finalizeInterruptedAssistantMessage();
+            if (audioPlayer) audioPlayer.interrupt();
+            assistantTurnOpen = false;
+            assistantAudibleThisTurn = false;
+            lastAssistantAudioAt = 0;
+            lastAppSteeringInjectAt = Date.now();
+            pendingFalseCreditAssistantText = '';
+            deferredSteeringNudges = [];
+            clearDeferredSteeringFlushTimer();
+            clearNoAudioRecoveryTimer();
+            clearDeadSessionRestartTimer();
+            steeringNudgeSentThisTurn = false;
+        }
+
+        /**
+         * Deliver the single app speak-package for this child turn.
+         * Skips if Learny already started speaking (prefer one bubble), unless
+         * force=true (step/mission verdicts must land even mid-reply).
+         */
+        function deliverSpeakPackage(packageText, { force = false } = {}) {
             if (!packageText?.trim() || !client?.connected) return false;
             if (assistantAudibleThisTurn || assistantTurnOpen) {
-                dbg('speak package skipped (already speaking)');
-                return false;
+                if (!force) {
+                    dbg('speak package skipped (already speaking)');
+                    return false;
+                }
+                interruptAssistantForAppVerdict();
             }
             // Cancel competing injects for this turn (recovery / stale queues).
             deferredSteeringNudges = deferredSteeringNudges.filter(
@@ -2492,7 +2518,14 @@
             clearDeferredSteeringFlushTimer();
             clearNoAudioRecoveryTimer();
             clearDeadSessionRestartTimer();
-            return sendSteeringNudgeNow(packageText);
+            const sent = sendSteeringNudgeNow(
+                packageText,
+                force ? { recoveryRetry: true } : {}
+            );
+            // force uses recoveryRetry to bypass the once-per-turn gate; still
+            // mark the turn owned so silence recovery won't double-inject.
+            if (sent && force) steeringNudgeSentThisTurn = true;
+            return sent;
         }
 
         function sendSteeringNudgeNow(
@@ -2918,7 +2951,8 @@
                 };
             }
 
-            // 3) STEP_PASS — celebrate + next phrase in one package (if idle).
+            // 3) STEP_PASS — celebrate + next phrase. Force-deliver so a racey
+            // free reply ("checking the app…") cannot block the verdict.
             if (newly.length) {
                 const pkg = buildChallengeResultNudge(
                     activeQuest,
@@ -2926,13 +2960,19 @@
                     newly,
                     utterance
                 );
-                const sent = deliverSpeakPackage(pkg);
+                let sent = deliverSpeakPackage(pkg, { force: true });
+                if (!sent) {
+                    // Last resort: queue as state-sync so it survives flush.
+                    sent = Boolean(
+                        sendSteeringNudge(pkg, { stateSyncCorrection: true })
+                    );
+                }
                 dbg('speak intent', { intent: 'step_pass', sent });
                 return {
                     stepIds: newly,
                     intent: 'step_pass',
                     packageSent: sent,
-                    ownsSpokenTurn: true,
+                    ownsSpokenTurn: sent,
                 };
             }
 
@@ -4474,8 +4514,9 @@
                 : ' Use fresh wording — not a line you already used this call.';
 
             let proactivePrompt =
-                '[Speak now] The child has been quiet for 30 seconds. ' +
-                'You MUST speak aloud now with ONE short friendly check-in (do not stay silent).' +
+                `${PRIVATE_COACH_NOTE}The child has been quiet for about 30 seconds. ` +
+                'Say ONE short, natural check-in like a friendly human teacher — not a script, not a system. ' +
+                'Never mention timers, apps, waiting, or checking.' +
                 banLine;
 
             if (inMission) {
