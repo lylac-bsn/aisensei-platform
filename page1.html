@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <script>window.GC_LEVEL = 'beginner';</script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="images/tab-logo.png" type="image/png">
 </head>
@@ -31,9 +32,8 @@
                             残り時間: <span id="timer-display">--:--:--</span>
                         </span>
                         <div class="header-tab-switcher">
-                            <button id="tab-server1" class="tab-btn active">1-1 音声</button>
-                            <button id="tab-server2" class="tab-btn" disabled>1-2 音声＆画面共有</button>
-                            <button id="tab-server3" class="tab-btn" disabled>1-3 音声＆画面共有＆声かけ</button>
+                            <button id="tab-part1" class="tab-btn active">Part 1</button>
+                            <button id="tab-part2" class="tab-btn" disabled title="Part 1 を終わらせてから">Part 2</button>
                         </div>
                     </div>
                 </div>
@@ -53,23 +53,16 @@
         <!-- Main content area -->
         <div class="main-content-grid main-content-grid--dashboard">
             <main id="app-content" class="chat-box-wrapper chat-column">
-                <iframe 
-                    src="voice-tab.html" 
-                    id="server-iframe-1"
+                <iframe
+                    src="voice-tab.html?level=beginner&lesson=part1"
+                    id="iframe-part1"
                     frameborder="0"
                     allow="microphone; display-capture"
                     style="width:100%; height:100%;">
                 </iframe>
-                <iframe 
-                    src="https://learnysensei-s1-2-voice.web.app/" 
-                    id="server-iframe-2"
-                    frameborder="0"
-                    allow="microphone; display-capture"
-                    style="width:100%; height:100%; display:none;">
-                </iframe>
-                <iframe 
-                    src="https://learnysensei-s1-3.web.app/" 
-                    id="server-iframe-3"
+                <iframe
+                    src="voice-tab.html?level=beginner&lesson=part2"
+                    id="iframe-part2"
                     frameborder="0"
                     allow="microphone; display-capture"
                     style="width:100%; height:100%; display:none;">
@@ -100,14 +93,14 @@
                         <ul class="dashboard-tips-note__list">
                             <li>わからないときは、「ゆっくりしゃべって！」とか「もう一回！」って言ってみよう！</li>
                             <li>へんじがない時は、「hello!」って話しかけてみよう！</li>
-                            <li>ミッションにないフレーズを言えたり、先生の助けなしでチャレンジできたら…シークレットバッジをゲットするかも？！</li>
+                            <li>わすれていてもだいじょうぶ。ラーニー先生がヒントを出してくれるよ。</li>
                         </ul>
                     </div>
 
                     <div class="dashboard-buttons">
-                    <button type="button" class="dashboard-btn" data-panel="missions" aria-label="ミッション" aria-expanded="false" title="ミッション">
+                    <button type="button" class="dashboard-btn" data-panel="missions" aria-label="レッスン" aria-expanded="false" title="レッスン">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-                        <span class="dashboard-btn-label">ミッション</span>
+                        <span class="dashboard-btn-label">レッスン</span>
                     </button>
                     <button type="button" class="dashboard-btn" data-panel="words" aria-label="覚えたフレーズ" aria-expanded="false" title="覚えたフレーズ">
                         <svg class="dashboard-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -134,44 +127,26 @@
 
                 <!-- Hidden instruction templates (cloned into panel) -->
                 <div hidden aria-hidden="true">
-                    <div class="instructions-panel instructions-panel--popover" id="instructions-server1">
+                                        <div class="instructions-panel instructions-panel--popover" id="instructions-server1">
                         <h2>使い方</h2>
                         <ol class="instructions-list">
-                            <li>右の<strong>ミッション</strong>から、やりたいクエストを選ぶか、「<strong>自由におしゃべり</strong>」を選んで自由会話モードにしよう。</li>
-                            <li>ラーニー先生の画面<strong>右上</strong>の<span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><strong>はじめる</strong>を押して電話しよう！</li>
-                            <li>ミッション中は<strong>ステップの英語フレーズ</strong>を言えばクリア！（例：「I found a tree!」→「I got wood!」）</li>
-                            <li>通話中は会話がリアルタイムで<strong>文字起こし</strong>されるよ。下の入力欄から文字メッセージも送れる。</li>
-                            <li>終わりたいときは<span class="instr-icon instr-icon--hangup" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.7 13.3 5 19"/><path d="M14.3 10.7 19 5"/><path d="M22 16.9v2a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h2a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L7.1 9.9a16 16 0 0 0 6 6l1.5-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6A2 2 0 0 1 22 16.9z"/><line x1="2" y1="2" x2="22" y2="22"/></svg></span><strong>おわる</strong>で電話を切れる。クエストをクリアすると次のミッションへ進める！</li>
+                            <li>上のタブで <strong>Part 1</strong>（2週目の宿題）か <strong>Part 2</strong>（4週目の宿題）を選ぶよ。Part 2 は Part 1 が終わってからひらける。</li>
+                            <li>ラーニー先生の画面<strong>右上</strong>の<strong>はじめる</strong>を押して電話しよう！</li>
+                            <li>先生の質問にこたえて、英語をいっしょに言ってみよう。わすれていてもだいじょうぶ。</li>
+                            <li>終わりたいときは<strong>おわる</strong>で電話を切れる。途中から再開できるよ。</li>
                         </ol>
                         <h2>右のボタン</h2>
                         <ul class="instructions-feature-list">
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></span><strong>ミッション</strong> — クエストを選ぶ／自由会話モード</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12a8 8 0 0 1 13.5-5.9M20 12a8 8 0 0 1-13.5 5.9"/><path d="M16 4h4v4M4 20v-4h4"/></svg></span><strong>最初から</strong> — レッスンクリア後に進捗をリセット</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.5c0 2-2.5 2-2.5 4"/><line x1="12" y1="17" x2="12" y2="17.5"/></svg></span><strong>使い方</strong> — この説明を見る</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><strong>フレーズ</strong> — 覚えた英語フレーズ</li>
-                            <li><span class="instr-icon instr-icon--star" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l2.9 6.9H22l-5.5 4.5 2.1 6.6L12 16.8 5.4 20l2.1-6.6L2 8.9h7.1z"/></svg></span><strong>スター</strong> — クリアしたクエスト数（右上に表示）</li>
-                            <li><span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="5"/><path d="M8.2 14.5 7 22l5-2.5L17 22l-1.2-7.5"/></svg></span><strong>バッジコレクション</strong> — レッスンを全部クリアするとバッジがもらえる（右上に表示）</li>
+                            <li><strong>レッスン</strong> — 今の宿題の章</li>
+                            <li><strong>最初から</strong> — この Part をやりなおす</li>
+                            <li><strong>使い方</strong> — この説明</li>
+                            <li><strong>フレーズ</strong> — 言えた英語</li>
+                            <li><strong>スター / バッジ</strong> — がんばりのしるし</li>
                         </ul>
-                        <h2>ヒント</h2>
-                        <p class="hint-text">ラーニー先生は日本語もわかるけど、英語で話すともっと上手に教えてくれるよ。</p>
-                        <p>例：「英語で〇〇ってなんて言うの？」「次は何をすればいい？」など、気軽に聞いてみよう！</p>
-                        <p class="hint-text">返事がないときは、ページを<strong>更新</strong>してから、もう一度<span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><strong>はじめる</strong>を押してみてね。</p>
                         <h2>おわりかた</h2>
-                        <p class="hint-text">タブを閉じるかログアウトしてね。タイマーがなくなると、ラーニー先生の体験は終了だよ。</p>
+                        <p class="hint-text">タブを閉じるかログアウトしてね。タイマーがなくなると終了だよ。</p>
                     </div>
-                    <div class="instructions-panel instructions-panel--popover" id="instructions-default">
-                        <h2>使い方</h2>
-                        <ol class="instructions-list">
-                            <li>マイクラの画面を共有して、ラーニー先生に<span class="instr-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><strong>はじめる</strong>で電話しよう。</li>
-                            <li>「Hello!」など、英語で声をかけてみよう。</li>
-                            <li>返事がないときは、ページを<strong>更新</strong>してからもう一度試してね。</li>
-                        </ol>
-                        <h2>ヒント</h2>
-                        <p class="hint-text">ラーニー先生は日本語もわかるけど、英語で話すともっと上手に教えてくれるよ。</p>
-                        <p>例：「英語で〇〇ってなんて言うの？」「ここから何をしたらいい？」など、ゲームのことも気軽に聞いてみよう！</p>
-                        <h2>おわりかた</h2>
-                        <p class="hint-text">タブを閉じるかログアウトしてね。タイマーがなくなると、ラーニー先生の体験は終了だよ。</p>
-                    </div>
+                    <div class="instructions-panel" id="instructions-default" hidden></div>
                 </div>
             </aside>
         </div>
@@ -187,29 +162,51 @@
 
     <!-- Page-specific script (Firebase v11 modular SDK loaded via page1.js) -->
     <script type="module" src="js/page1.js"></script>
-    <script type="module">
-        import { initPage1Dashboard, setDashboardInstructionsTab } from './js/page1-dashboard.js';
+        <script type="module">
+        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js';
+        import { isPart1Complete } from './js/lesson-engine.js';
 
-        const tabServer1 = document.getElementById('tab-server1');
-        const tabServer2 = document.getElementById('tab-server2');
-        const tabServer3 = document.getElementById('tab-server3');
-        const iframe1 = document.getElementById('server-iframe-1');
-        const iframe2 = document.getElementById('server-iframe-2');
-        const iframe3 = document.getElementById('server-iframe-3');
+        const tab1 = document.getElementById('tab-part1');
+        const tab2 = document.getElementById('tab-part2');
+        const iframe1 = document.getElementById('iframe-part1');
+        const iframe2 = document.getElementById('iframe-part2');
 
         initPage1Dashboard({ isVoiceTab: true });
 
-        function switchTab(activeTab, activeIframe) {
-            [tabServer1, tabServer2, tabServer3].forEach(tab => tab.classList.remove('active'));
-            [iframe1, iframe2, iframe3].forEach(iframe => iframe.style.display = 'none');
-
-            activeTab.classList.add('active');
-            activeIframe.style.display = 'block';
-
-            setDashboardInstructionsTab(activeTab === tabServer1);
+        function refreshLock() {
+            if (!tab2) return;
+            tab2.disabled = !isPart1Complete();
+            tab2.title = tab2.disabled ? 'Part 1 を終わらせてから' : 'Part 2';
         }
 
-        tabServer1.addEventListener('click', () => switchTab(tabServer1, iframe1));
+        function endVoiceCall(iframe) {
+            try {
+                iframe.contentWindow?.postMessage({ type: 'gc_end_call' }, '*');
+            } catch {
+                // ignore
+            }
+        }
+
+        function switchTab(part) {
+            const is1 = part === 'part1';
+            if (is1) endVoiceCall(iframe2);
+            else endVoiceCall(iframe1);
+            tab1.classList.toggle('active', is1);
+            tab2.classList.toggle('active', !is1);
+            iframe1.style.display = is1 ? 'block' : 'none';
+            iframe2.style.display = is1 ? 'none' : 'block';
+            setActiveHomeworkLesson(part);
+        }
+
+        tab1.addEventListener('click', () => switchTab('part1'));
+        tab2.addEventListener('click', () => {
+            if (tab2.disabled) return;
+            switchTab('part2');
+        });
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'gc_quest_progress_update') refreshLock();
+        });
+        refreshLock();
     </script>
 
     <!-- Growbuddy Logo -->

@@ -1224,8 +1224,15 @@ body.page-dashboard .user-dashboard {
     display: block;
 }
 
-.trophy-slot.upcoming {
-    color: rgba(255, 167, 38, 0.55);
+.trophy-slot-emoji {
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.trophy-slot-empty {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #FFB74D;
 }
 
 .trophy-shelf__stars {

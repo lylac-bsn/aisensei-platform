@@ -6,7 +6,7 @@ import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://w
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { initProgressSync, scheduleProgressSync } from "./progress-sync.js";
 import { logUserActivity } from "./activity-log.js";
-import { getActiveLevelInfo } from "./quest-engine.js";
+import { getActiveLevelInfo } from "./lesson-engine.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -159,7 +159,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.data?.type === 'gc_activity_event' && currentUser) {
             logUserActivity(db, currentUser.uid, e.data.event || {});
         }
+        if (e.data?.type === 'gc_call_state') {
+            document.body.dataset.voiceCallState = e.data.state || 'idle';
+        }
     });
+
+    function endAllVoiceCalls() {
+        document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {
+            try {
+                frame.contentWindow?.postMessage({ type: 'gc_end_call' }, '*');
+            } catch {
+                // ignore
+            }
+        });
+    }
 
     window.addEventListener('learny-progress-changed', () => {
         if (currentUser) {
@@ -293,6 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function lockApp(message) {
+        endAllVoiceCalls();
         currentRemainingTime = 0;
         saveTime(true);
         clearAllIntervals();

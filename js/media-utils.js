@@ -29,9 +29,9 @@ export class AudioStreamer {
     // turn), so streaming silence/game noise during long quiet stretches is
     // the biggest cost driver. Chunks are 4096 samples = 256ms each.
     this.voiceGateEnabled = true;
-    // Must exceed the server VAD silence_duration_ms (2000) so the server
-    // still receives the trailing silence it needs to close the user's turn.
-    this.voiceGateHangoverMs = 2600;
+    // With manual activity_start/end, hangover only needs to catch trailing
+    // phonemes — keep it short so Learny answers quickly after the child stops.
+    this.voiceGateHangoverMs = 450;
     this.voiceGatePreRollChunks = 2; // ~512ms replayed on speech onset
     this.voiceGateMinThreshold = 0.01;
     // Ambient noise (game audio on speakers) raises the adaptive floor; cap
@@ -190,13 +190,24 @@ export class AudioStreamer {
     this.client = newClient;
   }
 
+  resetVoiceGate() {
+    this._gateLastVoiceAt = 0;
+    this._gateOpen = false;
+    this._gatePreRoll = [];
+  }
+
   /** Mute is absolute: stop sending to the API AND disable the hardware tracks. */
   setMuted(muted) {
-    this.muted = Boolean(muted);
+    const next = Boolean(muted);
+    const becameMuted = next && !this.muted;
+    this.muted = next;
     if (this.mediaStream) {
       this.mediaStream.getAudioTracks().forEach((track) => {
         track.enabled = !this.muted;
       });
+    }
+    if (becameMuted) {
+      this.resetVoiceGate();
     }
   }
 
@@ -493,6 +504,8 @@ export class AudioPlayer {
     this.workletNode = null;
     this.gainNode = null;
     this.isInitialized = false;
+    /** Once true, play()/init() must no-op — in-flight play can otherwise revive audio after hang-up. */
+    this.destroyed = false;
     this.volume = 1.0;
     this.sampleRate = 24000; // Gemini outputs at 24kHz
     /** Wall-clock time (ms) when queued playback is expected to finish. */
@@ -503,7 +516,7 @@ export class AudioPlayer {
    * Initialize the audio player
    */
   async init() {
-    if (this.isInitialized) return;
+    if (this.destroyed || this.isInitialized) return;
 
     try {
       // Create audio context at 24kHz to match Gemini
@@ -514,6 +527,16 @@ export class AudioPlayer {
 
       // Load the audio worklet from external file
       await this.audioContext.audioWorklet.addModule(PLAYBACK_WORKLET_URL);
+
+      if (this.destroyed) {
+        try {
+          await this.audioContext.close();
+        } catch {
+          // ignore
+        }
+        this.audioContext = null;
+        return;
+      }
 
       // Create worklet node
       this.workletNode = new AudioWorkletNode(
@@ -539,15 +562,18 @@ export class AudioPlayer {
    * Play audio chunk from base64 PCM
    */
   async play(base64Audio) {
+    if (this.destroyed) return;
     if (!this.isInitialized) {
       await this.init();
     }
+    if (this.destroyed || !this.isInitialized || !this.workletNode) return;
 
     try {
       // Resume audio context if suspended
       if (this.audioContext.state === "suspended") {
         await this.audioContext.resume();
       }
+      if (this.destroyed || !this.workletNode) return;
 
       // Convert base64 to Float32Array
       const binaryString = atob(base64Audio);
@@ -572,6 +598,7 @@ export class AudioPlayer {
       const now = Date.now();
       this.playbackEndAt = Math.max(this.playbackEndAt, now) + chunkMs;
     } catch (error) {
+      if (this.destroyed) return;
       throw error;
     }
   }
@@ -581,7 +608,11 @@ export class AudioPlayer {
    */
   interrupt() {
     if (this.workletNode) {
-      this.workletNode.port.postMessage("interrupt");
+      try {
+        this.workletNode.port.postMessage("interrupt");
+      } catch {
+        // ignore
+      }
     }
     this.playbackEndAt = 0;
   }
@@ -598,6 +629,7 @@ export class AudioPlayer {
 
   /** Estimated ms of audio still playing (0 when playback has finished). */
   getPlaybackMsRemaining() {
+    if (this.destroyed) return 0;
     return Math.max(0, Math.ceil(this.playbackEndAt - Date.now()));
   }
 
@@ -607,12 +639,38 @@ export class AudioPlayer {
   }
 
   /**
-   * Clean up resources
+   * Clean up resources — stops sound immediately and blocks any late play().
    */
   destroy() {
+    this.destroyed = true;
+    this.interrupt();
+    if (this.gainNode) {
+      try {
+        this.gainNode.gain.value = 0;
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      this.workletNode?.disconnect();
+    } catch {
+      // ignore
+    }
+    try {
+      this.gainNode?.disconnect();
+    } catch {
+      // ignore
+    }
+    this.workletNode = null;
+    this.gainNode = null;
     if (this.audioContext) {
-      this.audioContext.close();
+      const ctx = this.audioContext;
       this.audioContext = null;
+      try {
+        ctx.close();
+      } catch {
+        // ignore
+      }
     }
     this.playbackEndAt = 0;
     this.isInitialized = false;

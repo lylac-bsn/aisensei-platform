@@ -1,36 +1,14 @@
-import { LESSON_1_QUESTS } from "./quests/beginner-lesson1.js";
-import { INTERMEDIATE_QUESTS } from "./quests/intermediate-lesson1.js";
-import { ADVANCED_QUESTS } from "./quests/advanced-lesson1.js";
-import {
-  MAIN_BADGE_SLOTS,
-  HIDDEN_BADGE_SLOT_COUNT,
-  getBadgeCatalog,
-} from "./quest-engine.js";
-import { skipCountForMission, totalSkipCount } from "./activity-log.js";
+import { getBadgeCatalog } from "./lesson-engine.js";
+import { totalSkipCount } from "./activity-log.js";
 
-const TOTAL_BADGE_SLOTS = MAIN_BADGE_SLOTS.length + HIDDEN_BADGE_SLOT_COUNT;
 const BADGE_CATALOG = getBadgeCatalog();
+const TOTAL_BADGE_SLOTS = BADGE_CATALOG.length;
 const BADGE_BY_ID = Object.fromEntries(BADGE_CATALOG.map((b) => [b.id, b]));
 
 const LEVEL_META = [
-  {
-    id: "beginner",
-    label: "ビギナー",
-    field: "beginnerProgress",
-    quests: LESSON_1_QUESTS,
-  },
-  {
-    id: "intermediate",
-    label: "中級",
-    field: "intermediateProgress",
-    quests: INTERMEDIATE_QUESTS,
-  },
-  {
-    id: "advanced",
-    label: "上級",
-    field: "advancedProgress",
-    quests: ADVANCED_QUESTS,
-  },
+  { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
+  { id: "intermediate", label: "中級", field: "intermediateProgress" },
+  { id: "advanced", label: "上級", field: "advancedProgress" },
 ];
 
 export function escapeHtml(text) {
@@ -73,72 +51,39 @@ function normalizeIndexArray(raw) {
   ].sort((a, b) => a - b);
 }
 
-export function normalizeLevelProgress(raw, quests) {
+export function normalizeLevelProgress(raw) {
   if (!raw || typeof raw !== "object") {
     return {
       hasData: false,
+      part1Complete: false,
       starsEarned: 0,
-      totalQuests: quests.length,
-      lessonComplete: false,
-      fullyStarred: false,
-      questIndex: 0,
-      starredQuestIds: [],
-      skippedQuestIds: [],
-      missionLabel: "データなし",
-      missionDetail: "まだ同期されていません",
-      missionStatus: "—",
-      missionGoal: "",
       phraseCount: 0,
       phrases: [],
       lessonBadges: [],
     };
   }
-
-  const totalQuests = Number(raw.totalQuests) || quests.length;
-  const starsEarned = Number(raw.starsEarned) || 0;
-  const lessonComplete = !!raw.lessonComplete;
-  const starredQuestIds = normalizeIndexArray(
-    raw.starredQuestIds ??
-      (starsEarned > 0 ? Array.from({ length: starsEarned }, (_, i) => i) : [])
-  );
-  const skippedQuestIds = normalizeIndexArray(raw.skippedQuestIds);
-  const questIndex = Number.isFinite(raw.questIndex) ? raw.questIndex : starredQuestIds.length;
-  const missionNumber =
-    raw.missionNumber ?? (raw.missionIndex != null ? raw.missionIndex + 1 : null);
-
-  let missionLabel = "未開始";
-  if (lessonComplete) missionLabel = "全ミッションクリア";
-  else if (missionNumber) missionLabel = `ミッション ${missionNumber} / ${totalQuests}`;
-
-  const missionDetail =
-    raw.missionTitleEn ||
-    (missionNumber ? quests[missionNumber - 1]?.titleEn : "") ||
-    "—";
-  const missionGoal =
-    raw.missionGoal || (missionNumber ? quests[missionNumber - 1]?.goal : "") || "";
-
+  const p1 = raw.part1 || {};
+  const p2 = raw.part2 || {};
+  const phrases = [
+    ...(Array.isArray(p1.phrasesSpoken) ? p1.phrasesSpoken : []),
+    ...(Array.isArray(p2.phrasesSpoken) ? p2.phrasesSpoken : []),
+  ];
   return {
     hasData: true,
-    starsEarned,
-    totalQuests,
-    lessonComplete,
-    fullyStarred: !!raw.fullyStarred,
-    questIndex,
-    starredQuestIds,
-    skippedQuestIds,
-    missionLabel,
-    missionDetail,
-    missionGoal,
-    missionStatus: raw.missionStatus || "—",
-    phraseCount: Number(raw.phraseCount) || (raw.phrases?.length ?? 0),
-    phrases: Array.isArray(raw.phrases) ? raw.phrases : [],
+    part1Complete: Boolean(raw.part1Complete || p1.complete),
+    part2Complete: Boolean(p2.complete),
+    starsEarned: (Number(p1.stars) || 0) + (Number(p2.stars) || 0),
+    phraseCount: phrases.length,
+    phrases,
     lessonBadges: Array.isArray(raw.lessonBadges) ? raw.lessonBadges : [],
+    part1,
+    part2,
   };
 }
 
-/** @deprecated use per-level normalize — kept for any external callers */
+/** @deprecated */
 export function normalizeStudentProgress(user) {
-  const p = normalizeLevelProgress(user.beginnerProgress, LESSON_1_QUESTS);
+  const p = normalizeLevelProgress(user.beginnerProgress);
   return {
     ...p,
     badgeCount: collectUserBadges(user).length,
@@ -161,23 +106,25 @@ export function buildProgressSummary(users) {
   const withProgress = accounts.filter(
     (u) => u.beginnerProgress || u.intermediateProgress || u.advancedProgress
   );
-  const lessonComplete = accounts.filter((u) => u.beginnerProgress?.lessonComplete).length;
+  const lessonComplete = accounts.filter((u) => u.beginnerProgress?.part1Complete).length;
   const totalStars = accounts.reduce((sum, u) => {
     return (
       sum +
-      LEVEL_META.reduce(
-        (s, m) => s + (Number(u[m.field]?.starsEarned) || 0),
-        0
-      )
+      LEVEL_META.reduce((s, m) => {
+        const p = u[m.field];
+        return s + (Number(p?.part1?.stars) || 0) + (Number(p?.part2?.stars) || 0);
+      }, 0)
     );
   }, 0);
   const totalPhrases = accounts.reduce((sum, u) => {
     return (
       sum +
-      LEVEL_META.reduce(
-        (s, m) => s + (Number(u[m.field]?.phraseCount) || 0),
-        0
-      )
+      LEVEL_META.reduce((s, m) => {
+        const p = u[m.field];
+        const n =
+          (p?.part1?.phrasesSpoken?.length || 0) + (p?.part2?.phrasesSpoken?.length || 0);
+        return s + n;
+      }, 0)
     );
   }, 0);
   const totalSkips = accounts.reduce(
@@ -196,58 +143,25 @@ export function buildProgressSummary(users) {
   };
 }
 
-function renderMissionGrid(level, progress, skipStats) {
-  const { quests, id: levelId, label } = level;
-  const starred = new Set(progress.starredQuestIds);
-  const skipped = new Set(progress.skippedQuestIds);
-  const currentIdx = progress.lessonComplete
-    ? -1
-    : Number.isFinite(progress.questIndex)
-      ? progress.questIndex
-      : progress.starredQuestIds.length;
-
-  const rows = quests
-    .map((quest, i) => {
-      const isStar = starred.has(i);
-      const isSkip = skipped.has(i) && !isStar;
-      const isCurrent = i === currentIdx && !progress.lessonComplete;
-      const skipN = skipCountForMission(skipStats, levelId, i);
-      const stateClass = isStar
-        ? "starred"
-        : isSkip
-          ? "skipped"
-          : isCurrent
-            ? "current"
-            : i < (progress.questIndex || 0)
-              ? "unlocked"
-              : "locked";
-      const mark = isStar ? "★" : isSkip ? "↷" : isCurrent ? "●" : i < (progress.questIndex || 0) ? "○" : "·";
-      return `<div class="progress-mission-cell ${stateClass}" title="${escapeHtml(quest.titleEn || quest.title)}">
-        <span class="progress-mission-cell-mark">${mark}</span>
-        <span class="progress-mission-cell-num">M${i + 1}</span>
-        <span class="progress-mission-cell-title">${escapeHtml(quest.goal || quest.titleEn || "")}</span>
-        ${
-          skipN > 0
-            ? `<span class="progress-skip-count" title="スキップ回数">↷×${skipN}</span>`
-            : ""
-        }
-      </div>`;
-    })
-    .join("");
-
+function renderHomeworkParts(meta, raw) {
+  const p1 = raw?.part1 || {};
+  const p2 = raw?.part2 || {};
+  const row = (label, part) => {
+    const done = part.complete ? "完了" : `章 ${(part.segmentIndex || 0) + 1}`;
+    const mem = Object.entries(part.memories || {})
+      .map(([k, v]) => `${k}:${v}`)
+      .join("、 ");
+    return `<p class="progress-level-now">${escapeHtml(label)} — ${escapeHtml(done)} · ★${Number(part.stars) || 0}${
+      mem ? ` · ${escapeHtml(mem)}` : ""
+    }</p>`;
+  };
   return `<section class="progress-level-block">
     <header class="progress-level-header">
-      <h4>${escapeHtml(label)}</h4>
-      <span class="progress-level-meta">★${progress.starsEarned}/${progress.totalQuests}
-        · スキップ ${progress.skippedQuestIds.length}件
-        · ${escapeHtml(progress.missionStatus)}</span>
+      <h4>${escapeHtml(meta.label)}</h4>
+      <span class="progress-level-meta">${raw?.part1Complete ? "Part1完了" : "Part1未完了"}</span>
     </header>
-    <div class="progress-mission-grid">${rows || '<p class="progress-empty-inline">ミッション定義なし</p>'}</div>
-    ${
-      progress.hasData
-        ? `<p class="progress-level-now">${escapeHtml(progress.missionLabel)} — ${escapeHtml(progress.missionDetail)}</p>`
-        : `<p class="progress-level-now muted">未同期</p>`
-    }
+    ${row("Part 1", p1)}
+    ${row("Part 2", p2)}
   </section>`;
 }
 
@@ -257,7 +171,7 @@ function renderBadgeBoard(earnedIds, userId) {
     const has = earned.has(b.id);
     return `<div class="progress-badge-chip${has ? " earned" : ""}" data-badge-id="${escapeHtml(b.id)}">
       <span class="progress-badge-chip-label">${escapeHtml(b.label)}</span>
-      <span class="progress-badge-chip-kind">${b.kind === "main" ? "メイン" : "シークレット"}</span>
+      <span class="progress-badge-chip-kind">宿題</span>
       ${
         has
           ? `<button type="button" class="progress-badge-btn revoke" data-action="revoke-badge" data-user-id="${escapeHtml(userId)}" data-badge-id="${escapeHtml(b.id)}">取消</button>`
@@ -290,13 +204,16 @@ function collectAllPhrases(user) {
   const seen = new Set();
   const out = [];
   for (const meta of LEVEL_META) {
-    const list = user[meta.field]?.phrases;
-    if (!Array.isArray(list)) continue;
-    for (const p of list) {
-      const key = `${p.english}|${p.japanese}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(p);
+    const field = user[meta.field] || {};
+    for (const part of [field.part1, field.part2]) {
+      const list = part?.phrasesSpoken;
+      if (!Array.isArray(list)) continue;
+      for (const p of list) {
+        const english = typeof p === "string" ? p : p.english;
+        if (!english || seen.has(english)) continue;
+        seen.add(english);
+        out.push({ english, japanese: "" });
+      }
     }
   }
   return out;
@@ -352,15 +269,11 @@ export function renderProgressDashboard(users, searchQuery = "") {
           const badges = collectUserBadges(u);
           const skipTotal = totalSkipCount(u.skipStats);
           const levelsHtml = LEVEL_META.map((meta) =>
-            renderMissionGrid(
-              meta,
-              normalizeLevelProgress(u[meta.field], meta.quests),
-              u.skipStats || {}
-            )
+            renderHomeworkParts(meta, u[meta.field] || {})
           ).join("");
           const phrases = collectAllPhrases(u);
           const hasAny = LEVEL_META.some((m) => u[m.field]);
-          const statusClass = u.beginnerProgress?.lessonComplete
+          const statusClass = u.beginnerProgress?.part1Complete
             ? "complete"
             : hasAny
               ? "active"

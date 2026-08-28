@@ -41,46 +41,34 @@ export class MultimodalLiveResponseMessage {
 
     try {
       if (data?.setupComplete) {
-        // console.log("🏁 SETUP COMPLETE response", data);
         this.type = MultimodalLiveResponseType.SETUP_COMPLETE;
-      } else if (data?.serverContent?.turnComplete) {
-        // console.log("🏁 TURN COMPLETE response");
-        this.type = MultimodalLiveResponseType.TURN_COMPLETE;
       } else if (data?.serverContent?.interrupted) {
-        // console.log("🗣️ INTERRUPTED response");
         this.type = MultimodalLiveResponseType.INTERRUPTED;
       } else if (data?.serverContent?.inputTranscription) {
-        // console.log(
-        //   "📝 INPUT TRANSCRIPTION:",
-        //   data.serverContent.inputTranscription
-        // );
         this.type = MultimodalLiveResponseType.INPUT_TRANSCRIPTION;
         this.data = {
           text: data.serverContent.inputTranscription.text || "",
           finished: data.serverContent.inputTranscription.finished || false,
         };
       } else if (data?.serverContent?.outputTranscription) {
-        // console.log(
-        //   "📝 OUTPUT TRANSCRIPTION:",
-        //   data.serverContent.outputTranscription
-        // );
         this.type = MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION;
         this.data = {
           text: data.serverContent.outputTranscription.text || "",
           finished: data.serverContent.outputTranscription.finished || false,
         };
       } else if (data?.toolCall) {
-        // console.log("🎯 🛠️ TOOL CALL response", data?.toolCall);
         this.type = MultimodalLiveResponseType.TOOL_CALL;
         this.data = data?.toolCall;
       } else if (parts?.length && parts[0].text) {
-        // console.log("💬 TEXT response", parts[0].text);
         this.data = parts[0].text;
         this.type = MultimodalLiveResponseType.TEXT;
       } else if (parts?.length && parts[0].inlineData) {
-        // console.log("🔊 AUDIO response");
         this.data = parts[0].inlineData.data;
         this.type = MultimodalLiveResponseType.AUDIO;
+      } else if (data?.serverContent?.turnComplete) {
+        // Parse audio/text first. A short reply often arrives in the same
+        // frame as turnComplete; treating that as TURN_COMPLETE dropped audio.
+        this.type = MultimodalLiveResponseType.TURN_COMPLETE;
       }
     } catch (e) {
       // parsing error handled silently
@@ -511,23 +499,32 @@ export class GeminiLiveAPI {
     this.sendMessage(textMessage);
   }
 
-  sendToolResponse(name, id, responseBody = {}, scheduling = "WHEN_IDLE") {
-    const response = {
-      ...responseBody,
-      scheduling: responseBody.scheduling || scheduling,
-    };
-    const message = {
-      tool_response: {
-        function_responses: [
-          {
-            id,
-            name,
-            response,
+  sendToolResponse(name, id, responseBody = {}, scheduling = "SILENT") {
+    this.sendToolResponses([{ name, id, responseBody, scheduling }]);
+  }
+
+  sendToolResponses(entries = []) {
+    const functionResponses = entries
+      .filter((entry) => entry?.id && entry?.name)
+      .map(({ name, id, responseBody = {}, scheduling = "SILENT" }) => {
+        const sched = responseBody.scheduling || scheduling;
+        const { scheduling: _ignored, ...payload } = responseBody;
+        return {
+          id,
+          name,
+          scheduling: sched,
+          response: {
+            ...payload,
+            scheduling: sched,
           },
-        ],
+        };
+      });
+    if (!functionResponses.length) return false;
+    return this.sendMessage({
+      tool_response: {
+        function_responses: functionResponses,
       },
-    };
-    this.sendMessage(message);
+    });
   }
 
   sendRealtimeInputMessage(data, mime_type) {
@@ -560,16 +557,38 @@ export class GeminiLiveAPI {
   }
 
   /**
+   * Manual activity markers for Live API when automatic VAD is disabled.
+   * activity_start/end bracket one user utterance so the model replies promptly.
+   */
+  signalActivityStart() {
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return false;
+    return this.sendMessage({
+      realtime_input: {
+        activity_start: {},
+      },
+    });
+  }
+
+  /**
+   * Close an open audio VAD turn without sending an empty client_content turn
+   * (that empty turn can make the model start speaking before the real text).
+   */
+  signalActivityEnd() {
+    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return false;
+    return this.sendMessage({
+      realtime_input: {
+        activity_end: {},
+      },
+    });
+  }
+
+  /**
    * After barge-in, server VAD often misses end-of-speech. Explicitly hand the
    * turn back so the model can respond to the child's interrupt utterance.
    */
   signalUserTurnComplete() {
     if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) return false;
-    this.sendMessage({
-      realtime_input: {
-        activity_end: {},
-      },
-    });
+    this.signalActivityEnd();
     return this.sendMessage({
       client_content: {
         turn_complete: true,
