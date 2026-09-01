@@ -69,14 +69,17 @@ body.page-dashboard {
 body.page-dashboard,
 body:has(.main-content-grid--dashboard) {
     --dashboard-header: 8.5rem;
-    --dashboard-top-inset: clamp(1.25rem, 2.2vh, 1.75rem);
-    --dashboard-bottom-inset: clamp(1.75rem, 3.5vh, 2.75rem);
-    --dashboard-side-inset: clamp(1rem, 2vw, 1.75rem);
+    --dashboard-top-inset: clamp(0.75rem, 1.6vh, 1.35rem);
+    --dashboard-bottom-inset: clamp(0.75rem, 1.8vh, 1.5rem);
+    --dashboard-side-inset: clamp(0.75rem, 1.6vw, 1.5rem);
+    /* Fallback until JS measures; prefers dynamic viewport units. */
     --dashboard-chat-height: calc(
-        100vh - var(--dashboard-header) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)
+        100svh - var(--dashboard-header-measured, var(--dashboard-header))
+        - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)
     );
     --dashboard-chat-height: calc(
-        100dvh - var(--dashboard-header) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)
+        100dvh - var(--dashboard-header-measured, var(--dashboard-header))
+        - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)
     );
     height: 100vh;
     height: 100dvh;
@@ -727,20 +730,20 @@ input::placeholder {
 
 .main-content-grid--dashboard {
     display: grid;
-    grid-template-columns: minmax(0, 1.75fr) minmax(220px, 1fr);
-    grid-template-rows: var(--dashboard-chat-height, auto);
+    grid-template-columns: minmax(0, 1.85fr) minmax(220px, 0.95fr);
+    grid-template-rows: var(--dashboard-chat-height, minmax(0, 1fr));
     align-items: stretch;
     align-content: start;
     gap: clamp(0.75rem, 1.5vw, 1.5rem);
-    padding: var(--dashboard-top-inset, clamp(1.25rem, 2.2vh, 1.75rem))
-             var(--dashboard-side-inset, clamp(1rem, 2vw, 1.75rem))
-             var(--dashboard-bottom-inset, clamp(1.75rem, 3.5vh, 2.75rem));
-    max-width: 1480px;
-    margin: 0 auto;
+    padding: var(--dashboard-top-inset, clamp(0.75rem, 1.6vh, 1.35rem))
+             var(--dashboard-side-inset, clamp(0.75rem, 1.6vw, 1.5rem))
+             var(--dashboard-bottom-inset, clamp(0.75rem, 1.8vh, 1.5rem));
+    max-width: none;
+    margin: 0;
     width: 100%;
     flex: 1 1 0%;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
     box-sizing: border-box;
 }
 
@@ -782,7 +785,8 @@ body.page-dashboard .main-content-grid--dashboard {
 
 body.page-dashboard .user-dashboard {
     height: var(--dashboard-chat-height);
-    min-height: var(--dashboard-chat-height);
+    min-height: 0;
+    max-height: var(--dashboard-chat-height);
 }
 
 .user-dashboard {
@@ -2773,29 +2777,29 @@ body.page-dashboard .user-dashboard {
 
 /* Re-assert the dashboard grid: generic .main-content-grid media rules above
    (450px/700px two-panel layout) would otherwise override it below 1400px.
-   Also let the chat row fill whatever space is actually left under the
-   header, instead of relying on a hardcoded header height that breaks when
-   the header wraps taller (long names, OS display scaling, narrow windows). */
+   Chat height comes from --dashboard-chat-height (JS-measured to the screen). */
 .main-content-grid--dashboard {
-    grid-template-columns: minmax(0, 1.75fr) minmax(220px, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.85fr) minmax(220px, 0.95fr);
+    grid-template-rows: var(--dashboard-chat-height, minmax(0, 1fr));
     gap: clamp(0.75rem, 1.5vw, 1.5rem);
-    padding: var(--dashboard-top-inset, clamp(1.25rem, 2.2vh, 1.75rem))
-             var(--dashboard-side-inset, clamp(1rem, 2vw, 1.75rem))
-             var(--dashboard-bottom-inset, clamp(1.75rem, 3.5vh, 2.75rem));
+    padding: var(--dashboard-top-inset, clamp(0.75rem, 1.6vh, 1.35rem))
+             var(--dashboard-side-inset, clamp(0.75rem, 1.6vw, 1.5rem))
+             var(--dashboard-bottom-inset, clamp(0.75rem, 1.8vh, 1.5rem));
+    max-width: none;
+    overflow: hidden;
 }
 
 body.page-dashboard #app-content.chat-column,
 body:has(.main-content-grid--dashboard) #app-content.chat-column {
-    height: auto;
-    min-height: 0;
-    max-height: none;
+    height: var(--dashboard-chat-height);
+    min-height: var(--dashboard-chat-height);
+    max-height: var(--dashboard-chat-height);
 }
 
 body.page-dashboard .user-dashboard {
-    height: auto;
+    height: var(--dashboard-chat-height);
     min-height: 0;
-    max-height: 100%;
+    max-height: var(--dashboard-chat-height);
 }
 
 /* Sidebar scrolls instead of clipping when it is taller than the screen. */
@@ -2913,8 +2917,8 @@ body.page-dashboard .user-dashboard {
     }
     body.page-dashboard #app-content.chat-column,
     body:has(.main-content-grid--dashboard) #app-content.chat-column {
-        height: min(72dvh, 640px);
-        min-height: 420px;
+        height: var(--dashboard-chat-height, min(70dvh, 640px));
+        min-height: min(360px, var(--dashboard-chat-height, 360px));
         max-height: none;
     }
     body.page-dashboard .user-dashboard,

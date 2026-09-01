@@ -131,6 +131,16 @@ export function buildProgressSummary(users) {
     (sum, u) => sum + totalSkipCount(u.skipStats),
     0
   );
+  const mcq = accounts.reduce(
+    (acc, u) => {
+      const s = summarizeUserMcq(u.mcqStats);
+      acc.correct += s.correct;
+      acc.incorrect += s.incorrect;
+      acc.attempts += s.attempts;
+      return acc;
+    },
+    { correct: 0, incorrect: 0, attempts: 0 }
+  );
 
   return {
     studentCount: accounts.filter((u) => u.role !== "admin").length,
@@ -140,7 +150,29 @@ export function buildProgressSummary(users) {
     totalStars,
     totalPhrases,
     totalSkips,
+    mcqCorrect: mcq.correct,
+    mcqIncorrect: mcq.incorrect,
+    mcqAttempts: mcq.attempts,
   };
+}
+
+function summarizeUserMcq(mcqStats) {
+  let correct = 0;
+  let incorrect = 0;
+  let attempts = 0;
+  if (!mcqStats || typeof mcqStats !== "object") {
+    return { correct, incorrect, attempts };
+  }
+  for (const levelMap of Object.values(mcqStats)) {
+    if (!levelMap || typeof levelMap !== "object") continue;
+    for (const row of Object.values(levelMap)) {
+      if (!row || typeof row !== "object") continue;
+      correct += Number(row.correct) || 0;
+      incorrect += Number(row.incorrect) || 0;
+      attempts += Number(row.attempts) || 0;
+    }
+  }
+  return { correct, incorrect, attempts };
 }
 
 function renderHomeworkParts(meta, raw) {
@@ -230,18 +262,24 @@ export function renderActivityTimeline(events) {
     badge: "バッジ獲得",
     badge_revoke: "バッジ取消",
     reset: "最初から",
+    mcq_correct: "4択正解",
+    mcq_incorrect: "4択不正解",
   };
 
   return `<ul class="progress-activity-list">${events
     .map((ev) => {
       const when = formatProgressTimestamp(ev.at);
       const level = ev.level ? ` · ${escapeHtml(ev.level)}` : "";
-      const detail =
-        ev.type === "skip" || ev.type === "star"
-          ? `M${(ev.questIndex ?? 0) + 1}${ev.questTitle ? ` ${escapeHtml(ev.questTitle)}` : ""}`
-          : ev.badgeId
-            ? escapeHtml(badgeLabel(ev.badgeId))
-            : "";
+      let detail = "";
+      if (ev.type === "skip" || ev.type === "star") {
+        detail = `M${(ev.questIndex ?? 0) + 1}${ev.questTitle ? ` ${escapeHtml(ev.questTitle)}` : ""}`;
+      } else if (ev.type === "mcq_correct" || ev.type === "mcq_incorrect") {
+        detail = `${escapeHtml(ev.segmentId || "")}/${escapeHtml(ev.beatId || "")} → ${escapeHtml(ev.choice || "")}${
+          ev.attempt ? ` (${ev.attempt}回目)` : ""
+        }`;
+      } else if (ev.badgeId) {
+        detail = escapeHtml(badgeLabel(ev.badgeId));
+      }
       const src = ev.source === "admin" ? "admin" : "生徒";
       return `<li class="progress-activity-item type-${escapeHtml(ev.type)}">
         <span class="progress-activity-type">${escapeHtml(typeLabel[ev.type] || ev.type)}</span>
@@ -268,6 +306,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
         .map((u) => {
           const badges = collectUserBadges(u);
           const skipTotal = totalSkipCount(u.skipStats);
+          const mcq = summarizeUserMcq(u.mcqStats);
           const levelsHtml = LEVEL_META.map((meta) =>
             renderHomeworkParts(meta, u[meta.field] || {})
           ).join("");
@@ -292,6 +331,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
               <div class="progress-header-right">
                 <span class="progress-updated">更新: ${escapeHtml(formatProgressTimestamp(u.progressUpdatedAt))}</span>
                 <span class="progress-skip-pill" title="累計スキップ回数">↷ スキップ ${skipTotal}回</span>
+                <span class="progress-skip-pill" title="4択クイズ">4択 ○${mcq.correct} ×${mcq.incorrect}</span>
               </div>
             </header>
 
@@ -303,6 +343,10 @@ export function renderProgressDashboard(users, searchQuery = "") {
               <div class="progress-stat">
                 <span class="progress-stat-label">フレーズ</span>
                 <span class="progress-stat-value">${phrases.length}</span>
+              </div>
+              <div class="progress-stat">
+                <span class="progress-stat-label">4択</span>
+                <span class="progress-stat-value">${mcq.attempts}回 (○${mcq.correct}/×${mcq.incorrect})</span>
               </div>
               <div class="progress-stat">
                 <span class="progress-stat-label">残り時間</span>
@@ -358,6 +402,14 @@ export function renderProgressDashboard(users, searchQuery = "") {
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.totalSkips}</span>
         <span class="progress-summary-label">スキップ合計</span>
+      </div>
+      <div class="progress-summary-card">
+        <span class="progress-summary-num">${summary.mcqAttempts || 0}</span>
+        <span class="progress-summary-label">4択回答数</span>
+      </div>
+      <div class="progress-summary-card">
+        <span class="progress-summary-num">${summary.mcqCorrect || 0} / ${summary.mcqIncorrect || 0}</span>
+        <span class="progress-summary-label">4択 正解 / 不正解</span>
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.totalPhrases}</span>

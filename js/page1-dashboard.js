@@ -156,6 +156,10 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   const panelClose = document.getElementById("dashboard-panel-close");
   const startOverBtn = document.getElementById("dashboard-startover-btn");
   const buttons = document.querySelectorAll("[data-panel]");
+
+  // Always size the chat to the screen, even if the sidebar panel markup is missing.
+  bindDashboardChatResize();
+
   if (!panel || !panelBody) return;
 
   let activePanel = null;
@@ -217,6 +221,59 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   });
 
   refreshDashboardChrome();
+}
+
+let dashboardChatResizeBound = false;
+
+function bindDashboardChatResize() {
+  syncDashboardChatSize();
+  if (dashboardChatResizeBound) return;
+  dashboardChatResizeBound = true;
+  window.addEventListener("resize", syncDashboardChatSize);
+  window.visualViewport?.addEventListener("resize", syncDashboardChatSize);
+  window.visualViewport?.addEventListener("scroll", syncDashboardChatSize);
+  if (typeof ResizeObserver !== "undefined") {
+    const header = document.querySelector("header.app-header");
+    const appView = document.getElementById("app-view");
+    const ro = new ResizeObserver(() => syncDashboardChatSize());
+    if (header) ro.observe(header);
+    if (appView) ro.observe(appView);
+  }
+  requestAnimationFrame(() => syncDashboardChatSize());
+}
+
+/**
+ * Size the chat iframe to whatever space is left under the header on this screen.
+ * Replaces guessed rem/vh math that breaks with long names, OS scaling, or short laptops.
+ */
+export function syncDashboardChatSize() {
+  const root = document.documentElement;
+  const appView = document.getElementById("app-view");
+  const header = document.querySelector("header.app-header");
+  const grid = document.querySelector(".main-content-grid--dashboard");
+  if (!appView || !grid) return;
+
+  const headerH = header?.getBoundingClientRect().height || 0;
+  const styles = getComputedStyle(grid);
+  const padTop = parseFloat(styles.paddingTop) || 0;
+  const padBottom = parseFloat(styles.paddingBottom) || 0;
+  const vv = window.visualViewport;
+  const viewportH = Math.round(vv?.height || window.innerHeight || appView.clientHeight || 0);
+  const stacked = window.matchMedia("(max-width: 860px)").matches;
+
+  let chatH;
+  if (stacked) {
+    chatH = Math.min(Math.round(viewportH * 0.7), Math.max(360, viewportH - headerH - 48));
+  } else {
+    chatH = viewportH - headerH - padTop - padBottom;
+  }
+
+  const minH = stacked ? 360 : 280;
+  const maxH = Math.max(minH, viewportH - (stacked ? 48 : headerH));
+  chatH = Math.round(Math.min(maxH, Math.max(minH, chatH)));
+
+  root.style.setProperty("--dashboard-chat-height", `${chatH}px`);
+  root.style.setProperty("--dashboard-header-measured", `${Math.round(headerH)}px`);
 }
 
 export function setDashboardInstructionsTab() {

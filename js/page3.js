@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
             timeUpOverlay.style.display = 'none';
             if (appContent) appContent.style.pointerEvents = 'auto';
             userEmailDisplay.textContent = userData.displayName || user.email || "";
+            syncVoiceUserProfile(userData.displayName || user.email || "");
 
             // Check for monthly auto-set before starting timer (skip for admin — do not overwrite their time)
             if (userData.role !== 'admin') {
@@ -162,7 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.data?.type === 'gc_call_state') {
             document.body.dataset.voiceCallState = e.data.state || 'idle';
         }
+        if (e.data?.type === 'gc_request_user_profile' && currentUser) {
+            syncVoiceUserProfile(userEmailDisplay.textContent || '');
+        }
     });
+
+    function syncVoiceUserProfile(displayName) {
+        document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {
+            try {
+                frame.contentWindow?.postMessage({ type: 'gc_user_profile', displayName }, '*');
+            } catch {
+                // ignore
+            }
+        });
+    }
 
     function endAllVoiceCalls() {
         document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {

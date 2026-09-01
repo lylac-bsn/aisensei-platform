@@ -21,6 +21,8 @@ export const ACTIVITY_TYPES = Object.freeze({
   BADGE: "badge",
   BADGE_REVOKE: "badge_revoke",
   RESET: "reset",
+  MCQ_CORRECT: "mcq_correct",
+  MCQ_INCORRECT: "mcq_incorrect",
 });
 
 /**
@@ -32,6 +34,13 @@ export const ACTIVITY_TYPES = Object.freeze({
  *   questIndex?: number|null,
  *   questTitle?: string|null,
  *   badgeId?: string|null,
+ *   segmentId?: string|null,
+ *   beatId?: string|null,
+ *   choice?: string|null,
+ *   answer?: string|null,
+ *   correct?: boolean|null,
+ *   attempt?: number|null,
+ *   learnyPrompt?: string|null,
  *   source?: 'client'|'admin',
  * }} event
  */
@@ -44,6 +53,13 @@ export async function logUserActivity(db, userId, event) {
     questIndex: Number.isFinite(event.questIndex) ? event.questIndex : null,
     questTitle: event.questTitle ? String(event.questTitle).slice(0, 120) : null,
     badgeId: event.badgeId ? String(event.badgeId) : null,
+    segmentId: event.segmentId ? String(event.segmentId).slice(0, 40) : null,
+    beatId: event.beatId ? String(event.beatId).slice(0, 40) : null,
+    choice: event.choice ? String(event.choice).slice(0, 120) : null,
+    answer: event.answer ? String(event.answer).slice(0, 120) : null,
+    correct: typeof event.correct === "boolean" ? event.correct : null,
+    attempt: Number.isFinite(event.attempt) ? event.attempt : null,
+    learnyPrompt: event.learnyPrompt ? String(event.learnyPrompt).slice(0, 200) : null,
     source: event.source === "admin" ? "admin" : "client",
     at: serverTimestamp(),
   };
@@ -65,6 +81,27 @@ export async function logUserActivity(db, userId, event) {
       });
     } catch {
       // ignore — event row is enough for timeline
+    }
+  }
+
+  if (
+    (payload.type === ACTIVITY_TYPES.MCQ_CORRECT ||
+      payload.type === ACTIVITY_TYPES.MCQ_INCORRECT) &&
+    payload.segmentId &&
+    payload.beatId
+  ) {
+    const key = `${payload.segmentId}.${payload.beatId}`;
+    const fieldBase = `mcqStats.${payload.level || "beginner"}.${key}`;
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        [`${fieldBase}.attempts`]: increment(1),
+        [`${fieldBase}.correct`]: increment(payload.type === ACTIVITY_TYPES.MCQ_CORRECT ? 1 : 0),
+        [`${fieldBase}.incorrect`]: increment(payload.type === ACTIVITY_TYPES.MCQ_INCORRECT ? 1 : 0),
+        [`${fieldBase}.lastChoice`]: payload.choice || "",
+        [`${fieldBase}.lastAt`]: serverTimestamp(),
+      });
+    } catch {
+      // ignore
     }
   }
 }

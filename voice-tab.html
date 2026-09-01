@@ -53,6 +53,7 @@
         html {
             font-size: var(--font-size-root);
             height: 100%;
+            max-height: 100%;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,6 +65,7 @@
             font-size: var(--text-base);
             overflow: hidden;
             height: 100%;
+            max-height: 100%;
             width: 100%;
         }
 
@@ -71,8 +73,10 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            max-height: 100%;
             width: 100%;
             overflow: hidden;
+            min-height: 0;
         }
 
         /* ===== Header ===== */
@@ -400,10 +404,50 @@
             border: 1px solid var(--border);
         }
 
-        .msg-row.assistant.thinking .msg-bubble {
-            color: var(--system-text);
-            font-style: italic;
-            opacity: 0.9;
+        .learny-thinking {
+            align-self: flex-start;
+            max-width: 85%;
+            opacity: 0;
+            transition: opacity 0.42s ease;
+            pointer-events: none;
+        }
+
+        .learny-thinking.is-visible {
+            opacity: 1;
+        }
+
+        .learny-thinking.is-hiding {
+            opacity: 0;
+        }
+
+        .learny-thinking[hidden] {
+            display: none !important;
+        }
+
+        .msg-row.assistant.thinking {
+            align-items: center;
+            gap: 10px;
+        }
+
+        .msg-row.assistant.thinking .msg-avatar {
+            margin-top: 0;
+        }
+
+        .learny-thinking-label {
+            font-size: var(--text-sm);
+            font-weight: 500;
+            line-height: 1.4;
+            white-space: nowrap;
+            animation: learnyThinkingPulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes learnyThinkingPulse {
+            0%, 100% {
+                color: var(--text-muted);
+            }
+            50% {
+                color: var(--text-secondary);
+            }
         }
 
         .msg-row.system .msg-bubble {
@@ -425,13 +469,91 @@
 
         /* ===== Input Area ===== */
         .input-area {
-            padding: 14px 18px 18px;
+            padding: 12px 16px 16px;
             display: flex;
-            align-items: center;
-            gap: 12px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
             background: var(--surface);
             border-top: 1px solid var(--border);
             flex-shrink: 0;
+            min-height: 0;
+            max-height: min(46vh, 360px);
+            overflow-y: auto;
+        }
+
+        .input-area-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-area.has-mcq .input-area-row {
+            opacity: 0.72;
+        }
+
+        .input-area.has-mcq .input-field {
+            min-height: 40px;
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .input-area.has-mcq .input-field::placeholder {
+            color: var(--text-muted);
+        }
+
+        .lesson-choice-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px 12px 4px;
+            margin: 0;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #eef8ef 0%, #f7fbf7 100%);
+            border: 2px solid #7cbc7f;
+            box-shadow: 0 4px 14px rgba(67, 160, 71, 0.12);
+        }
+        .lesson-choice-bar[hidden] { display: none !important; }
+        .lesson-choice-title {
+            width: 100%;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #2e7d32;
+            margin: 0;
+            text-align: center;
+            letter-spacing: 0.02em;
+        }
+        .lesson-choice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .lesson-choice-btn {
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 650;
+            line-height: 1.25;
+            min-height: 56px;
+            padding: 14px 12px;
+            border-radius: 14px;
+            border: 2px solid #a5d6a7;
+            background: #fff;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+            box-shadow: 0 2px 0 rgba(46, 125, 50, 0.08);
+        }
+        .lesson-choice-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary-dark);
+            background: #f1faf2;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(67, 160, 71, 0.18);
+        }
+        .lesson-choice-btn:active {
+            transform: translateY(1px);
+            box-shadow: none;
         }
 
         .input-field {
@@ -1320,6 +1442,15 @@
         }
 
         /* ===== Responsive ===== */
+@media (max-height: 720px) {
+            .header { padding: 10px 14px; }
+            .header-avatar { width: 40px; height: 40px; }
+            .quest-banner { min-height: 0; padding: 10px 12px; }
+            .lesson-choice-btn { min-height: 44px; font-size: 0.88rem; padding: 10px 8px; }
+            .input-area { max-height: min(42vh, 300px); padding: 8px 10px 10px; gap: 8px; }
+            .chat-area { padding: 10px 10px; }
+        }
+
         @media (max-width: 480px) {
             .header { padding: 14px 14px; }
             .header-avatar { width: 44px; height: 44px; }
@@ -1342,32 +1473,9 @@
             .quest-banner { min-height: 112px; }
             .quest-badge { min-width: 64px; padding: 10px 10px 16px; }
             .quest-card-status { min-width: 100px; padding: 10px 8px 10px 8px; }
+            .lesson-choice-btn { min-height: 50px; font-size: 0.92rem; padding: 12px 10px; }
+            .lesson-choice-grid { gap: 8px; }
         }
-
-        .lesson-choice-bar {
-            padding: 0 16px 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-        }
-        .lesson-choice-bar[hidden] { display: none; }
-        .lesson-choice-title {
-            width: 100%;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin: 0;
-        }
-        .lesson-choice-btn {
-            font-family: inherit;
-            font-size: 0.85rem;
-            padding: 8px 12px;
-            border-radius: 999px;
-            border: 1px solid var(--border);
-            background: #fff;
-            cursor: pointer;
-        }
-        .lesson-choice-btn:hover { border-color: var(--primary); color: var(--primary-dark); }
     </style>
 </head>
 <body>
@@ -1413,7 +1521,6 @@
                 </div>
             </div>
         </div>
-        <div class="lesson-choice-bar" id="lesson-choice-bar" hidden></div>
 
         <!-- Chat Area -->
         <div class="chat-area" id="chat-area">
@@ -1425,36 +1532,42 @@
                     <span>右上の「はじめる」を押して、ラーニー先生と宿題の復習を始めよう！</span>
                 </div>
             </div>
+            <div class="learny-thinking" id="learny-thinking" hidden aria-live="polite" aria-busy="true">
+                <div class="msg-row assistant thinking">
+                    <div class="msg-avatar"><img src="images/ラーニー先生.png" alt=""></div>
+                    <span class="learny-thinking-label">ラーニー先生考え中…</span>
+                </div>
+            </div>
         </div>
 
-        <!-- Input Area -->
-        <div class="input-area">
-            <button class="mute-btn" id="btn-mute" title="マイクミュート">🎙️</button>
-            <button class="retry-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき" hidden>
-                もういちど
-            </button>
-            <input type="text" class="input-field" id="chat-input" placeholder="メッセージを入力..." />
-            <button class="send-btn" id="btn-send" title="送信">
-                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            </button>
+        <!-- Input Area: MCQ is primary; mic muted by default -->
+        <div class="input-area" id="input-area">
+            <div class="lesson-choice-bar" id="lesson-choice-bar" hidden></div>
+            <div class="input-area-row">
+                <button class="mute-btn muted" id="btn-mute" title="マイクオフ（4択ボタンで答えよう）">🔇</button>
+                <button class="retry-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき" hidden>
+                    もういちど
+                </button>
+                <input type="text" class="input-field" id="chat-input" placeholder="自由会話のときだけ入力…" />
+                <button class="send-btn" id="btn-send" title="送信">
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
         </div>
     </div>
 
     <!-- Quest completion modal -->
     <div class="quest-modal" id="quest-modal" aria-hidden="true">
         <div class="quest-modal-inner" id="quest-modal-inner">
-            <div class="quest-modal-celebrate" id="quest-modal-celebrate" hidden>
+                <div class="quest-modal-celebrate" id="quest-modal-celebrate" hidden>
                 <div class="quest-confetti" id="quest-confetti" aria-hidden="true"></div>
-                <div class="quest-modal-badge" aria-hidden="true">
-                    <img src="images/completion-badge-bronze.png" alt="" width="160" height="160" decoding="async">
-                </div>
             </div>
             <h2 id="quest-modal-title">おめでとう！</h2>
             <p id="quest-modal-body">クエストクリア！</p>
             <div class="quest-modal-actions">
                 <button type="button" class="quest-modal-btn primary" id="quest-modal-next">次のクエスト</button>
                 <button type="button" class="quest-modal-btn secondary" id="quest-modal-done">ここで終わる</button>
-                <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">バッジを受け取る</button>
+                <button type="button" class="quest-modal-btn primary" id="quest-modal-reset" style="display:none">もういちど</button>
             </div>
         </div>
     </div>
@@ -1470,7 +1583,7 @@
             </div>
             <h2 id="skip-confirm-title">このミッションをスキップする？</h2>
             <p id="skip-confirm-body">つぎのミッションへ進みます。</p>
-            <div class="skip-confirm-note">スター・バッジはもらえません</div>
+            <div class="skip-confirm-note">スターはもらえません</div>
             <div class="skip-confirm-actions">
                 <button type="button" class="skip-confirm-btn confirm" id="skip-confirm-yes">スキップして次へ</button>
                 <button type="button" class="skip-confirm-btn cancel" id="skip-confirm-no">やっぱりやめる</button>

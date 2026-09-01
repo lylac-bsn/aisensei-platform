@@ -70,7 +70,7 @@ export class AwardBadgeTool {
   constructor() {
     this.name = "award_badge";
     this.description =
-      "Award a homework badge id from the lesson list when its condition is met. Never award aquarium_master in Part 1.";
+      "Disabled for now. Do not call. Badges will return later based on end-of-lesson score.";
     this.parameters = {
       type: "object",
       properties: {

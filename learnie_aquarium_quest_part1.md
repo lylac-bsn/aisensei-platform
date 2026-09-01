@@ -1,375 +1,404 @@
-# ラーニー先生 水族館クエスト Part 1
+# ラーニー先生 水族館クエスト Part 1 — 全セリフ台本
 
-## 魚を迎える準備をしよう！
+**想定時間：40〜60分以上**  
+**目的：** 1週目リアルレッスンの復習。魚は入れない。最終は「魚を迎える水槽の準備ができた！」
 
-**想定時間：40〜60分以上**
+> **Learny が話す日本語はすべてひらがな**（TTS 読み上げ用。漢字・カタカナは使わない）。
 
-## 目的
-
-1週目のリアルレッスンで行った以下の内容を、ラーニー先生との会話・ストーリー・クイズで楽しく復習する。
-
-- ガラスを作る
-- 水槽の壁を作る
-- 好きな色のガラスを作る
-- 水槽の底に砂を入れる
-
-このPartでは**水族館そのものは完成させない**。
-
-最終地点は、  
-**「魚を入れられる水槽の準備ができた！」**  
-までとする。
-
-3週目のリアルレッスンで、魚やサンゴなどを入れて水族館を完成させるため、Part1では魚を捕まえたり、水族館を完成させたりしない。
+> このファイルは `js/lessons/aquarium-part1.js` の台本ソースと揃える。フロー／セリフを変えたら **必ずここも更新** する。
 
 ---
 
-# 復習する主なフレーズ
+## 画面・入力のルール（実装どおり）
 
-## ガラスを作る
 
-- I need glass.
-- I need sand.
-- I found some sand!
-- I need to make glass.
-- I made glass!
+| 項目    | 内容                                                                   |
+| ----- | -------------------------------------------------------------------- |
+| メイン入力 | **4択ボタン**（テキスト／マイクは補助）                                               |
+| マイク   | **デフォルト OFF（ミュート）**                                                  |
+| 4択の並び | **毎回ランダム**（正解が常に左上にならない）                                             |
+| 不正解   | `おしい！もういちど！` — **正解は言わない**。同じビートの4択を再表示                              |
+| バッジ   | Part 1 では付与オフ（表示は 0/0）                                               |
+| 章のつなぎ | 「つぎの章へ…」ローディング。**Learny が次章の発話を始めるまで 4択は出さない**（Ch2→Ch3 も含む Live 再接続） |
+| 自由会話中 | **4択を隠す**（Ch2 ③④・さがし待ち、Ch4「すきないろは？」など）。MCQ に戻ったら **また表示**            |
 
-## 水槽の壁を作る
 
-- I put glass here.
-- I’m building a tank.
-- I made a tank!
-- It looks good!
 
-## 色をつける
+| 区間                           | 4択ボタン                    |
+| ---------------------------- | ------------------------ |
+| Chapter 0                    | なし（自由会話）                 |
+| Chapter 1                    | **あり**（各ビート）             |
+| Chapter 2 ①場所・②左右            | **あり**                   |
+| Chapter 2 ③あつい・④みえる          | **なし**（自由会話）             |
+| Chapter 2 砂みつけたフレーズ          | **あり**（Beat 4 のあとすぐ再表示）  |
+| Mini quiz 1                  | **あり**（3問・Learny は日本語のみ） |
+| Chapter 4「すきないろは？」           | **なし**（自由会話中はボタン非表示）     |
+| Chapter 4「I made ___ glass!」 | **あり**（いろを答えたあと）         |
+| Daily English                | **なし**                   |
+| Chapter 3 / 5 / 6 / Final    | **あり**                   |
+| Ending                       | なし（会話ビート）                |
 
-- I need a dye.
-- I found a flower!
-- I choose ___.
-- I made ___ glass.
-- I like this color.
-- This is my favorite color.
 
-## 水槽の底を作る
-
-- I put sand here.
-- I put the sand on the bottom.
-- I need more sand.
-- I’m done!
-- My tank is ready!
-
-> ※「My tank is ready!」は、水族館完成ではなく、**魚を迎えるための水槽の準備ができた**という意味で使う。
+- **正解** → 次のビート（章の最後なら次の章へ／章ヒンジでは Live 再接続）
+- 回答ログ（正解/不正解・選択肢・回数）は管理画面の学習進捗に集計
 
 ---
 
-# ストーリー
+# CHAPTER 0 — まずは今日のおしゃべり（ボタンなし）
 
-ラーニー先生が新しい水族館を作ろうとしている。  
-でも、水槽を確認するとまだ準備ができていない。
+### Learny
 
-子どもはラーニー先生と一緒に、
-
-1. 必要なものを確認する
-2. 砂を探す
-3. ガラスを作る
-4. 水槽の壁を作る
-5. 好きな色を選ぶ
-6. 水槽の底に砂を入れる
-
-ところまで進める。
-
-最後に、  
-**「水槽はできた！でも……まだ魚がいない！」**  
-というところでPart1を終える。
-
----
-
-# CHAPTER 0
-
-## ラーニー先生とおしゃべり
-
-**目安：5〜10分**
-
-いきなり復習を始めない。  
-その時の子どもの状況に合わせて、日常英語を2〜4問程度聞く。
-
-例：
-
-- How are you today?
-- What time is it?
-- Are you hungry?
-- What did you eat today?
-- What’s your favorite summer food?（任意）
-- What color do you like?
-- Do you like the ocean or the mountains?
-- What did you do today?
-
-毎回同じ質問にしない。
-
-子どもの回答に1〜2ターン程度反応してから、  
-「そうだ！今日はラーニー先生の水槽づくりを手伝ってほしいんだ！」  
-とストーリーに入る。
+1. `Hello! How are you today?`
+  `こんにちは！きょうは どうですか？`  
+   ※ How are you を同じターンで繰り返さない
+2. （気分の返事のあと — **この質問固定**）
+  `That's great! What did you do today?`  
+   `よかった！きょうは なにを したの？`  
+   ※気分の答えに `Thank you` / `ありがとう` は使わない  
+   ※ `Did you eat lunch yet?` / `Are you hungry?` など別の日常質問に差し替えない
+3. 子どもが具体的な話をしたら（例: cafe / studied）→ その話に触れてから聞く：
+  `A cafe! That sounds fun! What did you drink there?`  
+   `かふぇ！たのしそう！なにを のんだの？`  
+   ※「Oh!」だけで水槽の話に飛ばない／同じ質問を繰り返さない
+4. `no` / `nothing` / `とくにない` のとき：
+  `Okay!` / `そっか！だいじょうぶ！` → **質問は1つだけ**（例: `Did you play anything fun?` / `なにか たのしいこと した？`）。同じターンで2つ聞かない。`What did you do today?` の繰り返し禁止
+5. 3ターン前後の会話のあと（招待ターン）：短い反応のあと、**同じ発話**で水槽へ
+  例：  
+   `Okay! Oh! Today I want to make a fish tank. Will you help me make it?`  
+   `そっか！そうだ！きょうは らーにーせんせいの すいそうづくりを てつだってほしいんだ。いっしょに つくれる？`  
+   ※いきなり `Oh! Today…` だけで始めない。日常質問＋招待を同じバブルに混ぜない
+6. 子どもが yes / うん / いいよ → **Chapter 1 へ**（ローディングのあと、Thank you + ガラス質問。水槽招待のやり直しはしない）
 
 ---
 
-# CHAPTER 1
+# CHAPTER 1 — ガラスが足りない！（4択）
 
-## ガラスが足りない！
+章オープニング（warmup 完了直後）：  
+`Thank you! What do I need to make a tank? Something transparent and hard.`  
+`ありがとう！すいそうを つくるには なにが いる？ とうめいで かたい ものだよ。`  
+※ `Oh! Today… Will you help…` / `いっしょに つくれる？` を言い直さない
 
-**目安：5〜8分**
+## Beat 1 — タンクに必要なもの
 
-「水槽を作ろうと思ったら、ガラスがない！」
+**Learny:**  
+`What do I need to make a tank? Something transparent and hard.`  
+`すいそうを つくるには なにが いる？ とうめいで かたい ものだよ。`
 
-子どもに、  
-**I need glass.**  
-を思い出してもらう。
+**4択:** glass / wood / water / dirt → **正解: glass**
 
-その後、  
-「ガラスを作るには何が必要だった？」  
-→ **I need sand.**  
-につなげる。
+## Beat 2 — I need glass
 
-単純に答えを言わせるだけではなく、
+**Learny:**  
+`Can you say it in English?`  
+`「がらすが ひつよう」って えいごで いってみて！`  
+※ 英語の答え `I need glass` を Learny が先に言わない
 
-- 何が必要か選ぶ
-- ラーニー先生の間違いを直す
-- 日本語から英語にする
+**4択:** I need glass. / I found glass. / I made sand. / I need water. → **正解: I need glass.**
 
-など、違う形式を混ぜる。
+## Beat 3 — ガラス材料
 
----
+**Learny:**  
+`To make glass in Minecraft, what do we need?`  
+`まいくらふとで がらすを つくるには、なにが いるかな？`  
+※ `Did you find the glass?` は禁止
 
-# CHAPTER 2
+**4択:** sand / water / wood / stone → **正解: sand**
 
-## 砂を探しに行こう！
+## Beat 4 — I need sand
 
-**目安：5〜8分**
+**Learny:**  
+`Can you say it in English?`  
+`「すなが ひつよう」って えいごで いってみて！`
 
-会話の中で砂探しをする。
+**4択:** I need sand. / I found sand. / I need glass. / I made glass. → **正解: I need sand.**  
+→ **Chapter 2 へ**
 
-例：
-
-- 「ビーチと川、どっちを探す？」
-- 「左と右、どっちに行く？」
-
-など子どもに選択してもらう。
-
-途中で、  
-**Do you like the ocean or the mountains?**  
-などの日常英語を自然に入れてよい。
-
-最後に砂を見つけ、  
-**I found some sand!**  
-を使わせる。
+**不正解時（各ビート共通）:**  
+`Almost! Try again!` / `おしい！もういちど！`（答えは言わない）
 
 ---
 
-# CHAPTER 3
+# CHAPTER 2 — 砂を探しに行こう！
 
-## ガラスを作ろう！
+## Beat 1 — 場所（4択）
 
-**目安：5〜8分**
+**Learny:**  
+`Let's go find some sand! Do you want to go to the beach or the mountains?`  
+`すなを さがしに いこう！ びーちと やま、どっちに いく？`
 
-砂を手に入れたら、  
-「次は何をする？」  
-と聞く。
+**4択:** beach / mountains / river / forest → **beach または mountains どちらも正解**
 
-→ **I need to make glass.**
+## Beat 2 — 左右（4択）
 
-ガラスが完成したら、  
-→ **I made glass!**  
-を使わせる。
+**Learny:**  
+`Do you want to go to the left or right?`  
+`ひだりと みぎ、どっちに いく？`
 
-途中でラーニー先生がわざと変な行動を提案し、子どもに反応してもらってもよい。
+**4択:** left / right / straight / back → **left または right どちらも正解**  
+※ 次は必ず Beat 3（あつい？）。左右の直後に `You found some sand!` へ飛ばない
 
----
+## Beat 3 — あつい？（ボタンなし）
 
-# MINI QUIZ 1
+**Learny:**  
+`Is it hot outside?`  
+`そとは あつい？`  
+→ 子どもが答えたら短く反応  
+※ 次は必ず Beat 4（なにがみえる？）。あつい？の直後に `Keep looking` / さがして へ飛ばない
 
-**目安：3〜5分**
+## Beat 4 — なにがみえる？（ボタンなし）
 
-ここまでのフレーズから3〜5問。
+**Learny:**  
+`What can you see around you?`  
+`まわりに なにが みえる？`  
+→ 短く反応したら **すぐ Beat 5**（`We found some sand!…`）。ユーザーが「みつけた」と言うのを待たない。Keep looking 禁止
 
-例：
+## Beat 5 — I found some sand!（4択）
 
-- 「ガラスが必要」は？
-- 「砂を見つけた！」は？
-- Which one means “I need sand”?
-- “I made glass!” はどういう意味？
+**Learny:**  
+`We found some sand! Can you say it in English?`  
+`あ！すな あった！「すなを みつけた！」って えいごで いってみて！`  
+※ `Can you say, I found some sand!` / 「I found some sand!」いってみて！ は禁止（英語の答えを先に言わない）
 
-初級は選択肢あり。  
-中級は最初は選択肢なし。
-
----
-
-# CHAPTER 4
-
-## 水槽の壁を作ろう
-
-**目安：5〜8分**
-
-ガラスを使って水槽の壁を作るストーリー。
-
-使う表現：
-
-- I put glass here.
-- I’m building a tank.
-- I made a tank!
-- It looks good!
-
-子ども自身に、
-
-- 「どこに置く？」
-- 「どんな形にする？」
-
-など簡単な選択をさせる。
+**4択:** I found some sand! / I need sand. / I made glass! / I put sand here. → **正解: I found some sand!**  
+→ **Chapter 3 へ**（Live 再接続 → `Let's make some glass!`）
 
 ---
 
-# CHAPTER 5
+# CHAPTER 3 — ガラスを作ろう！（4択）
 
-## 好きな色を選ぼう
+## Beat 1
 
-**目安：7〜10分**
+**Learny:**  
+`Let's make some glass!`  
+`「がらすを つくらないと」って えいごで いってみて！`  
+※ `Can you say, I need to make glass` / 「I need to make glass」いってみて！ は禁止（英語の答えを先に言わない）
 
-ここでは子どもの好みをストーリーに反映する。
+**4択:** I need to make glass. / I found some sand! / I need sand. / I put glass here.  
+→ **正解: I need to make glass.**
 
-まず、  
-**What color do you like?**  
-と聞く。
+## Beat 2
 
-子どもがredと答えたら、その後もredを使う。
+**Learny:**  
+`Are you done making the glass?`  
+`「がらすを つくった」って えいごで いってみて！`  
+※ `Can you say, I made glass?` / 「I made glass」いってみて！ は禁止（英語の答えを先に言わない）
 
-使う表現：
-
-- I need a dye.
-- I found a flower!
-- I choose red.
-- I made red glass.
-- I like this color.
-- This is my favorite color.
-
-blueに固定しない。
+**4択:** I made glass! / I need glass. / I found sand. / I made a tank!  
+→ **正解: I made glass!** → **Mini quiz 1 へ**
 
 ---
 
-# DAILY ENGLISH CHALLENGE
+# MINI QUIZ 1（4択）
 
-**目安：5〜10分**
+Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さない（画面の4択をタップ）。並びはランダム。
 
-一度Minecraftの話から離れ、突然日常英会話を2〜4問出す。
+### Q1
 
-例：
+**Learny:**  
+`くいずたいむ！「がらすが ひつよう」は えいごで？`  
 
-- What’s your favorite food?
-- What time is it?
-- Are you tired?
-- What did you eat today?
-- Do you like the ocean or the mountains?
-- What’s your favorite animal?
+**4択:** I need glass. / I found some sand! / I need sand. / I made glass!  
+→ **正解: I need glass.**
 
-子どもの回答によって少し会話を広げる。
+### Q2
 
-終了したら、  
-「Nice! じゃあ水槽の続きに戻ろう！」  
-と自然に戻す。
+**Learny:**  
+`じゃあ つぎは 「すなを みつけた」は えいごで？`  
 
----
+**4択:** I found some sand! / I need sand. / I need glass. / I made glass!  
+→ **正解: I found some sand!**
 
-# CHAPTER 6
+### Q3
 
-## 水槽の底を作ろう
+**Learny:**  
+`じゃあ つぎは 「がらすを つくった！」は えいごで？`  
 
-**目安：5〜8分**
-
-水槽の底に砂を入れる。
-
-使う表現：
-
-- I put sand here.
-- I put the sand on the bottom.
-- I need more sand.
-
-最後に、
-
-- I’m done!
-- My tank is ready!
-
-につなげる。
-
-ここで必ず、  
-**「水槽の準備はできたけど、まだ魚はいない」**  
-状態にする。
+**4択:** I made glass! / I need glass. / I found some sand! / I need to make glass.  
+→ **正解: I made glass!** → **Chapter 4 へ**
 
 ---
 
-# FINAL CHALLENGE
+# CHAPTER 4 — 好きな色を選ぼう
 
-**目安：8〜12分**
+**流れ:** Beat A1 → Beat A2 → Beat B（MCQ）— **1ビートずつ、別ターンで**
 
-これまでの場面をランダムに出す。
+## Beat A1 — すきないろ（ボタンなし）
 
-例：
+**Learny:**  
+`What's your favorite color?`  
+`すきな いろは？`  
+→ 子どもが色を言う（例: orange）→ `favoriteColor` を記録  
+→ **ここで MCQ は出さない**
 
-「ガラスがない！」  
-→ **I need glass.**
+## Beat A2 — その色のガラスを作ろう（ボタンなし）
 
-「砂を見つけた！」  
-→ **I found some sand!**
+**Learny:**  
+`Let's make orange coloured glass!`  
+`おれんじいろの がらすを つくろう！`  
+（色は子どもの答えに合わせて変える）  
+→ **次のターンまで Beat B / MCQ は出さない**
 
-「ガラスを作った！」  
-→ **I made glass!**
+## Beat B — I made ___ glass!（4択）
 
-「好きな色を選ぶ！」  
-→ **I choose ___.**
+**Learny:**  
+`Tell me when you make one!`  
+`つくれたら「おれんじいろの がらすを つくった！」って えいごで おしえてね！`  
+（`おれんじ` の部分は `favoriteColor` に合わせて変える — 例: あか → `つくれたら「あかいろの がらすを つくった！」って えいごで おしえてね！`）  
+→ **このあと 4択 MCQ を表示**
 
-「もっと砂が必要！」  
-→ **I need more sand.**
-
-「魚を入れられる準備ができた！」  
-→ **My tank is ready!**
-
-8〜12問程度を目安とする。
-
-> もし発音が無理そうであれば、選択肢3つの中から選んでクリックするような形式にできるか？
-
----
-
-# PART1 エンディング
-
-水槽が準備できたところで、  
-「やった！水槽の準備ができた！」  
-と褒める。
-
-その後、  
-「でもまだ魚が1匹もいない！」  
-と次につなげる。
-
-軽く予告として、
-
-- What fish do you like?
-- What fish do you want?
-- How many fish do you want?
-
-などを聞いてよい。
-
-ただし、魚を実際に捕まえるストーリーまでは進めない。
-
-最後は、  
-**「次のMinecraftレッスンでは、この水槽をもっと飾って、魚を入れて完成させよう！」**  
-と伝えて終了する。
+**4択例:** I made orange glass! / I need a dye. / I put glass here. / I made a tank!  
+→ **正解: I made [その色] glass!** → **Chapter 5 へ**  
+※ 染料／花探しフレーズは教えない（花壇に用意済み）  
+※ `[color] glass! Great job` のような省略は禁止 — A2 は必ず `Let's make … coloured glass!`
 
 ---
 
-# バッジ例
+# CHAPTER 5 — 水槽の壁を作ろう（4択）
 
-- Sand Finder Badge
-- Glass Maker Badge
-- Color Designer Badge
-- Tank Builder Badge
-- Quick Answer Badge
+## Beat 1
 
-Part1終了時は、  
-**Aquarium Masterなど「水族館完成」を意味する最終バッジはまだ出さない。**
+**Learny:**  
+`Now let's make a tank wall! Where do you want to put the glass? Tell me!`  
+`すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！`  
+**4択:** I put glass here. / I put sand here. / I made glass! / I need glass. → **I put glass here.**
 
-英語が言えたことに関するバッジなども入れたい。  
-言えたフレーズの数や、どのくらい英語を話したかでレア度が変わるなど。
+## Beat 2
+
+**Learny:**  
+`Tell me what you're building!`  
+`「すいそうを つくってる」って えいごで いってみて！`  
+**4択:** I'm building a tank. / I made a tank! / It looks good! / I need sand. → **I'm building a tank.**
+
+## Beat 3
+
+**Learny:**  
+`Are you done making it?`  
+`「すいそうを つくった」って えいごで いってみて！`  
+**4択:** I made a tank! / I'm building a tank. / I put glass here. / My tank is ready! → **I made a tank!**
+
+## Beat 4
+
+**Learny:**  
+`How does it look?`  
+`「いい かんじに できた！」って えいごで いってみて！`  
+**4択:** It looks good! / I made glass! / I'm done! / I need more sand. → **It looks good!**  
+→ **Daily English へ**
+
+---
+
+# DAILY ENGLISH — 突然英会話！（ボタンなし）
+
+**Learny（最初の一言 — イントロなし）:**  
+`Oh by the way, do you have a favourite animal?`  
+`そういえば、[name]さんは すきな どうぶつとか いるの？`
+
+**禁止:** `Let's practice today's English!` / `きょうの えいごを れんしゅうしよう！`
+
+**続き（4ラリー以上 — 毎回同じにしない）:**
+
+- `What's your favorite food?` / `すきな たべものは？`
+- `What time is it?` / `いま なんじ？`
+- `What did you eat today?` / `きょうは なにを たべたの？`
+- `Do you like the ocean or the mountains?` / `うみと やま、どっちが すき？`
+
+※ `Are you tired?` / `つかれた？` は禁止  
+※ `What's your favorite color?` / `すきな いろは？` も禁止（Chapter 4 で既に聞いた）
+
+4ラリー以上のあと：  
+`Nice! Now let's get back to the tank!`  
+`いいね！じゃあ すいそう つくりに もどろう！` → **Chapter 6 へ**
+
+---
+
+# CHAPTER 6 — 水槽の底を作ろう（4択）
+
+## Beat 1
+
+**Learny:**  
+`Let's make a basement inside the tank!`  
+`すいそうの そこに すなを おこう！できたら えいごで おしえてね！`  
+**4択:** I put the sand on the bottom. / I put sand here. / I put glass here. / I'm done! → **I put the sand on the bottom.**
+
+## Beat 2
+
+**Learny:**  
+`Do we have enough sand?`  
+`「もっと すなが ひつよう」って えいごで いってみて！`  
+**4択:** I need more sand. / I need glass. / I'm done! / I found some sand! → **I need more sand.**
+
+## Beat 3
+
+**Learny:**  
+`Are you done?`  
+`「できた！」って えいごで いってみて！`  
+**4択:** I'm done! / My tank is ready! / I put sand here. / It looks good! → **I'm done!**
+
+## Beat 4
+
+**Learny:**  
+`Is the tank ready for the fishes to swim?`  
+`「さかなを いれられる じゅんびが できた！」って えいごで いってみて！`  
+**4択:** My tank is ready! / I'm done! / I need fish. / I made a tank! → **My tank is ready!**  
+→ **Final challenge へ**  
+※ 魚はまだ入れない（水族館完成ではない）
+
+---
+
+# FINAL CHALLENGE（4択）
+
+**Learny オープニング（1ターン — 準備確認なし）:**  
+`Final challenge time! Let's go!`  
+`さいごのチャレンジだよ！レッツゴー！`  
+→ **すぐ最初の「〜は えいごで？」へ**
+
+**禁止:** `Are you ready?` / `じゅんびは できてる？`（待たずに第1問へ）
+
+各問は「〜は えいごで？」＋画面4択（並びランダム）。例：
+
+
+| 日本語キュー                | 正解                   |
+| --------------------- | -------------------- |
+| がらすが ひつよう！             | I need glass.        |
+| すなを みつけた！             | I found some sand!   |
+| がらすを つくった！            | I made glass!        |
+| もっと すなが ひつよう！         | I need more sand.    |
+| さかなを いれられる じゅんびが できた！ | My tank is ready!    |
+| がらすを ここに おいた！         | I put glass here.    |
+| すいそうを つくってる！          | I'm building a tank. |
+| いい かんじ！               | It looks good!       |
+| できた！                  | I'm done!            |
+| あかい がらすを つくった！        | I made red glass.    |
+
+
+ランダム5〜6問。不正解はやり直し（答えは言わない）。残り1問のとき `さいごの もんだい！`。全部終わったら Ending へ。
+
+---
+
+# ENDING — 水槽の準備できた！（ボタンなし・1ビートずつ待つ）
+
+1. `Perfect! We made a fish tank together! Thank you for helping!`
+  `ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！`
+2. `Hold on... we don't have any fish in the fish tank! That's for next time!`
+  `あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだよ！`
+3. `What kind of fish should we catch?`
+  `どんな おさかなを つかまえよう？`
+4. `How many do we want?`
+  `なんびき ほしい？`
+5. `Hmm... I can't stop thinking about it!`
+  `うーん… わくわく しちゃう！`
+6. `Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time!`
+  `つぎの まいんくらふと レッスンで この すいそうを かざって おさかなを いれて かんせい させよう！ また ね！`
+
+---
+
+# 管理画面に残る統計（イメージ）
+
+各4択について記録：
+
+- セグメントID / ビートID
+- 選んだ選択肢
+- 正解か不正解か
+- 何回目の挑戦か
+- 時刻
+
+集計：生徒ごとの ○正解 / ×不正解 / 総回答数、アクティビティタイムラインに「4択正解」「4択不正解」
