@@ -731,15 +731,13 @@ function final1Rule() {
 
 function ending1Rule() {
   return [
-    "ENDING ONLY — this is a CONVERSATION with the child, not a monologue.",
-    "ONE beat per turn — English first, then same-meaning ひらがな. Then STOP and WAIT for the child.",
-    "Beat 1: Perfect! We made a fish tank together! Thank you for helping! → WAIT",
-    "Beat 2 (after child replies): Hold on... we don't have any fish in the fish tank! That's for next time! → WAIT",
-    "Beat 3: What kind of fish should we catch? → WAIT for their fish idea",
-    "Beat 4: How many do we want? → WAIT for their number",
-    "Beat 5: Hmm... I can't stop thinking about it! → WAIT",
-    "Beat 6 FINAL: Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! → then call complete_segment(ending1)",
-    "FORBIDDEN: combining multiple beats in one message; skipping WAIT; catching fish or finishing the aquarium.",
+    "ENDING ONLY — lines 1–3 play automatically back-to-back (THREE separate messages, no waiting for the child).",
+    "Line 1: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！",
+    "Line 2 (immediately after line 1 — do NOT react to the child): Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！",
+    "Line 3 (immediately after line 2): What kind of fish should we catch? JP: どんな おさかなを つかまえよう？ → then STOP and WAIT for the child.",
+    "After the child replies to line 3 — ONE beat per turn: Beat 4 How many do we want? → WAIT",
+    "After the child replies to line 4 — lines 5→6 back-to-back (TWO messages, no wait): Beat 5 Hmm... I can't stop thinking about it! then Beat 6 Next Minecraft lesson… See you next time! → call complete_segment(ending1)",
+    "FORBIDDEN during lines 1–2 and 5: reacting to the child between chained lines. FORBIDDEN: combining multiple beats in one message.",
     "Every turn: English first, then ひらがな with the SAME full meaning.",
   ].join(" ");
 }
@@ -757,10 +755,11 @@ function final1StartNudge() {
 
 function ending1StartNudge() {
   return (
-    "[Teacher note — do not read aloud] ENDING starts NOW — conversation mode, ONE beat only. " +
-    "Say ONLY Beat 1: Perfect! We made a fish tank together! Thank you for helping! " +
-    "JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
-    "Then WAIT for the child — do NOT say beats 2–6 yet."
+    "[Teacher note — do not read aloud] ENDING starts NOW. Speak lines 1→2→3 back-to-back (THREE messages, no wait). " +
+    "Line 1: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
+    "Line 2 (do NOT react to the child): Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+    "Line 3: What kind of fish should we catch? JP: どんな おさかなを つかまえよう？ Then STOP and WAIT. " +
+    "After child replies: line 4 How many do we want? → WAIT. Then lines 5→6 back-to-back, then disconnect."
   );
 }
 

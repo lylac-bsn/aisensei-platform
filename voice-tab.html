@@ -715,6 +715,10 @@
         .mute-btn.muted:hover {
             background: #E05555;
         }
+        .mute-btn svg {
+            width: 22px;
+            height: 22px;
+        }
 
         .retry-btn {
             height: 44px;
@@ -1544,7 +1548,9 @@
         <div class="input-area" id="input-area">
             <div class="lesson-choice-bar" id="lesson-choice-bar" hidden></div>
             <div class="input-area-row">
-                <button class="mute-btn muted" id="btn-mute" title="マイクオフ（4択ボタンで答えよう）">🔇</button>
+                <button class="mute-btn muted" id="btn-mute" type="button" title="マイクオフ（4択ボタンで答えよう）" aria-label="マイクオフ">
+                    <svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><path d="M12 19v4"/><path d="M8 23h8"/></svg>
+                </button>
                 <button class="retry-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき" hidden>
                     もういちど
                 </button>

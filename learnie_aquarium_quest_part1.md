@@ -374,20 +374,25 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 ---
 
-# ENDING — 水槽の準備できた！（ボタンなし・1ビートずつ待つ）
+# ENDING — 水槽の準備できた！（ボタンなし）
+
+**1→2→3 はれんぞく（待たない）。3のあとでこどもの返事を待つ。4も1ビート待つ。5→6はれんぞく。そのあと自動で切断。**
 
 1. `Perfect! We made a fish tank together! Thank you for helping!`
   `ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！`
 2. `Hold on... we don't have any fish in the fish tank! That's for next time!`
-  `あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだよ！`
+  `あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！`
 3. `What kind of fish should we catch?`
   `どんな おさかなを つかまえよう？`
+  → **ここで待つ**
 4. `How many do we want?`
   `なんびき ほしい？`
+  → **ここで待つ**
 5. `Hmm... I can't stop thinking about it!`
   `うーん… わくわく しちゃう！`
 6. `Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time!`
   `つぎの まいんくらふと レッスンで この すいそうを かざって おさかなを いれて かんせい させよう！ また ね！`
+  → **6が終わったら自動切断**
 
 ---
 

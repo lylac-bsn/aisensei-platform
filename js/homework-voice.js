@@ -137,6 +137,10 @@ const ICON_PHONE =
   '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.97-1.16a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 const ICON_PHONE_OFF =
   '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M10.7 13.3 5 19"/><path d="M14.3 10.7 19 5"/><path d="M22 16.9v2a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h2a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L7.1 9.9a16 16 0 0 0 6 6l1.5-1.1a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6A2 2 0 0 1 22 16.9z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+const ICON_MIC =
+  '<svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
+const ICON_MIC_OFF =
+  '<svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><path d="M12 19v4"/><path d="M8 23h8"/></svg>';
 
 let client = null;
 let audioStreamer = null;
@@ -497,18 +501,22 @@ let final1Quiz = {
 let final1OpenForceAt = 0;
 let bannerSegmentId = "";
 
+const ENDING1_INTRO_COUNT = 3;
+const ENDING1_FINALE_START_INDEX = 4;
+const ENDING1_FINALE_COUNT = 2;
+
 const ENDING1_BEATS = [
   {
     en: "Perfect! We made a fish tank together! Thank you for helping!",
-    coach: "Beat 1 ONLY: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ Then STOP and WAIT.",
+    coach: "Beat 1 ONLY: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！",
   },
   {
     en: "Hold on... we don't have any fish in the fish tank! That's for next time!",
-    coach: "Beat 2 ONLY: Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだよ！ Then WAIT.",
+    coach: "Beat 2 ONLY: Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！",
   },
   {
     en: "What kind of fish should we catch?",
-    coach: "Beat 3 ONLY: What kind of fish should we catch? JP: どんな おさかなを つかまえよう？ Then WAIT for their idea.",
+    coach: "Beat 3 ONLY: What kind of fish should we catch? JP: どんな おさかなを つかまえよう？",
   },
   {
     en: "How many do we want?",
@@ -516,7 +524,7 @@ const ENDING1_BEATS = [
   },
   {
     en: "Hmm... I can't stop thinking about it!",
-    coach: "Beat 5 ONLY: Hmm... I can't stop thinking about it! JP: うーん… わくわく しちゃう！ Then WAIT.",
+    coach: "Beat 5 ONLY: Hmm... I can't stop thinking about it! JP: うーん… わくわく しちゃう！",
   },
   {
     en: "Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time!",
@@ -525,18 +533,223 @@ const ENDING1_BEATS = [
   },
 ];
 
-let ending1Beat = { userTurns: 0, hangUpScheduled: false, advancedForUserKey: "" };
+let ending1Beat = {
+  userTurns: 0,
+  autoSpoken: 0,
+  autoCoachSent: 0,
+  finaleSpoken: 0,
+  finaleCoachSent: 0,
+  hangUpScheduled: false,
+  advancedForUserKey: "",
+};
 
 function resetEnding1Beat() {
-  ending1Beat = { userTurns: 0, hangUpScheduled: false, advancedForUserKey: "" };
+  ending1Beat = {
+    userTurns: 0,
+    autoSpoken: 0,
+    autoCoachSent: 0,
+    finaleSpoken: 0,
+    finaleCoachSent: 0,
+    hangUpScheduled: false,
+    advancedForUserKey: "",
+  };
+}
+
+function ending1AutoIntroComplete() {
+  return ending1Beat.autoSpoken >= ENDING1_INTRO_COUNT;
+}
+
+function ending1FinaleComplete() {
+  return ending1Beat.finaleSpoken >= ENDING1_FINALE_COUNT;
+}
+
+function assistantSaidEnding1AutoBeat(beatIndex, text = lastAssistantText()) {
+  const t = String(text || "");
+  if (beatIndex === 0) return /fish tank together|we made a fish tank|すいそうを.*つくれた|いっしょに.*すいそう/i.test(t);
+  if (beatIndex === 1) {
+    return /hold on|don't have any fish|no fish in the fish tank|1ぴきも\s*いない|つぎの\s*レッスン/i.test(t);
+  }
+  if (beatIndex === 2) return /what kind of fish|どんな\s*おさかな/i.test(t);
+  return false;
+}
+
+function assistantSaidEnding1FinaleBeat(finaleIndex, text = lastAssistantText()) {
+  const t = String(text || "");
+  if (finaleIndex === 0) return /can't stop thinking|わくわく\s*しちゃう/i.test(t);
+  if (finaleIndex === 1) {
+    return /next minecraft|decorate this tank|see you next time|また\s*ね|つぎの.*まいんくらふと/i.test(t);
+  }
+  return false;
+}
+
+function buildEnding1AutoBeatNote(beatIndex) {
+  const beat = ENDING1_BEATS[beatIndex];
+  if (!beat) return "";
+  const lastAuto = beatIndex === ENDING1_INTRO_COUNT - 1;
+  return (
+    "[Teacher note — do not read aloud] Ending auto line " +
+    (beatIndex + 1) +
+    "/3. Say ONLY one message: " +
+    beat.coach +
+    (lastAuto
+      ? " Then STOP and WAIT for the child. Do NOT react to anything they said during lines 1–2."
+      : " Do NOT wait for the child — the next ending line chains right after you finish.") +
+    " FORBIDDEN: combining beats / You're welcome / どういたしまして." +
+    beginnerTurnHint()
+  );
+}
+
+function buildEnding1FinaleBeatNote(finaleIndex) {
+  const beat = ENDING1_BEATS[ENDING1_FINALE_START_INDEX + finaleIndex];
+  if (!beat) return "";
+  const lastFinale = finaleIndex === ENDING1_FINALE_COUNT - 1;
+  return (
+    "[Teacher note — do not read aloud] Ending finale line " +
+    (ENDING1_FINALE_START_INDEX + finaleIndex + 1) +
+    "/6. Say ONLY one message: " +
+    beat.coach +
+    (lastFinale
+      ? " This is the FINAL line — then call complete_segment(ending1). Do NOT wait for the child."
+      : " Do NOT wait for the child — line 6 chains right after you finish.") +
+    " FORBIDDEN: combining beats / extra goodbye." +
+    beginnerTurnHint()
+  );
+}
+
+function sendEnding1FinaleBeatCoach(finaleIndex) {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  const key = `ending1-finale-${finaleIndex}`;
+  if (sentTeacherNotes.has(key)) return false;
+  const note = buildEnding1FinaleBeatNote(finaleIndex);
+  const trySend = (attempt = 0) => {
+    if (actionState !== "active" || !client?.connected) return;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (assistantIsSpeaking() && attempt < 16) {
+      setTimeout(() => trySend(attempt + 1), 260);
+      return;
+    }
+    const ok = sendTeacherNote(key, note, { allowRetry: attempt < 16 });
+    if (!ok && attempt < 16) {
+      setTimeout(() => trySend(attempt + 1), 320);
+    }
+  };
+  trySend();
+  return true;
+}
+
+function kickEnding1FinaleChain() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1Beat.userTurns < 2) return false;
+  if (ending1FinaleComplete()) return false;
+  if (ending1Beat.finaleCoachSent > 0) return false;
+  sendEnding1FinaleBeatCoach(0);
+  ending1Beat.finaleCoachSent = 1;
+  updateLessonBanner();
+  return true;
+}
+
+function maybeChainEnding1FinaleBeat() {
+  if (getCurrentSegment()?.id !== "ending1") return;
+  if (ending1Beat.userTurns < 2) return;
+
+  for (let i = ENDING1_FINALE_COUNT - 1; i >= 0; i -= 1) {
+    if (assistantSaidEnding1FinaleBeat(i, lastAssistantText())) {
+      ending1Beat.finaleSpoken = Math.max(ending1Beat.finaleSpoken, i + 1);
+    }
+  }
+  updateLessonBanner();
+
+  if (ending1FinaleComplete()) {
+    if (!turnEndProcessed) return;
+    maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
+    return;
+  }
+
+  if (ending1Beat.finaleCoachSent >= ENDING1_FINALE_COUNT) return;
+  if (ending1Beat.finaleSpoken < ending1Beat.finaleCoachSent) return;
+
+  sendEnding1FinaleBeatCoach(ending1Beat.finaleCoachSent);
+  ending1Beat.finaleCoachSent += 1;
+}
+
+function sendEnding1AutoBeatCoach(beatIndex) {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  const key = `ending1-auto-${beatIndex}`;
+  if (sentTeacherNotes.has(key)) return false;
+  const note = buildEnding1AutoBeatNote(beatIndex);
+  const trySend = (attempt = 0) => {
+    if (actionState !== "active" || !client?.connected) return;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (assistantIsSpeaking() && attempt < 16) {
+      setTimeout(() => trySend(attempt + 1), 260);
+      return;
+    }
+    const ok = sendTeacherNote(key, note, { allowRetry: attempt < 16 });
+    if (!ok && attempt < 16) {
+      setTimeout(() => trySend(attempt + 1), 320);
+    }
+  };
+  trySend();
+  return true;
+}
+
+function kickEnding1AutoIntro() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1AutoIntroComplete()) return false;
+  if (ending1Beat.autoCoachSent > 0) return false;
+  sendEnding1AutoBeatCoach(0);
+  ending1Beat.autoCoachSent = 1;
+  updateLessonBanner();
+  return true;
+}
+
+function maybeChainEnding1AutoBeat() {
+  if (getCurrentSegment()?.id !== "ending1") return;
+  if (ending1AutoIntroComplete()) return;
+
+  for (let i = ENDING1_INTRO_COUNT - 1; i >= 0; i -= 1) {
+    if (assistantSaidEnding1AutoBeat(i, lastAssistantText())) {
+      ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, i + 1);
+    }
+  }
+  updateLessonBanner();
+
+  if (ending1Beat.autoSpoken >= ENDING1_INTRO_COUNT) return;
+  if (ending1Beat.autoCoachSent >= ENDING1_INTRO_COUNT) return;
+  if (ending1Beat.autoSpoken < ending1Beat.autoCoachSent) return;
+
+  sendEnding1AutoBeatCoach(ending1Beat.autoCoachSent);
+  ending1Beat.autoCoachSent += 1;
+}
+
+function getEnding1DisplayStep() {
+  if (!ending1AutoIntroComplete()) return Math.max(1, ending1Beat.autoSpoken || ending1Beat.autoCoachSent);
+  if (ending1Beat.finaleCoachSent > 0 || ending1FinaleComplete()) {
+    return Math.min(
+      ENDING1_BEATS.length,
+      ENDING1_FINALE_START_INDEX + 1 + Math.max(0, ending1Beat.finaleSpoken)
+    );
+  }
+  return Math.min(ENDING1_INTRO_COUNT + ending1Beat.userTurns, ENDING1_BEATS.length);
 }
 
 function getEnding1NextBeatIndex() {
-  return Math.min(ending1Beat.userTurns + 1, ENDING1_BEATS.length - 1);
+  if (!ending1AutoIntroComplete()) return Math.max(0, ending1Beat.autoSpoken);
+  if (ending1Beat.userTurns >= 2) return ENDING1_FINALE_START_INDEX;
+  return Math.min(ENDING1_INTRO_COUNT + ending1Beat.userTurns, ENDING1_BEATS.length - 1);
 }
 
 function buildEnding1OutboundCoach({ afterAdvance = false } = {}) {
   if (getCurrentSegment()?.id !== "ending1") return "";
+  if (!ending1AutoIntroComplete()) return "";
+  if (ending1Beat.userTurns === 1) {
+    return (
+      "[Teacher note — do not read aloud] Child replied — react briefly, then speak Beat 5 ONLY. " +
+      "Beat 6 chains immediately after Beat 5 (no wait). " +
+      ENDING1_BEATS[4].coach +
+      beginnerTurnHint()
+    );
+  }
   const idx = afterAdvance ? getEnding1BeatIndex() : getEnding1NextBeatIndex();
   const beat = ENDING1_BEATS[idx];
   if (!beat) return "";
@@ -549,6 +762,11 @@ function buildEnding1OutboundCoach({ afterAdvance = false } = {}) {
 
 function flushEnding1NextBeatCoach(source = "voice") {
   if (getCurrentSegment()?.id !== "ending1") return;
+  if (!ending1AutoIntroComplete()) return;
+  if (ending1Beat.userTurns >= 2) {
+    kickEnding1FinaleChain();
+    return;
+  }
   const beat = ENDING1_BEATS[getEnding1BeatIndex()];
   if (!beat) return;
   const key = `ending1-next-${ending1Beat.userTurns}`;
@@ -572,11 +790,26 @@ function flushEnding1NextBeatCoach(source = "voice") {
 }
 
 function getEnding1BeatIndex() {
-  return Math.min(ending1Beat.userTurns, ENDING1_BEATS.length - 1);
+  if (!ending1AutoIntroComplete()) {
+    return Math.max(0, ending1Beat.autoSpoken - 1);
+  }
+  return Math.min(ENDING1_INTRO_COUNT + ending1Beat.userTurns - 1, ENDING1_BEATS.length - 1);
 }
 
 function ending1CoachHint() {
   if (getCurrentSegment()?.id !== "ending1") return "";
+  if (!ending1AutoIntroComplete()) {
+    return (
+      ` Ending auto intro ${Math.max(1, ending1Beat.autoSpoken || ending1Beat.autoCoachSent)}/${ENDING1_INTRO_COUNT} — lines 1–3 play back-to-back, then WAIT after line 3. ` +
+      "FORBIDDEN: reacting to the child during lines 1–2 / combining beats."
+    );
+  }
+  if (ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()) {
+    return (
+      ` Ending finale ${Math.max(5, ENDING1_FINALE_START_INDEX + 1 + ending1Beat.finaleSpoken)}/6 — lines 5→6 back-to-back, then auto disconnect. ` +
+      "FORBIDDEN: waiting between 5 and 6 / extra lines."
+    );
+  }
   const idx = getEnding1BeatIndex();
   const beat = ENDING1_BEATS[idx];
   if (!beat) return " Ending done — quick goodbye only.";
@@ -618,6 +851,9 @@ function maybeNotifyEnding1NextBeat() {
 
 function maybeAdvanceEnding1Beat(userText, { skipNotify = false } = {}) {
   if (getCurrentSegment()?.id !== "ending1") return false;
+  if (!ending1AutoIntroComplete()) return false;
+  if (ending1FinaleComplete()) return false;
+  if (ending1Beat.userTurns >= 2) return false;
   const userKey = normalizeUserText(userText);
   if (userKey && ending1Beat.advancedForUserKey === userKey) {
     dbg("ending1 advance skipped; already advanced for this reply");
@@ -627,7 +863,13 @@ function maybeAdvanceEnding1Beat(userText, { skipNotify = false } = {}) {
   ending1Beat.advancedForUserKey = userKey;
   ending1Beat.userTurns += 1;
   updateLessonBanner();
-  if (!skipNotify) maybeNotifyEnding1NextBeat();
+  if (!skipNotify) {
+    if (ending1Beat.userTurns >= 2) {
+      kickEnding1FinaleChain();
+    } else {
+      maybeNotifyEnding1NextBeat();
+    }
+  }
   return true;
 }
 
@@ -722,48 +964,30 @@ function ensureEnding1HangUpWatch() {
 }
 
 function assistantSaidEnding1Beat1(text = lastAssistantText()) {
-  return /fish tank together|we made a fish tank|すいそうを.*つくれた|いっしょに.*すいそう/i.test(String(text || ""));
+  return assistantSaidEnding1AutoBeat(0, text);
 }
 
 function needsEnding1Opening() {
   return (
     getCurrentSegment()?.id === "ending1" &&
-    ending1Beat.userTurns === 0 &&
-    !assistantSaidEnding1Beat1()
+    !ending1AutoIntroComplete() &&
+    ending1Beat.autoCoachSent === 0
   );
 }
 
-/** Retry until Beat 1 is spoken — advance-final1 was often dropped while Learny still had audio. */
+/** Retry until auto intro line 1 is queued — advance-final1 was often dropped while Learny still had audio. */
 function forceEnding1OpeningAfterFinal1(reason = "final1-complete") {
   if (getCurrentSegment()?.id !== "ending1") return false;
-  const note = buildAdvanceNudge(loadLessonState());
-  const trySend = (attempt = 0) => {
-    if (actionState !== "active" || !client?.connected) return;
-    if (getCurrentSegment()?.id !== "ending1") return;
-    if (!needsEnding1Opening()) return;
-    if (assistantIsSpeaking() && attempt < 18) {
-      setTimeout(() => trySend(attempt + 1), 280);
-      return;
-    }
-    if (!sentTeacherNotes.has("advance-final1")) {
-      const ok = sendTeacherNote("advance-final1", note);
-      if (!ok && attempt < 18) {
-        setTimeout(() => trySend(attempt + 1), 320);
-      }
-      return;
-    }
-    if (attempt < 18) {
-      setTimeout(() => trySend(attempt + 1), 400);
-    }
-  };
   dbg("force ending1 opening", reason);
-  setTimeout(() => trySend(0), 450);
+  setTimeout(() => kickEnding1AutoIntro(), 450);
   return true;
 }
 
 
 function maybeEnding1CoachNudge() {
   if (getCurrentSegment()?.id !== "ending1") return;
+  if (!ending1AutoIntroComplete()) return;
+  if (ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()) return;
   const assistant = lastAssistantText();
   if (!assistantEnding1Monologue(assistant)) return;
   const idx = getEnding1BeatIndex();
@@ -4314,8 +4538,13 @@ export function updateLessonBanner() {
           ? `いま：ミニクイズ ${qDone}/${qTotal}（4択でこたえよう）`
           : "いま：ミニクイズ おわり！ Chapter 4 へ";
     } else if (segment.id === "ending1") {
-      const step = Math.min(ending1Beat.userTurns + 1, ENDING1_BEATS.length);
-      questBannerHint.textContent = `いま：おわりの おはなし ${step}/${ENDING1_BEATS.length}（1つずつ話そう）`;
+      const step = getEnding1DisplayStep();
+      const autoBit = !ending1AutoIntroComplete()
+        ? "（1→2→3 れんぞく）"
+        : ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()
+          ? "（5→6 れんぞく）"
+          : "（こたえたら つぎへ）";
+      questBannerHint.textContent = `いま：おわりの おはなし ${step}/${ENDING1_BEATS.length}${autoBit}`;
     } else {
       questBannerHint.textContent = segment.goal ? `いま：${segment.goal}` : "";
     }
@@ -5366,13 +5595,17 @@ function updateActionUI() {
     btnMute.classList.add("visible");
     btnMute.disabled = !callLive || handoffBusy;
     btnMute.classList.toggle("muted", isMuted && callLive);
-    btnMute.textContent = isMuted && callLive ? "🔇" : "🎙️";
+    btnMute.innerHTML = isMuted && callLive ? ICON_MIC_OFF : ICON_MIC;
     btnMute.title =
       !callLive
         ? "はじめるとマイクはオフのまま（ボタンで答えよう）"
         : isMuted
           ? "マイクオフ（4択ボタンで答えよう）"
           : "タップでマイクをオフ";
+    btnMute.setAttribute(
+      "aria-label",
+      !callLive ? "マイクオフ" : isMuted ? "マイクオフ" : "マイクオン"
+    );
   }
   if (btnRetry) {
     btnRetry.hidden = actionState === "idle";
@@ -5416,6 +5649,8 @@ function isThrottledCoachNote(key) {
   if (key.startsWith("final1-praise-cont")) return false;
   if (key.startsWith("ending1-coach-")) return false;
   if (key.startsWith("ending1-next-")) return false;
+  if (key.startsWith("ending1-auto-")) return false;
+  if (key.startsWith("ending1-finale-")) return false;
   if (key === "final1-done") return false;
   if (key.startsWith("advance-final1")) return false;
   if (key.startsWith("reply-")) return false;
@@ -5553,6 +5788,8 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
   const allowed =
     key.startsWith("advance-") ||
     key.startsWith("ending1-next-") ||
+    key.startsWith("ending1-auto-") ||
+    key.startsWith("ending1-finale-") ||
     key.startsWith("beginner-jp") ||
     key.startsWith("no-system") ||
     key.startsWith("lead-cont-") ||
@@ -5581,6 +5818,8 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
     key.startsWith("advance-") ||
     key.startsWith("advance-final1") ||
     key.startsWith("ending1-next-") ||
+    key.startsWith("ending1-auto-") ||
+    key.startsWith("ending1-finale-") ||
     key.startsWith("beginner-jp") ||
     key.startsWith("no-system") ||
     key.startsWith("lead-cont-") ||
@@ -5753,6 +5992,10 @@ function endsWithLeadPrompt(text) {
 function needsContinuationNudge(text) {
   const t = String(text || "").trim();
   if (!t || endsWithLeadPrompt(t)) return false;
+  if (getCurrentSegment()?.id === "ending1" && !ending1AutoIntroComplete()) return false;
+  if (getCurrentSegment()?.id === "ending1" && ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()) {
+    return false;
+  }
   // Final1 user-turn coach already says praise + next cue — global continuation nudge caused double speech.
   if (getCurrentSegment()?.id === "final1") return false;
   if (getCurrentSegment()?.type === "warmup" && findWarmupAgreeAfterInvite()) return false;
@@ -5942,6 +6185,10 @@ function finishAssistantTurn() {
     blockCoachUntilUserSpeaks = true;
   }
   scheduleAssistantTurnEnd();
+  if (getCurrentSegment()?.id === "ending1") {
+    maybeChainEnding1AutoBeat();
+    maybeChainEnding1FinaleBeat();
+  }
   if (getCurrentSegment()?.id === "ending1" || loadLessonState().complete) {
     ensureEnding1HangUpWatch();
   }
@@ -6757,7 +7004,7 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
       if (fromVoice) {
         if (needsEnding1Opening()) {
           dbg("voice ending1 opening fallback", userText.slice(0, 32));
-          sendTeacherNote("advance-final1", buildAdvanceNudge(loadLessonState()));
+          kickEnding1AutoIntro();
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
           return;
         }
@@ -6802,7 +7049,7 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
       // Typed / muted path: never wait on playback — resend a forced nudge.
       dbg("typed reply watchdog", { userText, attempt });
       if (needsEnding1Opening()) {
-        sendTeacherNote("advance-final1", buildAdvanceNudge(loadLessonState()));
+        kickEnding1AutoIntro();
         if (attempt + 1 < REPLY_WATCH_MAX) {
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
         } else {
@@ -7303,7 +7550,8 @@ function handleTools(functionCalls) {
       if (
         sid === "ending1" &&
         getActiveLessonId() === "part1" &&
-        ending1Beat.userTurns < ENDING1_BEATS.length - 1
+        !ending1FinaleComplete() &&
+        !looksLikeEnding1FinalLineComplete(lastAssistantText())
       ) {
         queueReply(
           id,
@@ -7311,7 +7559,7 @@ function handleTools(functionCalls) {
           {
             result: "not_yet",
             message:
-              "Ending is NOT done yet — ONE beat per turn, then wait for the child. " +
+              "Ending is NOT done yet — finish lines 5→6 (back-to-back), then complete_segment(ending1). " +
               ending1CoachHint(),
           },
           toolReplyScheduling()

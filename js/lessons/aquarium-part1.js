@@ -556,14 +556,12 @@ export const AQUARIUM_PART1 = {
       goal: "6つの短い会話：褒める→魚ゼロ→どんな魚？→何匹？→ワクワク→次回予告。",
       completeWithoutEnglish: true,
       coach:
-        "CONVERSATION — one beat per turn, then WAIT for the child. Never combine beats. " +
-        "1) Perfect! We made a fish tank together! Thank you for helping! → wait " +
-        "2) Hold on... no fish yet! That's for next time! → wait " +
-        "3) What kind of fish should we catch? → wait " +
-        "4) How many do we want? → wait " +
-        "5) Hmm... I can't stop thinking about it! → wait " +
-        "6) Next Minecraft lesson we'll decorate and add fish! See you next time! → complete_segment(ending1). " +
-        "English then ひらがな each beat. NEVER catch fish or finish the aquarium.",
+        "AUTO intro: lines 1→2→3 back-to-back (no wait), then WAIT after line 3. " +
+        "1) Perfect! We made a fish tank together! Thank you for helping! " +
+        "2) Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+        "3) What kind of fish should we catch? → WAIT. 4) How many do we want? → WAIT. " +
+        "5→6) Hmm... / Next Minecraft lesson… See you next time! back-to-back → complete_segment(ending1) → disconnect. " +
+        "FORBIDDEN during 1–2: reacting to child (You're welcome). English then ひらがな each beat.",
     },
   ],
 };
