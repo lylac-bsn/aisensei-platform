@@ -1,6 +1,6 @@
 /**
- * Student activity events for the admin dashboard (skips, stars, badges, resets).
- * Stored at users/{uid}/activity/{id}. Skip counts also roll up into users.skipStats.
+ * Student activity events for the admin dashboard (poke, MCQ, stars, resets).
+ * Stored at users/{uid}/activity/{id}. Poke counts roll up into users.pokeStats.
  */
 import {
   collection,
@@ -16,13 +16,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
 export const ACTIVITY_TYPES = Object.freeze({
-  SKIP: "skip",
+  SKIP: "skip", // legacy — skip button removed
   STAR: "star",
   BADGE: "badge",
   BADGE_REVOKE: "badge_revoke",
   RESET: "reset",
   MCQ_CORRECT: "mcq_correct",
   MCQ_INCORRECT: "mcq_incorrect",
+  POKE: "poke",
 });
 
 /**
@@ -104,6 +105,21 @@ export async function logUserActivity(db, userId, event) {
       // ignore
     }
   }
+
+  if (payload.type === ACTIVITY_TYPES.POKE) {
+    const level = payload.level || "beginner";
+    const updates = {
+      [`pokeStats.${level}.total`]: increment(1),
+    };
+    if (payload.segmentId) {
+      updates[`pokeStats.${level}.${payload.segmentId}`] = increment(1);
+    }
+    try {
+      await updateDoc(doc(db, "users", userId), updates);
+    } catch {
+      // ignore — event row is enough for timeline
+    }
+  }
 }
 
 /**
@@ -125,7 +141,7 @@ export async function fetchUserActivity(db, userId, max = 80) {
   }
 }
 
-/** Sum skip counts from users.skipStats for one level (or all). */
+/** Sum skip counts from users.skipStats for one level (or all). Legacy. */
 export function totalSkipCount(skipStats, levelId = null) {
   if (!skipStats || typeof skipStats !== "object") return 0;
   const levels = levelId ? [levelId] : Object.keys(skipStats);
@@ -140,8 +156,28 @@ export function totalSkipCount(skipStats, levelId = null) {
   return sum;
 }
 
-/** Per-mission skip count for a level. */
+/** Per-mission skip count for a level. Legacy. */
 export function skipCountForMission(skipStats, levelId, questIndex) {
   const n = skipStats?.[levelId]?.[String(questIndex)] ?? skipStats?.[levelId]?.[questIndex];
   return Number(n) || 0;
+}
+
+/** Sum poke counts from users.pokeStats (prefers `.total`, else sums segment keys). */
+export function totalPokeCount(pokeStats, levelId = null) {
+  if (!pokeStats || typeof pokeStats !== "object") return 0;
+  const levels = levelId ? [levelId] : Object.keys(pokeStats);
+  let sum = 0;
+  for (const level of levels) {
+    const map = pokeStats[level];
+    if (!map || typeof map !== "object") continue;
+    if (Number.isFinite(Number(map.total))) {
+      sum += Number(map.total) || 0;
+      continue;
+    }
+    for (const [k, n] of Object.entries(map)) {
+      if (k === "total") continue;
+      sum += Number(n) || 0;
+    }
+  }
+  return sum;
 }

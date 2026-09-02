@@ -9503,6 +9503,13 @@ function pokeLearny() {
 
   const seg = getCurrentSegment();
   dbg("poke learny", { segment: seg?.id, user: (lastPendingUserText || "").slice(0, 40) });
+  notifyMcqActivity({
+    type: "poke",
+    level: LEVEL_INFO?.id || "beginner",
+    segmentId: seg?.id || null,
+    questTitle: seg?.title || seg?.id || "poke",
+    source: "client",
+  });
 
   // Scripted stuck paths: prefer exact beat forces over a generic continue.
   if (seg?.id === "ending1") {

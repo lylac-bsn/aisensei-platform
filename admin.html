@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamecollege - Admin Panel</title>
     <link rel="icon" href="images/tab-logo.png" type="image/png">
+    <link rel="stylesheet" href="css/admin.css">
     <style>
         :root {
             --bg-main: #FFF8F0;
@@ -1491,10 +1492,10 @@
     <div id="admin-view">
         <!-- Header -->
         <div class="admin-header">
-            <h1>&#9881; Admin Panel</h1>
+            <h1>Admin <span class="admin-header-sub">時間管理 · 学習進捗</span></h1>
             <div class="header-actions">
-                <button id="btn-refresh" class="btn-header" onclick="loadUsers()">&#x21bb; 更新</button>
-                <button class="btn-header" onclick="logoutAdmin()">ログアウト</button>
+                <button id="btn-refresh" class="btn-header" onclick="loadUsers()" type="button">更新</button>
+                <button class="btn-header" onclick="logoutAdmin()" type="button">ログアウト</button>
             </div>
         </div>
 
@@ -1506,7 +1507,7 @@
         <div id="tab-time" class="admin-tab-panel" role="tabpanel">
         <!-- Bulk Update -->
         <div class="bulk-panel">
-            <h2>&#9200; 全ユーザーの時間を一括変更</h2>
+            <h2>全ユーザーの時間を一括変更</h2>
 
             <div class="bulk-mode-toggle">
                 <button class="toggle-btn active" data-mode="set" onclick="setBulkMode('set')">上書き（セット）</button>
@@ -1533,7 +1534,7 @@
 
             <!-- Monthly Auto-Set -->
             <div class="auto-set-section">
-                <h3>&#128197; 毎月1日 0:00 (JST) 自動セット</h3>
+                <h3>毎月1日 0:00 (JST) 自動セット</h3>
                 <p class="section-desc">毎月1日の深夜0時（日本時間）に、全ユーザーの残り時間を自動でセットします。管理者またはユーザーが次にページを開いた時に適用されます。</p>
 
                 <div class="auto-set-row">
@@ -1565,7 +1566,7 @@
 
         <!-- Account Management -->
         <div class="account-panel">
-            <h2>&#128101; アカウント管理</h2>
+            <h2>アカウント管理</h2>
             <div class="create-account-form">
                 <div class="field">
                     <label>表示名</label>
@@ -1599,7 +1600,7 @@
 
         <!-- Users Table -->
         <div class="users-panel">
-            <h2>&#128100; ユーザー一覧 <span class="user-count" id="user-count"></span></h2>
+            <h2>ユーザー一覧 <span class="user-count" id="user-count"></span></h2>
             <div class="search-bar">
                 <span class="search-icon">&#128269;</span>
                 <input type="text" id="user-search" placeholder="名前で検索..." autocomplete="off">
@@ -1628,8 +1629,8 @@
 
         <div id="tab-progress" class="admin-tab-panel" role="tabpanel" hidden>
             <div class="progress-panel">
-                <h2>&#127891; 生徒の学習進捗</h2>
-                <p class="progress-panel-desc">全レベルのミッション（★クリア / ↷スキップ）、スキップ回数、バッジ付与、アクティビティ履歴を確認・操作できます。</p>
+                <h2>生徒の学習進捗</h2>
+                <p class="progress-panel-desc">章ごとの4択クリック数・クリック順、フレーズ習得、つつく回数を確認できます。</p>
                 <div class="search-bar">
                     <span class="search-icon">&#128269;</span>
                     <input type="text" id="progress-search" placeholder="名前で検索..." autocomplete="off">
@@ -1652,8 +1653,7 @@
         import { getFirestore, collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-functions.js";
         import { renderProgressDashboard, renderActivityTimeline } from "./js/admin-progress.js";
-        import { fetchUserActivity, logUserActivity, ACTIVITY_TYPES } from "./js/activity-log.js";
-        import { adminGrantBadge, adminRevokeBadge } from "./js/progress-sync.js";
+        import { fetchUserActivity } from "./js/activity-log.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -1740,6 +1740,8 @@
                         lessonBadges: data.lessonBadges || null,
                         badgeRevocations: data.badgeRevocations || null,
                         skipStats: data.skipStats || null,
+                        mcqStats: data.mcqStats || null,
+                        pokeStats: data.pokeStats || null,
                         progressUpdatedAt: data.progressUpdatedAt || null
                     });
                 });
@@ -1797,37 +1799,6 @@
                 const events = await fetchUserActivity(db, userId, 100);
                 mount.innerHTML = renderActivityTimeline(events);
                 return;
-            }
-
-            if (action === 'grant-badge' || action === 'revoke-badge') {
-                const badgeId = btn.dataset.badgeId;
-                if (!badgeId) return;
-                btn.disabled = true;
-                try {
-                    if (action === 'grant-badge') {
-                        const ok = await adminGrantBadge(db, userId, badgeId);
-                        if (!ok) throw new Error('grant failed');
-                        await logUserActivity(db, userId, {
-                            type: ACTIVITY_TYPES.BADGE,
-                            badgeId,
-                            source: 'admin',
-                        });
-                        showToast('バッジを付与しました', 'success');
-                    } else {
-                        const ok = await adminRevokeBadge(db, userId, badgeId);
-                        if (!ok) throw new Error('revoke failed');
-                        await logUserActivity(db, userId, {
-                            type: ACTIVITY_TYPES.BADGE_REVOKE,
-                            badgeId,
-                            source: 'admin',
-                        });
-                        showToast('バッジを取り消しました', 'success');
-                    }
-                    await loadUsers();
-                } catch (err) {
-                    showToast('バッジ操作に失敗しました', 'error');
-                    btn.disabled = false;
-                }
             }
         });
 
@@ -2379,6 +2350,8 @@
                     lessonBadges: data.lessonBadges || null,
                     badgeRevocations: data.badgeRevocations || null,
                     skipStats: data.skipStats || null,
+                    mcqStats: data.mcqStats || null,
+                    pokeStats: data.pokeStats || null,
                     progressUpdatedAt: data.progressUpdatedAt || null
                 });
             });

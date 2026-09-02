@@ -38,7 +38,11 @@ service cloud.firestore {
         && (!('badgeRevocations' in request.resource.data)
             || request.resource.data.badgeRevocations is list)
         && (!('skipStats' in request.resource.data)
-            || request.resource.data.skipStats is map);
+            || request.resource.data.skipStats is map)
+        && (!('mcqStats' in request.resource.data)
+            || request.resource.data.mcqStats is map)
+        && (!('pokeStats' in request.resource.data)
+            || request.resource.data.pokeStats is map);
 
       // Users cannot create or delete their own documents
       allow create, delete: if false;
