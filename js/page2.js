@@ -7,6 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { initProgressSync, scheduleProgressSync } from "./progress-sync.js";
 import { logUserActivity } from "./activity-log.js";
 import { getActiveLevelInfo } from "./lesson-engine.js";
+import { openLevelSwitcher } from "./level-picker.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -89,46 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. レベル切替処理
     // =================================================
     levelSwitcherBtn.addEventListener('click', () => {
-        // Show level selection overlay
-        const overlay = document.createElement('div');
-        overlay.id = 'level-switcher-overlay';
-        overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000;';
-        
-        const content = document.createElement('div');
-        content.className = 'level-selection-content';
-        content.innerHTML = `
-            <h2>レベルを選択してください</h2>
-            <div class="level-buttons">
-                <button class="level-btn" data-level="1">Beginner</button>
-                <button class="level-btn" data-level="2">Intermediate</button>
-                <button class="level-btn" data-level="3">Advanced</button>
-            </div>
-        `;
-        
-        overlay.appendChild(content);
-        document.body.appendChild(overlay);
-        
-        // Handle level selection
-        content.querySelectorAll('.level-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const level = e.target.getAttribute('data-level');
-                document.body.removeChild(overlay);
-                if (level === '1') {
-                    window.location.href = 'page1.html';
-                } else if (level === '2') {
-                    // Already on page2, do nothing
-                } else if (level === '3') {
-                    window.location.href = 'page3.html';
-                }
-            });
-        });
-        
-        // Close on overlay click (outside content)
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                document.body.removeChild(overlay);
-            }
-        });
+        openLevelSwitcher('page2.html');
     });
 
     // =================================================
@@ -137,13 +99,19 @@ document.addEventListener('DOMContentLoaded', () => {
     logoutButton.addEventListener('click', async () => {
         try {
             await signOut(auth);
-            // Redirect to login page after successful logout
             window.location.href = 'index.html';
         } catch (error) {
-            // error handled silently
-            // Still redirect even if there's an error
             window.location.href = 'index.html';
         }
+    });
+
+    document.getElementById('time-up-logout-btn')?.addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+        } catch {
+            // ignore
+        }
+        window.location.href = 'index.html';
     });
 
     // Save time when the page is hidden or closed

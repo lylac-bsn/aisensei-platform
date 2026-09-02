@@ -4,6 +4,7 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { mountLevelPicker } from "./level-picker.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -21,77 +22,77 @@ const db = getFirestore(app);
 
 document.addEventListener('DOMContentLoaded', () => {
 
-    // =================================================
-    // 2. HTML要素の取得
-    // =================================================
     const loginView = document.getElementById('login-view');
     const loginForm = document.getElementById('login-form');
     const displayNameInput = document.getElementById('display-name');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const loginError = document.getElementById('login-error');
+    const loginSubmitBtn = document.getElementById('login-submit-btn');
     const levelSelectionOverlay = document.getElementById('level-selection-overlay');
-    const levelBeginnerBtn = document.getElementById('level-beginner');
-    const levelIntermediateBtn = document.getElementById('level-intermediate');
-    const levelAdvancedBtn = document.getElementById('level-advanced');
 
-    // =================================================
-    // 3. ログイン状態の監視
-    // =================================================
+    function setLoginLoading(loading) {
+        if (!loginSubmitBtn) return;
+        loginSubmitBtn.classList.toggle('is-loading', loading);
+        loginSubmitBtn.disabled = loading;
+        loginSubmitBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
+        const label = loginSubmitBtn.querySelector('span');
+        if (label) label.textContent = loading ? 'ログイン中…' : 'ログイン';
+    }
+
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // User is logged in - check if user data exists
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);
             
             if (!snap.exists()) {
-                loginError.textContent = 'エラー: ユーザーデータが見つかりません。';
+                loginError.textContent = 'アカウントが見つかりません。先生に連絡してください。';
                 await signOut(auth);
                 return;
             }
 
-            // Show level selection popup
             loginView.style.display = 'none';
-            levelSelectionOverlay.style.display = 'flex';
+            mountLevelPicker(levelSelectionOverlay, {
+                onNavigate: (page) => {
+                    window.location.href = page;
+                },
+                onLogout: async () => {
+                    await signOut(auth);
+                    levelSelectionOverlay.hidden = true;
+                    levelSelectionOverlay.classList.remove('is-open');
+                    loginView.style.display = 'grid';
+                },
+            });
         } else {
-            // User is not logged in - show login screen
             loginView.style.display = 'grid';
-            levelSelectionOverlay.style.display = 'none';
+            levelSelectionOverlay.hidden = true;
+            levelSelectionOverlay.classList.remove('is-open');
+            setLoginLoading(false);
         }
     });
 
-    // =================================================
-    // 3.5. レベル選択処理
-    // =================================================
-    levelBeginnerBtn.addEventListener('click', () => {
-        window.location.href = 'page1.html';
-    });
-
-    levelIntermediateBtn.addEventListener('click', () => {
-        window.location.href = 'page2.html';
-    });
-
-    levelAdvancedBtn.addEventListener('click', () => {
-        window.location.href = 'page3.html';
-    });
-
-    // =================================================
-    // 4. ログイン処理
-    // =================================================
     loginForm.addEventListener('submit', (e) => {
         e.preventDefault();
         loginError.textContent = '';
         const displayName = displayNameInput.value.trim().substring(0, 50);
-        const email = emailInput.value;
+        const email = emailInput.value.trim();
         const password = passwordInput.value;
+
+        if (!displayName) {
+            loginError.textContent = 'なまえを入力してください。';
+            displayNameInput.focus();
+            return;
+        }
+
+        setLoginLoading(true);
         signInWithEmailAndPassword(auth, email, password)
             .then(async (userCredential) => {
-                // Save display name to Firestore
                 const userRef = doc(db, "users", userCredential.user.uid);
                 await updateDoc(userRef, { displayName: displayName });
             })
             .catch(() => {
-                loginError.textContent = 'メールアドレスまたはパスワードが間違っています。';
+                loginError.textContent = 'メールアドレスまたはパスワードが正しくありません。';
+                setLoginLoading(false);
             });
     });
 });

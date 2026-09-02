@@ -110,6 +110,8 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     mcqCursor: {},
     mcqLog: [],
     mcqSummary: {},
+    /** In-chapter UI state (e.g. Ch2 free-talk phase) for reconnect resume. */
+    segmentUi: {},
   };
 }
 
@@ -643,11 +645,18 @@ function daily1Rule() {
     "DAILY ENGLISH ONLY — sudden everyday chat away from the tank. NO intro line.",
     "FIRST line EXACTLY: Oh by the way, do you have a favourite animal? そういえば、[childName]は すきな どうぶつとか いるの？ (child's name + さん in Japanese).",
     "FORBIDDEN openers: Let's practice today's English / きょうの えいごを れんしゅうしよう.",
-    "After the animal question: at least 4 chat rallies — each turn = short reaction + exactly ONE new everyday question.",
+    "Talk like a friendly real teacher — NOT a quiz bot. After the animal question: at least 4 chat rallies.",
+    "EACH TURN: (1) react specifically to WHAT THEY JUST SAID (name their words), (2) ONE follow-up about THAT same topic, (3) WAIT.",
+    "Stay on their topic for 1–2 turns before changing topic. Soft bridge when you switch (e.g. Nice! By the way…).",
+    "FORBIDDEN: starting every turn with the same echo (A dog! / いぬ！) after you already reacted that way.",
+    "FORBIDDEN: asking something they already answered (e.g. Did you have one before? right after 飼ってたよ / I used to).",
+    "FORBIDDEN: abrupt random jumps (dog → video games) with no link to their last line.",
+    "If they only say うん/yes: warm ack + ONE gentle follow-up on the SAME topic (help them say a little more) — do NOT leap to a brand-new topic yet.",
     "FORBIDDEN forever: Are you tired? / つかれた？ / What's your favorite color? / すきな いろは？ — color was already chosen in Chapter 4 (favoriteColor).",
     "FORBIDDEN: stopping after Nice / That's right / そうだね with no next question before 4 rallies.",
     "FORBIDDEN: back to the tank before 4 rallies.",
-    "After 4+ rallies, speak EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ then call complete_segment(daily1). " +
+    "After 4+ rallies, ONE turn: short reaction to their last words, then Speak EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
+      "Finish speaking that full turn before tools. Then call complete_segment(daily1). " +
       "FORBIDDEN: complete_segment(daily1) before 4 rallies or before the back-to-tank bridge line. Next is Chapter 6 sand.",
     "Never go silent after praise — always lead to the next question or the back-to-tank bridge.",
   ].join(" ");
@@ -662,8 +671,8 @@ function daily1StartNudge() {
     open +
     " Then WAIT. " +
     "FORBIDDEN: Let's practice today's English / きょうの えいごを れんしゅうしよう. " +
-    "Continue 4+ chat rallies (reaction + ONE everyday question per turn). " +
-    "FORBIDDEN: Are you tired? / つかれた？ / favorite color (already chosen in Ch4). " +
+    "Continue 4+ NATURAL chat rallies: react to their exact words, stay on topic 1–2 turns, ONE new question per turn. " +
+    "FORBIDDEN: repeating A dog! every turn / re-asking answered facts / abrupt topic jumps / Are you tired? / favorite color (Ch4). " +
     "After 4+ rallies ONLY: " +
     back +
     " then complete_segment(daily1)."
@@ -709,7 +718,9 @@ function ch6StartNudge() {
   return (
     "[Teacher note — do not read aloud] CHAPTER 6 sand bottom start NOW. Speak EXACTLY Beat 1: " +
     CH6_BEAT1_SPEAK +
-    " Then WAIT for 4-button tap (I put the sand on the bottom). FORBIDDEN: old Put sand on the bottom / I put sand here."
+    " Then WAIT for 4-button tap (I put the sand on the bottom). " +
+    "FORBIDDEN: reacting to Daily English / favourite animal / pet names. " +
+    "FORBIDDEN: old Put sand on the bottom / I put sand here."
   );
 }
 
@@ -731,13 +742,11 @@ function final1Rule() {
 
 function ending1Rule() {
   return [
-    "ENDING ONLY — lines 1–3 play automatically back-to-back (THREE separate messages, no waiting for the child).",
-    "Line 1: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！",
-    "Line 2 (immediately after line 1 — do NOT react to the child): Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！",
-    "Line 3 (immediately after line 2): What kind of fish should we catch? JP: どんな おさかなを つかまえよう？ → then STOP and WAIT for the child.",
-    "After the child replies to line 3 — ONE beat per turn: Beat 4 How many do we want? → WAIT",
-    "After the child replies to line 4 — lines 5→6 back-to-back (TWO messages, no wait): Beat 5 Hmm... I can't stop thinking about it! then Beat 6 Next Minecraft lesson… See you next time! → call complete_segment(ending1)",
-    "FORBIDDEN during lines 1–2 and 5: reacting to the child between chained lines. FORBIDDEN: combining multiple beats in one message.",
+    "ENDING ONLY — exactly 3 spoken turns (client-forced). No free chat. Do NOT invent extra lines.",
+    "Turn A (ONE message, old lines 1+2+3 combined): Perfect! We made a fish tank together! Thank you for helping! Hold on... we don't have any fish in the fish tank! That's for next time! What kind of fish should we catch? + matching ひらがな → STOP and WAIT.",
+    "Turn B (after child names a fish): short reaction naming THAT fish (never invent a number like Five!), then How many do we want? なんびき ほしい？ → WAIT. Speak this turn ONCE only.",
+    "Turn C (ONE message, old lines 5+6 combined): Hmm... I can't stop thinking about it! + Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! + matching ひらがな → call complete_segment(ending1).",
+    "FORBIDDEN: You're welcome / どういたしまして / What did you enjoy / free conversation / inventing questions / repeating the same ending message twice / splitting Turn A or Turn C into multiple messages.",
     "Every turn: English first, then ひらがな with the SAME full meaning.",
   ].join(" ");
 }
@@ -755,11 +764,11 @@ function final1StartNudge() {
 
 function ending1StartNudge() {
   return (
-    "[Teacher note — do not read aloud] ENDING starts NOW. Speak lines 1→2→3 back-to-back (THREE messages, no wait). " +
-    "Line 1: Perfect! We made a fish tank together! Thank you for helping! JP: ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
-    "Line 2 (do NOT react to the child): Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
-    "Line 3: What kind of fish should we catch? JP: どんな おさかなを つかまえよう？ Then STOP and WAIT. " +
-    "After child replies: line 4 How many do we want? → WAIT. Then lines 5→6 back-to-back, then disconnect."
+    "[Teacher note — do not read aloud] ENDING starts NOW. Speak EXACTLY ONE intro message (old lines 1+2+3 combined), then WAIT: " +
+    "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
+    "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+    "What kind of fish should we catch? どんな おさかなを つかまえよう？ " +
+    "FORBIDDEN: You're welcome / free chat / What did you enjoy / splitting into multiple messages / repeating this intro."
   );
 }
 
@@ -1010,7 +1019,12 @@ export function buildHandoffOpeningNudge(
   { lastQuote = "", reason = "handoff" } = {}
 ) {
   const segment = getCurrentSegment(state);
-  const quote = String(lastQuote || "").trim().slice(0, 60);
+  // Daily English already reacted + bridged before this reconnect — never re-ack the pet/chat.
+  const omitQuote =
+    segment?.id === "ch6" ||
+    reason === "after-daily1" ||
+    String(reason || "").includes("daily1");
+  const quote = omitQuote ? "" : String(lastQuote || "").trim().slice(0, 60);
   const quoteBit = quote ? ` Child said "${quote}".` : "";
   const retryBit = reason === "stuck_retry" ? " Stuck-retry." : "";
 
@@ -1032,8 +1046,9 @@ export function buildHandoffOpeningNudge(
     ch6: CH6_BEAT1_SPEAK,
     final1: final1OpenSpeak(),
     ending1:
-      "Perfect! We made a fish tank together! Thank you for helping! " +
-      "ぱーふぇくと！いっしょに すいそうを つくれたね！てつだって くれて ありがとう！",
+      "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！いっしょに すいそうを つくれたね！てつだって くれて ありがとう！ " +
+      "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+      "What kind of fish should we catch? どんな おさかなを つかまえよう？",
   };
 
   const line = speakExact[segment.id];
@@ -1042,6 +1057,22 @@ export function buildHandoffOpeningNudge(
       `[Coach]${retryBit}${quoteBit} final1 ONLY. Speak EXACTLY ONE turn (no wait): ${final1OpenSpeak()} ` +
       "then IMMEDIATELY the first listed 〜は えいごで？ cue from coach (ひらがな only). " +
       "FORBIDDEN: Are you ready? / じゅんびは できてる？ / previous chapter."
+    );
+  }
+  if (state.lessonId === "part1" && segment.id === "ch6") {
+    return (
+      `[Coach]${retryBit} ch6 ONLY. Speak EXACTLY Beat 1 then WAIT: ${CH6_BEAT1_SPEAK} ` +
+      "FORBIDDEN: reacting to Daily English / favourite animal / pet names / トイプードル / previous chat. " +
+      "FORBIDDEN: previous chapter."
+    );
+  }
+  if (state.lessonId === "part1" && segment.id === "ending1") {
+    return (
+      `[Coach]${retryBit} ending1 ONLY. Speak EXACTLY ONE intro (old 1+2+3 combined) then WAIT: ` +
+      "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
+      "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+      "What kind of fish should we catch? どんな おさかなを つかまえよう？ " +
+      "FORBIDDEN: You're welcome / What did you enjoy / free chat / splitting intro / repeating / previous chapter."
     );
   }
   if (state.lessonId === "part1" && line) {

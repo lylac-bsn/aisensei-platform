@@ -380,9 +380,13 @@ export const AQUARIUM_PART1 = {
       completeWithoutEnglish: true,
       coach:
         "Start EXACTLY: Oh by the way, do you have a favourite animal? そういえば、[name]は すきな どうぶつとか いるの？ " +
-        "FORBIDDEN: Let's practice today's English. At least 4 chat rallies (reaction + ONE question). " +
+        "FORBIDDEN: Let's practice today's English. At least 4 NATURAL chat rallies. " +
+        "Each turn: react to their exact words (vary the reaction — do NOT repeat A dog!/いぬ！ every turn), " +
+        "stay on their topic 1–2 turns, ask ONE follow-up about THAT, then WAIT. " +
+        "FORBIDDEN: re-asking facts they already answered; abrupt topic jumps (dog→games) with no bridge. " +
         "FORBIDDEN: favorite color / すきな いろ — already chosen in Chapter 4 (favoriteColor). " +
-        "Then EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
+        "Then ONE turn: short reaction to their last words + EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
+        "Finish speaking before complete_segment(daily1). " +
         "FORBIDDEN: Are you tired? / つかれた？",
     },
     {
@@ -446,7 +450,8 @@ export const AQUARIUM_PART1 = {
         },
       ],
       coach:
-        "CHAPTER 6 — 4 MCQ beats: Beat1 Let's make a basement inside the tank! → I put the sand on the bottom → " +
+        "CHAPTER 6 — after Daily English do NOT re-react to the pet/chat; start Beat1 immediately. " +
+        "4 MCQ beats: Beat1 Let's make a basement inside the tank! → I put the sand on the bottom → " +
         "Beat2 Do we have enough sand? 「もっと すなが ひつよう」→ more sand → Beat3 Are you done? 「できた！」→ I'm done! → " +
         "Beat4 Is the tank ready for the fishes to swim? 「さかなを いれられる じゅんびが できた！」→ My tank is ready! " +
         "Wrong: soft retry. Last correct → complete_segment(ch6). ZERO fish.",
@@ -553,15 +558,14 @@ export const AQUARIUM_PART1 = {
       type: "ending",
       title: "水槽の準備できた！",
       titleEn: "Tank ready — no fish yet",
-      goal: "6つの短い会話：褒める→魚ゼロ→どんな魚？→何匹？→ワクワク→次回予告。",
+      goal: "3ターン：褒め+魚ゼロ+どんな魚？→何匹？→ワクワク+次回予告。",
       completeWithoutEnglish: true,
       coach:
-        "AUTO intro: lines 1→2→3 back-to-back (no wait), then WAIT after line 3. " +
-        "1) Perfect! We made a fish tank together! Thank you for helping! " +
-        "2) Hold on... we don't have any fish in the fish tank! That's for next time! JP: あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
-        "3) What kind of fish should we catch? → WAIT. 4) How many do we want? → WAIT. " +
-        "5→6) Hmm... / Next Minecraft lesson… See you next time! back-to-back → complete_segment(ending1) → disconnect. " +
-        "FORBIDDEN during 1–2: reacting to child (You're welcome). English then ひらがな each beat.",
+        "AUTO: client forces 3 spoken turns only. " +
+        "Turn A (old 1+2+3 in ONE message): Perfect! … Thank you! + Hold on... no fish… + What kind of fish should we catch? → WAIT. " +
+        "Turn B: react to THAT fish (never invent a number like Five!), then How many do we want? → WAIT. Speak ONCE. " +
+        "Turn C (old 5+6 in ONE message): Hmm... I can't stop thinking about it! + Next Minecraft lesson… See you next time! → complete_segment(ending1) → disconnect. " +
+        "FORBIDDEN: You're welcome / What did you enjoy / free chat / inventing how many / repeating the same turn / splitting A or C. English then ひらがな.",
     },
   ],
 };

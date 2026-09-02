@@ -156,17 +156,27 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   const panelClose = document.getElementById("dashboard-panel-close");
   const startOverBtn = document.getElementById("dashboard-startover-btn");
   const buttons = document.querySelectorAll("[data-panel]");
+  const backdrop = document.getElementById("dashboard-backdrop");
 
-  // Always size the chat to the screen, even if the sidebar panel markup is missing.
   bindDashboardChatResize();
 
   if (!panel || !panelBody) return;
 
   let activePanel = null;
 
+  function setBackdropVisible(visible) {
+    if (!backdrop) return;
+    backdrop.hidden = !visible;
+    backdrop.classList.toggle("is-visible", visible);
+    backdrop.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
   function openPanel(name) {
     activePanel = name;
     panel.hidden = false;
+    panel.classList.toggle("dashboard-panel--instructions", name === "instructions");
+    panel.classList.toggle("dashboard-panel--missions", name === "missions");
+    panel.classList.toggle("dashboard-panel--badges", name === "badges" || name === "stars");
     if (panelTitle) panelTitle.textContent = PANEL_LABELS[name] || name;
     if (name === "missions") renderChapters(panelBody);
     else if (name === "words") renderWords(panelBody);
@@ -176,12 +186,14 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     buttons.forEach((b) =>
       b.setAttribute("aria-expanded", b.dataset.panel === name ? "true" : "false")
     );
+    setBackdropVisible(true);
   }
 
   function closePanel() {
     activePanel = null;
     panel.hidden = true;
     buttons.forEach((b) => b.setAttribute("aria-expanded", "false"));
+    setBackdropVisible(false);
   }
 
   buttons.forEach((btn) => {
@@ -192,6 +204,10 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     });
   });
   panelClose?.addEventListener("click", closePanel);
+  backdrop?.addEventListener("click", closePanel);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && activePanel) closePanel();
+  });
 
   startOverBtn?.addEventListener("click", () => {
     if (!confirm("この Part の宿題を最初からやり直しますか？")) return;

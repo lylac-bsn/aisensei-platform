@@ -34,9 +34,9 @@
                             <svg class="header-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                             残り時間: <span id="timer-display">--:--:--</span>
                         </span>
-                        <div class="header-tab-switcher">
-                            <button id="tab-part1" class="tab-btn active">Part 1</button>
-                            <button id="tab-part2" class="tab-btn" disabled title="Part 1 を終わらせてから">Part 2</button>
+                        <div class="header-tab-switcher" role="tablist" aria-label="宿題パート">
+                            <button id="tab-part1" class="tab-btn active" role="tab" aria-selected="true" aria-controls="iframe-part1">Part 1</button>
+                            <button id="tab-part2" class="tab-btn" role="tab" aria-selected="false" aria-controls="iframe-part2" disabled title="Part 1 を終わらせてから">Part 2</button>
                         </div>
                     </div>
                 </div>
@@ -54,6 +54,7 @@
         </header>
         
         <!-- Main content area -->
+        <div id="dashboard-backdrop" class="dashboard-backdrop" hidden aria-hidden="true"></div>
         <div class="main-content-grid main-content-grid--dashboard">
             <main id="app-content" class="chat-box-wrapper chat-column">
                 <iframe
@@ -95,7 +96,7 @@
                         <p class="dashboard-tips-note__title">先生と楽しく喋るコツ：</p>
                         <ul class="dashboard-tips-note__list">
                             <li>わからないときは、「ゆっくりしゃべって！」とか「もう一回！」って言ってみよう！</li>
-                            <li>へんじがない時は、「hello!」って話しかけてみよう！</li>
+                            <li>へんじがない時は、「つつく」ボタンでラーニー先生をつついてみよう！</li>
                             <li>わすれていてもだいじょうぶ。ラーニー先生がヒントを出してくれるよ。</li>
                         </ul>
                     </div>
@@ -155,10 +156,13 @@
         </div>
 
         <!-- 時間切れの時に表示するオーバーレイ -->
-        <div id="time-up-overlay" style="display:none">
+        <div id="time-up-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="time-up-title">
             <div class="overlay-content">
-                <h2>利用時間が終了しました</h2>
-                <p>本日のご利用ありがとうございました。</p>
+                <h2 id="time-up-title">利用時間が終了しました</h2>
+                <p>今日もがんばりましたね！また次回会いましょう。</p>
+                <div class="overlay-actions">
+                    <button type="button" class="overlay-btn overlay-btn--primary" id="time-up-logout-btn">ログアウト</button>
+                </div>
             </div>
         </div>
     </div>
@@ -178,8 +182,9 @@
 
         function refreshLock() {
             if (!tab2) return;
-            tab2.disabled = !isPart1Complete();
-            tab2.title = tab2.disabled ? 'Part 1 を終わらせてから' : 'Part 2';
+            const unlocked = isPart1Complete();
+            tab2.disabled = !unlocked;
+            tab2.title = unlocked ? 'Part 2（4週目の宿題）' : 'Part 1 を終わらせてから';
         }
 
         function endVoiceCall(iframe) {
@@ -196,6 +201,8 @@
             else endVoiceCall(iframe1);
             tab1.classList.toggle('active', is1);
             tab2.classList.toggle('active', !is1);
+            tab1.setAttribute('aria-selected', is1 ? 'true' : 'false');
+            tab2.setAttribute('aria-selected', !is1 ? 'true' : 'false');
             iframe1.style.display = is1 ? 'block' : 'none';
             iframe2.style.display = is1 ? 'none' : 'block';
             setActiveHomeworkLesson(part);

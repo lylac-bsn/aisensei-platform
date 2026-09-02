@@ -720,9 +720,10 @@
             height: 22px;
         }
 
-        .retry-btn {
+        .poke-btn {
             height: 44px;
-            padding: 0 14px;
+            padding: 0 12px;
+            gap: 6px;
             border: none;
             border-radius: var(--radius-full);
             background: var(--bg);
@@ -731,23 +732,47 @@
             display: none;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            transition: background 0.2s, color 0.2s, transform 0.15s;
             flex-shrink: 0;
             font-size: var(--text-sm);
             font-weight: 700;
             font-family: inherit;
             white-space: nowrap;
         }
-        .retry-btn:not([hidden]) {
+        .poke-btn:not([hidden]) {
             display: flex;
         }
-        .retry-btn:disabled {
+        .poke-btn:disabled {
             opacity: 0.45;
             cursor: not-allowed;
         }
-        .retry-btn:hover:not(:disabled) {
-            background: var(--border);
-            color: var(--text-primary);
+        .poke-btn:hover:not(:disabled) {
+            background: #FFE0B2;
+            color: #E65100;
+        }
+        .poke-btn .poke-icon {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+        .poke-btn.is-poking {
+            animation: poke-wiggle 0.45s ease;
+            background: #FFCC80;
+            color: #E65100;
+        }
+        .poke-btn.is-poking .poke-icon {
+            animation: poke-jab 0.45s ease;
+        }
+        @keyframes poke-wiggle {
+            0%, 100% { transform: translateX(0) rotate(0); }
+            30% { transform: translateX(3px) rotate(6deg); }
+            55% { transform: translateX(-2px) rotate(-4deg); }
+            75% { transform: translateX(2px) rotate(2deg); }
+        }
+        @keyframes poke-jab {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            40% { transform: translate(4px, -3px) scale(1.15) rotate(-12deg); }
+            70% { transform: translate(1px, -1px) scale(1.05); }
         }
 
         /* ===== Quest mission card ===== */
@@ -1551,8 +1576,14 @@
                 <button class="mute-btn muted" id="btn-mute" type="button" title="マイクオフ（4択ボタンで答えよう）" aria-label="マイクオフ">
                     <svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><path d="M12 19v4"/><path d="M8 23h8"/></svg>
                 </button>
-                <button class="retry-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき" hidden>
-                    もういちど
+                <button class="poke-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき、つついてね" aria-label="つつく" hidden>
+                    <svg class="poke-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M8 14V6a2 2 0 1 1 4 0v6"/>
+                        <path d="M12 12V5a2 2 0 1 1 4 0v8"/>
+                        <path d="M16 13V8a2 2 0 1 1 4 0v7a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5.2-3L5 15.5"/>
+                        <path d="M4 12h3"/>
+                    </svg>
+                    <span>つつく</span>
                 </button>
                 <input type="text" class="input-field" id="chat-input" placeholder="自由会話のときだけ入力…" />
                 <button class="send-btn" id="btn-send" title="送信">
