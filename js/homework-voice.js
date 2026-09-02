@@ -31,7 +31,7 @@ import {
   getActiveLevelId,
   setLearnerDisplayName,
   daily1OpenSpeak,
-  daily1BackToTankSpeak,
+  daily1BridgeTurnInstruction,
   final1OpenSpeak,
 } from "./lesson-engine.js";
 import { resolveProxyUrl } from "./proxy-config.js";
@@ -628,11 +628,9 @@ function forceCh2FoundSandElicit(reason = "after-see") {
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". Speak EXACTLY (one short turn): " +
+    ". Speak EXACTLY NOW: " +
     CH2_ELICIT_FOUND_SPEAK +
-    " Then WAIT for the 4-button tap (I found some sand!). " +
-    "FORBIDDEN: Keep looking / Take your time / がんばって / すな、さがして / more free-talk." +
-    beginnerTurnHint();
+    " Then WAIT for I found some sand! (4-button). No Keep looking / free-talk.";
   try {
     closeOpenAudioTurn();
     audioPlayer?.interrupt?.();
@@ -640,6 +638,87 @@ function forceCh2FoundSandElicit(reason = "after-see") {
     // ignore
   }
   dbg("force ch2 found elicit", reason);
+  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+}
+
+/** Short scripted-line coach — long praise/beginner notes made Ch2 Live replies very slow. */
+function ch2ScriptCoach(speak, lead = "Continue") {
+  return (
+    "[Teacher note — do not read aloud] " +
+    lead +
+    ". ONE short react, then Speak EXACTLY: " +
+    speak +
+    " Then WAIT. EN + matching ひらがな."
+  );
+}
+
+/** Resolve the next Ch2 line from chat progress — never re-ask an answered beat. */
+function ch2RecoverSpeakLine(userText = "") {
+  const user = String(userText || lastPendingUserText || recentUserMessages(1)[0] || "").trim();
+  syncCh2PhaseFromChat();
+  rememberCh2EverydayFromAssistant(lastAssistantText());
+  if (user) rememberCh2EverydayAnswered(lastAssistantText());
+
+  if (looksLikePlacePick(user) || (assistantAskedPlaceQuestion() && user && !looksLikeDirectionPick(user))) {
+    if (ch2Search.phase === "place" || ch2Search.phase === "idle") ch2Search.phase = "direction";
+  }
+  if (
+    looksLikeDirectionPick(user) ||
+    (assistantAskedDirectionQuestion() && user && !looksLikePlacePick(user))
+  ) {
+    if (ch2Search.phase === "direction" || ch2Search.phase === "place") {
+      ch2Search.phase = "chat";
+    }
+  }
+
+  if (ch2HotWasAnswered() && !ch2SeeWasAsked()) return CH2_SEE_SPEAK;
+  if (ch2HotWasAsked() && !ch2HotWasAnswered()) return CH2_HOT_SPEAK;
+  if (ch2Search.phase === "direction" || (looksLikePlacePick(user) && !assistantAskedDirectionQuestion())) {
+    return CH2_DIRECTION_SPEAK;
+  }
+  if (ch2Search.phase === "chat") return ch2NextEverydaySpeak() || CH2_HOT_SPEAK;
+  if (ch2Search.phase === "checking" || ch2Search.phase === "waiting") return CH2_ELICIT_FOUND_SPEAK;
+  // Only open with place if it has not already been asked in this chat.
+  if (assistantAskedPlaceQuestion(recentAssistantMessages(8).join("\n")) && looksLikePlacePick(user)) {
+    return CH2_DIRECTION_SPEAK;
+  }
+  return ch2NextScriptSpeak();
+}
+
+/** Force the next scripted Ch2 line when Gemini stalls (e.g. after うん on hot). */
+function forceCh2ScriptLine(speak, reason = "ch2-script") {
+  if (!isCh2SandSearchContext()) return false;
+  if (!client?.connected || actionState !== "active") return false;
+  const line = String(speak || "").trim();
+  if (!line) return false;
+  if (line === CH2_ELICIT_FOUND_SPEAK) return forceCh2FoundSandElicit(reason);
+  // Never stack a force on top of a Live reply that already moved forward.
+  const past = recentAssistantMessages(6).join("\n");
+  const last = lastAssistantText();
+  if (line === CH2_SEE_SPEAK && (ch2AssistantSaidSeeQuestion(last) || ch2AssistantSaidSeeQuestion(past))) {
+    return false;
+  }
+  if (line === CH2_HOT_SPEAK && (detectCh2EverydayKey(last) === "hot" || /hot outside|そとは\s*あつい/i.test(past))) {
+    return false;
+  }
+  if (line === CH2_DIRECTION_SPEAK && assistantAskedDirectionQuestion(past)) return false;
+  if (line === CH2_PLACE_SPEAK && assistantAskedPlaceQuestion(past)) return false;
+  if (sharesSameLeadQuestion(last, line) || (assistantAskedPlaceQuestion(last) && line === CH2_PLACE_SPEAK)) {
+    return false;
+  }
+  const note =
+    "[Teacher note — do not read aloud] " +
+    reason +
+    ". Speak EXACTLY NOW: " +
+    line +
+    " Then WAIT. One short EN + ひらがな turn. FORBIDDEN: repeating the previous question.";
+  try {
+    closeOpenAudioTurn();
+    audioPlayer?.interrupt?.();
+  } catch {
+    // ignore
+  }
+  dbg("force ch2 script line", reason, line.slice(0, 40));
   return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
 }
 
@@ -1586,6 +1665,26 @@ function buildPart1HandoffOpeningNudge(state, opts = {}) {
       "FORBIDDEN: Are you ready? / じゅんびは できてる？ / previous chapter."
     );
   }
+  // Ch2 mid-progress / place answer must NOT re-open with beach-or-mountains.
+  if (state?.lessonId === "part1" && segment?.id === "ch2") {
+    restoreCh2SearchState();
+    const quote = String(opts.lastQuote || "").trim();
+    const retryBit = opts.reason === "stuck_retry" ? " Stuck-retry." : "";
+    if (looksLikePlacePick(quote)) {
+      ch2Search.phase = "direction";
+      persistCh2SearchState();
+    } else if (looksLikeDirectionPick(quote)) {
+      ch2Search.phase = "chat";
+      persistCh2SearchState();
+    }
+    const speak = ch2RecoverSpeakLine(quote);
+    const quoteBit = quote ? ` Child said "${quote.slice(0, 40)}".` : "";
+    return (
+      `[Coach]${retryBit}${quoteBit} ch2 ONLY. Short react if needed, then Speak EXACTLY then WAIT: ` +
+      speak +
+      " FORBIDDEN: repeating beach/mountains if they already picked. FORBIDDEN: previous chapter."
+    );
+  }
   return buildHandoffOpeningNudge(state, opts);
 }
 
@@ -1609,15 +1708,12 @@ function final1RemainingCount() {
 
 function matchesFinal1Answer(userText, item) {
   if (!item) return false;
-  if (matchesPatterns(userText, item.patterns || [])) return true;
   const n = normalizeText(userText);
   if (!n) return false;
-  for (const choice of item.choices || []) {
-    const core = normalizeText(String(choice).replace(/[!?.]/g, ""));
-    if (core && (n === core || n.includes(core) || core.includes(n))) return true;
-  }
+  // Only the canonical answer (+ patterns) count — never treat distractor choices as correct.
   const ans = normalizeText(String(item.answer || "").replace(/[!?.]/g, ""));
   if (ans && (n === ans || n.includes(ans) || ans.includes(n))) return true;
+  if (matchesPatterns(userText, item.patterns || [])) return true;
   return false;
 }
 
@@ -2087,22 +2183,13 @@ function buildCh2OutboundCoach(userText) {
   rememberCh2EverydayFromAssistant(assistant);
 
   if (FORBIDDEN_EVERYDAY_RE.test(assistant)) {
-    return (
-      "[Teacher note — do not read aloud] WRONG question. NEVER ask Are you tired? / Can you hear the waves? " +
-      "React briefly, then speak ONLY: " +
-      ch2NextScriptSpeak() +
-      ". " +
-      ch2AntiRepeatRule() +
-      beginnerTurnHint()
-    );
+    return ch2ScriptCoach(ch2NextScriptSpeak(), "WRONG question (no tired/waves)");
   }
 
   if (/i put sand|put sand here|on the bottom|すいそうにいれ|砂を入れ/i.test(assistant)) {
     return (
-      "[Teacher note — do not read aloud] WRONG chapter beat. Stay on Chapter 2. " +
-      "FORBIDDEN: put sand in the tank / on the bottom (Chapter 6). " +
-      "If they found sand: elicit I found some sand! then complete_segment(ch2). Next is Chapter 3 make glass." +
-      beginnerTurnHint()
+      "[Teacher note — do not read aloud] Stay on Chapter 2. No put-sand-on-bottom (Ch6). " +
+      "If found sand: elicit I found some sand! then complete_segment(ch2)."
     );
   }
 
@@ -2110,65 +2197,39 @@ function buildCh2OutboundCoach(userText) {
     // Still on free-talk beats — do NOT jump to found-sand elicit.
     if (!ch2FreeTalkFinished() && (ch2Search.phase === "chat" || ch2Search.phase === "direction")) {
       const next = ch2NextEverydaySpeak() || CH2_HOT_SPEAK;
-      return (
-        "[Teacher note — do not read aloud] Free talk not done yet. React briefly, then speak EXACTLY: " +
-        next +
-        " Then WAIT. FORBIDDEN: You found some sand / found-sand elicit until after Is it hot outside? AND What can you see around you?" +
-        beginnerTurnHint()
+      return ch2ScriptCoach(
+        next,
+        "Free talk not done — no found-sand elicit yet"
       );
     }
-    return (
-      "[Teacher note — do not read aloud] Child FOUND sand" +
-      (/^(砂|すな|sand)/i.test(t) ? " (they said すな/sand)." : " (みつけた / found it).") +
-      " React to THAT — NOT the previous topic. Speak EXACTLY: " +
-      CH2_ELICIT_FOUND_SPEAK +
-      " Do NOT say Can you say, I found some sand. Then WAIT. " +
-      "FORBIDDEN: another chat question, put sand in the tank, Chapter 6." +
-      beginnerTurnHint()
+    return ch2ScriptCoach(
+      CH2_ELICIT_FOUND_SPEAK,
+      "Child FOUND sand — do NOT say Can you say, I found some sand"
     );
   }
   if (found === "phrase") {
     return (
-      "[Teacher note — do not read aloud] Child said I found some sand! Praise briefly, call complete_segment(ch2) NOW, " +
-      "then Chapter 3: Let's make some glass! " + PART1_ELICIT_JA.ch3NeedGlass + " → I need to make glass. " +
-      "FORBIDDEN: put sand in the tank / on the bottom." +
-      beginnerTurnHint()
+      "[Teacher note — do not read aloud] Child said I found some sand! Brief praise, complete_segment(ch2) NOW. " +
+      "Next Ch3 glass. No put-sand-on-bottom."
     );
   }
 
   // Scripted beats: place → direction → hot → see → wait for found
   if (ch2Search.phase === "place" || ch2Search.phase === "idle") {
     if (looksLikePlacePick(t) || (assistantAskedPlaceQuestion(assistant) && t)) {
-      return (
-        "[Teacher note — do not read aloud] Child picked a place. React briefly, then speak ONLY: " +
-        CH2_DIRECTION_SPEAK +
-        " Then WAIT." +
-        beginnerTurnHint()
-      );
+      return ch2ScriptCoach(CH2_DIRECTION_SPEAK, "Child picked a place");
     }
-    return (
-      "[Teacher note — do not read aloud] Chapter 2 opening. Speak ONLY: " +
-      CH2_PLACE_SPEAK +
-      " Then WAIT." +
-      beginnerTurnHint()
-    );
+    return ch2ScriptCoach(CH2_PLACE_SPEAK, "Chapter 2 opening");
   }
 
   if (ch2Search.phase === "direction") {
     if (looksLikeDirectionPick(t) || (assistantAskedDirectionQuestion(assistant) && t)) {
-      return (
-        "[Teacher note — do not read aloud] Child picked left/right. React briefly, then speak ONLY: " +
-        ch2NextEverydaySpeak() +
-        " (first chat: Is it hot outside?). Then WAIT." +
-        beginnerTurnHint()
+      return ch2ScriptCoach(
+        ch2NextEverydaySpeak() || CH2_HOT_SPEAK,
+        "Child picked left/right — first chat is hot"
       );
     }
-    return (
-      "[Teacher note — do not read aloud] Speak ONLY: " +
-      CH2_DIRECTION_SPEAK +
-      " Then WAIT." +
-      beginnerTurnHint()
-    );
+    return ch2ScriptCoach(CH2_DIRECTION_SPEAK, "Ask left/right");
   }
 
   if (ch2Search.phase === "waiting" || ch2Search.phase === "checking") {
@@ -2176,27 +2237,14 @@ function buildCh2OutboundCoach(userText) {
     if (!ch2SeeWasAsked()) {
       ch2Search.phase = "chat";
       if (!ch2HotWasAnswered()) {
-        return (
-          "[Teacher note — do not read aloud] Still on Beat 3. Speak EXACTLY: " +
-          CH2_HOT_SPEAK +
-          " Then WAIT for the child's answer. FORBIDDEN: What can you see / We found some sand." +
-          beginnerTurnHint()
-        );
+        return ch2ScriptCoach(CH2_HOT_SPEAK, "Still on Beat 3 — wait for answer");
       }
-      return (
-        "[Teacher note — do not read aloud] Free talk incomplete. Speak EXACTLY: " +
-        CH2_SEE_SPEAK +
-        " Then WAIT. FORBIDDEN: Keep looking / We found some sand / You found some sand." +
-        beginnerTurnHint()
-      );
+      return ch2ScriptCoach(CH2_SEE_SPEAK, "Ask Beat 4 — no Keep looking / found sand yet");
     }
     if (ch2FoundElicitAlreadyDelivered()) return "";
-    return (
-      "[Teacher note — do not read aloud] After What can you see around you?, speak EXACTLY: " +
-      CH2_ELICIT_FOUND_SPEAK +
-      " Then WAIT for I found some sand! (4-button). " +
-      "FORBIDDEN: Keep looking / がんばって / Take your time / ゆっくり探して / inventing new chat." +
-      beginnerTurnHint()
+    return ch2ScriptCoach(
+      CH2_ELICIT_FOUND_SPEAK,
+      "After see — no Keep looking / Take your time"
     );
   }
 
@@ -2206,39 +2254,26 @@ function buildCh2OutboundCoach(userText) {
 
     if (ch2SeeWasAsked() && ch2SeeWasAnswered() && !ch2NextEverydayItem()) {
       if (ch2FoundElicitAlreadyDelivered()) return "";
-      return (
-        "[Teacher note — do not read aloud] Beat 4 answered. ONE short reaction to what they saw, then speak EXACTLY: " +
-        CH2_ELICIT_FOUND_SPEAK +
-        " Do NOT say Keep looking / Take your time / さがして. Then WAIT for I found some sand! (4-button)." +
-        beginnerTurnHint()
+      return ch2ScriptCoach(
+        CH2_ELICIT_FOUND_SPEAK,
+        "Beat 4 answered — short react then found-sand elicit"
       );
     }
     if (ch2HotWasAsked() && !ch2HotWasAnswered()) {
-      return (
-        "[Teacher note — do not read aloud] Beat 3 is still waiting for an answer. Speak EXACTLY: " +
-        CH2_HOT_SPEAK +
-        " Then WAIT. FORBIDDEN: What can you see around you? until they answer Is it hot outside?." +
-        beginnerTurnHint()
-      );
+      return ch2ScriptCoach(CH2_HOT_SPEAK, "Beat 3 still waiting — no see yet");
     }
     const next =
       ch2HotWasAnswered() && !ch2SeeWasAsked() ? CH2_SEE_SPEAK : ch2NextEverydaySpeak();
-    const asked = ch2AskedLabels();
-    return (
-      "[Teacher note — do not read aloud] Child answered. React in ONE short phrase, then speak EXACTLY: " +
-      next +
-      ". " +
-      (asked.length ? `FORBIDDEN to repeat: ${asked.join(" / ")}. ` : "") +
-      "FORBIDDEN: Keep looking / We found some sand until AFTER What can you see around you?." +
-      beginnerTurnHint()
+    return ch2ScriptCoach(
+      next || CH2_SEE_SPEAK,
+      t ? `Child said "${t.slice(0, 24)}"` : "Child answered"
     );
   }
 
   if (assistantAskedFoundSandQuestion(assistant) && !userSaysStillSearchingSand(t)) {
-    return (
-      "[Teacher note — do not read aloud] Treat a clear found answer as FOUND. " +
-      "Elicit I found some sand! now — do NOT continue everyday chat." +
-      beginnerTurnHint()
+    return ch2ScriptCoach(
+      CH2_ELICIT_FOUND_SPEAK,
+      "Treat clear found answer as FOUND — elicit now"
     );
   }
   return "";
@@ -2539,8 +2574,8 @@ function daily1CompleteBlockedMessage() {
   }
   if (!daily1Chat.backToTankSpoken) {
     return (
-      "Daily English rallies done but bridge missing. Speak EXACTLY: " +
-      daily1BackToTankSpeak() +
+      "Daily English rallies done but bridge missing. " +
+      daily1BridgeTurnInstruction(lastPendingUserText || recentUserMessages(1)[0] || "") +
       " then call complete_segment(daily1). FORBIDDEN: skip bridge / jump to Chapter 6."
     );
   }
@@ -2613,6 +2648,23 @@ function daily1UnnaturalAssistantPatterns(assistant = lastAssistantText(), user 
     issues.push("Child already said they used to have one — do NOT ask Did you have one before? Acknowledge and ask something NEW about that (name, when, favorite memory).");
   }
 
+  // Favourite animal → "パンダ" then "Do you like pandas?" is tautological (they already answered).
+  const namedAnimal = u.match(
+    /^(犬|いぬ|猫|ねこ|うさぎ|パンダ|ぱんだ|ライオン|鳥|とり|さかな|dog|cat|rabbit|panda|lion|bird|fish|hamster|トイプードル|toypoodle)[!！.。\s]*$/i
+  );
+  if (
+    namedAnimal &&
+    /do you like|are you a .+ fan|すき[？?]|好き[？?]|すきなの|好きなの/i.test(a)
+  ) {
+    issues.push(
+      "Child already named their favourite animal (\"" +
+        namedAnimal[1] +
+        "\") — that MEANS they like it. FORBIDDEN: Do you like " +
+        namedAnimal[1] +
+        "? / すき？ Acknowledge and ask something NEW (seen one? zoo? cute? why?)."
+    );
+  }
+
   // Same animal echo + brand-new unrelated topic in one turn feels robotic.
   if (
     /\ba dog|わんちゃん|いぬ/i.test(a) &&
@@ -2649,11 +2701,15 @@ function buildDaily1NaturalTurnCoach(userText) {
     );
   }
 
-  if (/^(犬|いぬ|猫|ねこ|うさぎ|パンダ|ライオン|dog|cat|rabbit|panda|lion|bird|fish|トイプードル|toypoodle)[!！.。\s]*$/i.test(t)) {
+  if (/^(犬|いぬ|猫|ねこ|うさぎ|パンダ|ぱんだ|ライオン|鳥|とり|さかな|dog|cat|rabbit|panda|lion|bird|fish|トイプードル|toypoodle)[!！.。\s]*$/i.test(t)) {
     return (
-      "Animal (\"" +
+      "Favourite animal is \"" +
       t.slice(0, 20) +
-      "\"). Fresh reaction (not repeated A dog!), ONE pet follow-up." +
+      "\" (already answered). Warm react naming it. " +
+      "FORBIDDEN: Do you like " +
+      t.slice(0, 12) +
+      "? / すき？ — they already chose it. " +
+      "ONE NEW follow-up (seen at zoo? why cute? pet one?). " +
       issueBit
     );
   }
@@ -2681,14 +2737,11 @@ function buildDaily1OutboundCoach(userText) {
   }
 
   if (daily1ReadyForBackToTank()) {
-    const childBit = t ? `Short reaction to "${t.slice(0, 28)}", then ` : "";
     return (
       "[Teacher note — do not read aloud] " +
       daily1Chat.rallies +
       "+ rallies done. " +
-      childBit +
-      "Speak EXACTLY: " +
-      daily1BackToTankSpeak() +
+      daily1BridgeTurnInstruction(t) +
       " Finish speaking fully. FORBIDDEN this turn: complete_segment / Chapter 6."
     );
   }
@@ -2728,15 +2781,13 @@ function forceDaily1BackToTank(reason = "rallies-done", { bypassCooldown = false
   }
   daily1BridgeForceAt = Date.now();
   const lastUser = String(lastPendingUserText || recentUserMessages(1)[0] || "").trim();
-  const reactBit = lastUser ? `Short reaction to "${lastUser.slice(0, 28)}", then ` : "";
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
     ". " +
-    reactBit +
-    "Speak EXACTLY out loud NOW (finish the full line — do not only call tools): " +
-    daily1BackToTankSpeak() +
-    " FORBIDDEN this turn: complete_segment. Call complete_segment(daily1) only AFTER you finished speaking.";
+    daily1BridgeTurnInstruction(lastUser) +
+    " Speak that full turn out loud NOW (finish speaking — do not only call tools). " +
+    "FORBIDDEN this turn: complete_segment. Call complete_segment(daily1) only AFTER you finished speaking.";
   try {
     closeOpenAudioTurn();
     audioPlayer?.interrupt?.();
@@ -3067,9 +3118,9 @@ function buildCh4OutboundCoach(userText) {
         "Speak ONLY Beat A2: " +
         ch4LetsMakeSpeak(colorName) +
         " Then STOP and WAIT. " +
-        "FORBIDDEN this turn: Beat B, Tell me when you make one, MCQ buttons, I made " +
+        "FORBIDDEN this turn: What's your favorite color? / すきな いろは？ / どんな いろが すきかな？ / Beat B / Tell me when you make one / MCQ / I made " +
         colorName +
-        " glass!, [color] glass! Great job, dye/flower phrases." +
+        " glass! / dye/flower phrases." +
         beginnerTurnHint()
       );
   }
@@ -3081,7 +3132,7 @@ function buildCh4OutboundCoach(userText) {
       rememberedColor +
       ". Speak ONLY Beat A2 NOW: " +
       ch4LetsMakeSpeak(rememberedColor) +
-      " Then STOP and WAIT. FORBIDDEN: praise-only, ask favorite color again, Beat B this turn." +
+      " Then STOP and WAIT. FORBIDDEN: praise-only, ask favorite color again, どんな いろが すきかな？, Beat B this turn." +
       beginnerTurnHint()
     );
   }
@@ -3190,7 +3241,9 @@ function ch4BeatBSpeak(colorEn = loadLessonState().memories?.favoriteColor || "o
 
 function assistantCh4WrongBeatB(text = lastAssistantText()) {
   const t = String(text || "");
-  if (!/tell me when you make|let me know when you make|つくれたら/i.test(t)) return false;
+  if (!/tell me when you make|let me know when you make|when you make one|つくれたら/i.test(t)) {
+    return false;
+  }
   if (/つくれたら「[^」]*[a-zA-Z]/i.test(t)) return true;
   if (/「I made .+ glass/i.test(t)) return true;
   if (/つくれたら「/.test(t) && !/いろの\s*がらすを\s*つくった/.test(t)) return true;
@@ -3214,18 +3267,41 @@ function fixCh4BeatBBubble(text) {
 }
 
 function ch4AssistantSaidLetsMake(past = recentAssistantMessages(12).join("\n")) {
-  return /let'?s make .+ (coloured|colored) glass|いろの\s*がらすを\s*つくろう|の\s*がらすを\s*つくろう/i.test(
-    past
+  return /let'?s make .+(coloured|colored)\s+glass|(?:^|[\s!！])[\w]+\s+(coloured|colored)\s+glass|いろの\s*がらすを\s*つくろう|の\s*がらすを\s*つくろう/i.test(
+    String(past || "")
   );
 }
 
+/** Beat B unlock — Japanese elicit is the source of truth (English phrasing often drifts). */
 function ch4AssistantSaidBeatB(past = recentAssistantMessages(12).join("\n")) {
   const t = String(past || "");
-  if (assistantCh4WrongBeatB(t)) return false;
-  return (
-    /tell me when you make|let me know when you make/i.test(t) &&
-    /いろの\s*がらすを\s*つくった/.test(t) &&
-    /つくれたら「/.test(t)
+  const hasJaElicit =
+    /つくれたら「/.test(t) && /いろの\s*がらすを\s*つくった/.test(t);
+  if (!hasJaElicit) return false;
+  // Still locked if Learny put the English answer inside 「」.
+  if (/つくれたら「[^」]*[A-Za-z]/.test(t) || /「I made .+ glass/i.test(t)) return false;
+  return true;
+}
+
+/** Strip favorite-color re-asks once a color is already saved. */
+function stripCh4FavoriteColorReask(text) {
+  if (getCurrentSegment()?.id !== "ch4" || !ch4HasFavoriteColor()) {
+    return String(text || "");
+  }
+  let t = String(text || "");
+  t = t.replace(/どんな\s*いろが\s*すき(?:かな|なの)?[？?！!\s]*/g, "");
+  t = t.replace(/すきな\s*いろは[？?！!\s]*/g, "");
+  t = t.replace(/好きな\s*色は[？?！!\s]*/g, "");
+  t = t.replace(/What'?s your favou?rite colou?r\??[!.\s]*/gi, "");
+  t = t.replace(/What colou?r do you like\??[!.\s]*/gi, "");
+  t = t.replace(/What about your favou?rite colou?r\??[!.\s]*/gi, "");
+  return t.replace(/\s{2,}/g, " ").trim();
+}
+
+function ch4AssistantReaskedFavoriteColor(text = lastAssistantText()) {
+  if (!ch4HasFavoriteColor()) return false;
+  return /favorite color|favou?rite color|what color do you like|どんな\s*いろが\s*すき|すきな\s*いろは|好きな\s*色は/i.test(
+    String(text || "")
   );
 }
 
@@ -3314,6 +3390,19 @@ function maybeCh4BeatBCorrectiveNudge() {
     return;
   }
 
+  // Color already chosen but Learny asked favorite color again — force Beat A2.
+  if (ch4HasFavoriteColor() && ch4AssistantReaskedFavoriteColor(assistant)) {
+    whenAssistantIdle(() => {
+      if (getCurrentSegment()?.id !== "ch4") return;
+      if (!ch4HasFavoriteColor()) return;
+      if (ch4AssistantSaidLetsMake() && !ch4AssistantReaskedFavoriteColor(lastAssistantText())) {
+        return;
+      }
+      forceCh4LetsMake("ch4-reasked-color");
+    }, "ch4-reask-color");
+    return;
+  }
+
   // Color chosen but still stuck on praise / favorite-color — force Beat A2.
   if (ch4HasFavoriteColor() && !ch4AssistantSaidLetsMake(past)) {
     whenAssistantIdle(() => {
@@ -3331,7 +3420,7 @@ function maybeCh4BeatBCorrectiveNudge() {
   const shouldAdvanceToBeatB =
     /coloured glass|colored glass|いろの\s*がらすを\s*つくろう/i.test(assistant) ||
     assistantCh4WrongBeatB(assistant) ||
-    /tell me when you make/i.test(assistant) ||
+    /tell me when you make|when you make one/i.test(assistant) ||
     looksLikePraiseOnlyAssistant(assistant) ||
     !endsWithLeadPrompt(assistant);
 
@@ -3588,11 +3677,39 @@ function sharesPhraseTeachTarget(a, b) {
   return Boolean(ma && mb && ma === mb);
 }
 
+/** Primary English question in a Learny bubble (ignores praise prefixes). */
+function extractPrimaryEnglishQuestion(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  const hits = t.match(
+    /\b(?:(?:What|How|Where|When|Who|Why|Do|Did|Does|Are|Is|Can|Will|Shall|Have|Has)\b[^?？.!]{0,120}[?？])/gi
+  );
+  if (hits?.length) return hits[hits.length - 1].trim();
+  if (assistantAskedPlaceQuestion(t)) return "beach-or-mountains";
+  if (assistantAskedDirectionQuestion(t)) return "left-or-right";
+  if (detectCh2EverydayKey(t) === "hot") return "hot-outside";
+  if (detectCh2EverydayKey(t) === "see" || ch2AssistantSaidSeeQuestion(t)) return "see-around";
+  return "";
+}
+
+function sharesSameLeadQuestion(a, b) {
+  const qa = normalizeUserText(extractPrimaryEnglishQuestion(a));
+  const qb = normalizeUserText(extractPrimaryEnglishQuestion(b));
+  if (qa && qb && qa === qb) return true;
+  if (assistantAskedPlaceQuestion(a) && assistantAskedPlaceQuestion(b)) return true;
+  if (assistantAskedDirectionQuestion(a) && assistantAskedDirectionQuestion(b)) return true;
+  const ka = detectCh2EverydayKey(a);
+  const kb = detectCh2EverydayKey(b);
+  if (ka && ka === kb) return true;
+  return false;
+}
+
 function assistantMessagesTooSimilar(a, b) {
   const na = normalizeUserText(a);
   const nb = normalizeUserText(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
+  if (sharesSameLeadQuestion(a, b)) return true;
   if (sharesCh2FoundElicitBeat(a, b)) return true;
   if (getCurrentSegment()?.id === "ch2" && ch2AssistantSaidFoundElicit(a) && ch2AssistantSaidFoundElicit(b)) {
     return true;
@@ -3626,7 +3743,14 @@ function isLikelySameTurnContinuation(text, prevText) {
   const p = String(prevText || "").trim();
   if (!t || !p) return false;
   if (userSpokeSinceLastAssistantBubble()) return false;
+  if (sharesSameLeadQuestion(t, p)) return true;
   if (/は英語で[？?]/.test(p) && looksLikeNewAssistantReply(t)) return false;
+  // Live often splits one spoken turn into reaction + follow-up (two STT finishes).
+  if (Date.now() - lastAssistantBubbleAt < 12000) {
+    if (!endsWithLeadPrompt(p)) return true;
+    if (/[\u3040-\u309F]/.test(t) && /[a-zA-Z]/.test(p)) return true;
+    if (/[\u3040-\u309F]/.test(t) && /[\u3040-\u309F]/.test(p)) return true;
+  }
   if (/[\u3040-\u309F]/.test(t) && /[a-zA-Z]/.test(p)) return true;
   if (/[\u3040-\u309F]/.test(t) && /[\u3040-\u309F]/.test(p) && Date.now() - lastAssistantBubbleAt < 8000) {
     return true;
@@ -3637,12 +3761,14 @@ function isLikelySameTurnContinuation(text, prevText) {
 function shouldSuppressBackToBackAssistant(text) {
   const last = chatMessages[chatMessages.length - 1];
   if (last?.type !== "assistant") return false;
+  // Same turn continuation → merge in addMessage, do not drop.
   if (isLikelySameTurnContinuation(text, last.text)) return false;
   if (sharesCh2FoundElicitBeat(text, last.text)) return true;
   if (getCurrentSegment()?.id === "ch2" && ch2AssistantSaidFoundElicit(text) && ch2AssistantSaidFoundElicit(last.text)) {
     return true;
   }
   if (Date.now() - lastAssistantBubbleAt > 20000) return false;
+  if (sharesSameLeadQuestion(last.text, text)) return true;
   if (sharesPhraseTeachTarget(last.text, text)) return true;
   if (assistantMessagesTooSimilar(last.text, text)) return true;
   return false;
@@ -5908,12 +6034,46 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
     display &&
     last?.type === "assistant" &&
     !userSpokeSinceLastAssistantBubble() &&
-    (sharesCh2FoundElicitBeat(display, last.text) || assistantMessagesTooSimilar(display, last.text))
+    (sharesCh2FoundElicitBeat(display, last.text) ||
+      assistantMessagesTooSimilar(display, last.text) ||
+      isLikelySameTurnContinuation(display, last.text) ||
+      Date.now() - lastAssistantBubbleAt < 12000)
   ) {
     needNewBubble = false;
     assistantTurnTranscript = pickTranscriptChunk(String(last.text || ""), display, { finished: true });
   }
   if (needNewBubble && display) {
+    // Re-asking the same lead question after a short child reply = classic double.
+    if (
+      sharesSameLeadQuestion(lastAssistantText(), display) &&
+      Date.now() - lastAssistantBubbleAt < 25000
+    ) {
+      dbg("suppress re-asked lead question bubble", display.slice(0, 48));
+      try {
+        audioPlayer?.interrupt?.();
+        closeOpenAudioTurn();
+      } catch {
+        // ignore
+      }
+      assistantTranscriptOpen = false;
+      scheduleRenderChat();
+      updateLearnyThinkingUI();
+      return true;
+    }
+    if (
+      last?.type === "assistant" &&
+      shouldSuppressBackToBackAssistant(display)
+    ) {
+      dbg("suppress duplicate assistant STT bubble", display.slice(0, 48));
+      last.text = sanitizeAssistantBubbleText(
+        pickTranscriptChunk(String(last.text || ""), display, { finished: true })
+      );
+      assistantTurnTranscript = String(last.text || "");
+      assistantTranscriptOpen = Boolean(display);
+      scheduleRenderChat();
+      updateLearnyThinkingUI();
+      return true;
+    }
     chatMessages.push({ type: "assistant", text: display, sttEnterPending: true });
     lastAssistantBubbleAt = Date.now();
   } else if (last?.type === "assistant" && display) {
@@ -5922,6 +6082,10 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
   assistantTranscriptOpen = Boolean(display);
   scheduleRenderChat();
   updateLearnyThinkingUI();
+  // Show Ch4 MCQ as soon as Beat B elicit appears (don't wait for turn end).
+  if (getCurrentSegment()?.id === "ch4" && display && ch4AssistantSaidBeatB(display)) {
+    refreshChoiceBarIfNeeded();
+  }
   if (finished) {
     scheduleRepairIncompleteAssistantBubble();
     if (getCurrentSegment()?.id === "ch4" && ch4AssistantSaidBeatB()) {
@@ -6156,6 +6320,7 @@ function ensureJapaneseElicitBrackets(text) {
 function sanitizeAssistantBubbleText(text) {
   let t = ensureJapaneseElicitBrackets(String(text || "").trim());
   t = fixCh4BeatBBubble(t);
+  t = stripCh4FavoriteColorReask(t);
   if (getCurrentSegment()?.id === "quiz1") {
     t = trimDuplicateAssistantQuizPrompt(t);
   }
@@ -6303,6 +6468,13 @@ function addMessage(text, type, mode = "new") {
       scheduleRenderChat();
       return;
     }
+    if (
+      sharesSameLeadQuestion(lastAssistantText(), t) &&
+      Date.now() - lastAssistantBubbleAt < 25000
+    ) {
+      dbg("suppress re-asked lead question addMessage", t.slice(0, 48));
+      return;
+    }
     if (last?.type === "assistant" && sharesCh2FoundElicitBeat(t, last.text)) {
       dbg("suppress ch2 duplicate elicit bubble", t.slice(0, 48));
       return;
@@ -6324,46 +6496,59 @@ function addMessage(text, type, mode = "new") {
 
 function renderChatNow() {
   if (!chatArea) return;
+  const rows = Array.from(chatArea.querySelectorAll(":scope > .msg-row"));
+
   if (!chatMessages.length) {
-    chatArea.innerHTML = "";
+    rows.forEach((row) => row.remove());
     appendChatChrome();
     updateLearnyThinkingUI();
     return;
   }
 
-  const rows = chatArea.querySelectorAll(":scope > .msg-row");
-  if (rows.length === chatMessages.length && chatMessages.length > 0) {
-    const lastMsg = chatMessages[chatMessages.length - 1];
-    const lastRow = rows[rows.length - 1];
-    const lastBubble = lastRow?.querySelector(".msg-bubble");
-    if (
-      lastMsg.type === "assistant" &&
-      lastRow?.classList.contains("assistant") &&
-      lastBubble &&
-      lastBubble.textContent !== lastMsg.text
-    ) {
-      lastBubble.textContent = lastMsg.text;
-      appendChatChrome();
-      updateLearnyThinkingUI();
-      chatArea.scrollTop = chatArea.scrollHeight;
-      return;
-    }
+  // Shrink without wiping — full innerHTML rebuild re-fired fade animations on every bubble.
+  while (rows.length > chatMessages.length) {
+    rows.pop()?.remove();
   }
 
-  chatArea.innerHTML = "";
-  chatMessages.forEach((msg) => {
-    const row = document.createElement("div");
-    row.className = `msg-row ${msg.type}`;
-    if (msg.sttEnterPending) {
-      row.classList.add("stt-enter");
-      msg.sttEnterPending = false;
+  const insertBeforeChrome = (row) => {
+    if (learnyThinkingEl && learnyThinkingEl.parentElement === chatArea) {
+      chatArea.insertBefore(row, learnyThinkingEl);
+    } else {
+      chatArea.appendChild(row);
     }
-    const bubble = document.createElement("div");
-    bubble.className = "msg-bubble";
-    bubble.textContent = msg.text;
-    row.appendChild(bubble);
-    chatArea.appendChild(row);
+  };
+
+  chatMessages.forEach((msg, i) => {
+    let row = rows[i];
+    if (!row) {
+      row = document.createElement("div");
+      row.className = `msg-row ${msg.type}`;
+      const bubble = document.createElement("div");
+      bubble.className = "msg-bubble";
+      bubble.textContent = msg.text;
+      row.appendChild(bubble);
+      insertBeforeChrome(row);
+      rows[i] = row;
+      if (msg.type === "assistant" && msg.sttEnterPending) {
+        row.classList.add("stt-enter");
+      } else if (msg.type === "user" || msg.type === "system") {
+        row.classList.add("msg-enter");
+      }
+      msg.sttEnterPending = false;
+      return;
+    }
+
+    if (!row.classList.contains(msg.type)) {
+      row.className = `msg-row ${msg.type}`;
+    }
+    const bubble = row.querySelector(".msg-bubble");
+    if (bubble && bubble.textContent !== msg.text) {
+      bubble.textContent = msg.text;
+    }
+    // Never re-apply enter animations on existing rows (causes chat flicker).
+    msg.sttEnterPending = false;
   });
+
   appendChatChrome();
   updateLearnyThinkingUI();
   chatArea.scrollTop = chatArea.scrollHeight;
@@ -6962,8 +7147,8 @@ function segmentContinuationHint() {
   if (seg?.type === "daily_english" || seg?.id === "daily1") {
     if (daily1ReadyForBackToTank()) {
       return (
-        " Daily English: 4+ rallies done — speak EXACTLY: " +
-        daily1BackToTankSpeak() +
+        " Daily English: 4+ rallies done — " +
+        daily1BridgeTurnInstruction(lastPendingUserText || recentUserMessages(1)[0] || "") +
         " then complete_segment(daily1). FORBIDDEN: more everyday questions."
       );
     }
@@ -7877,6 +8062,7 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
     pendingReplyWatchId = null;
   }
   pendingReplyText = userText;
+  // Ch2: wait longer before forcing — early forces stacked on Gemini's real reply (= doubling).
   const delay = attempt === 0 ? REPLY_WATCH_MS : REPLY_WATCH_RETRY_MS;
   pendingReplyWatchId = setTimeout(() => {
     pendingReplyWatchId = null;
@@ -7923,6 +8109,25 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
               });
             } else {
               forceDaily1Continue("voice-reply-watch");
+            }
+            userTurnSentViaClientText = true;
+            armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+            return;
+          }
+          if (getCurrentSegment()?.id === "ch2") {
+            const next = ch2RecoverSpeakLine(userText);
+            if (
+              (ch2Search.phase === "checking" || ch2SeeWasAnswered()) &&
+              !ch2FoundElicitAlreadyDelivered()
+            ) {
+              forceCh2FoundSandElicit("voice-reply-watch");
+            } else {
+              const placeAlreadyAsked = assistantAskedPlaceQuestion(
+                recentAssistantMessages(8).join("\n")
+              );
+              if (!(next === CH2_PLACE_SPEAK && placeAlreadyAsked)) {
+                forceCh2ScriptLine(next, "voice-reply-watch");
+              }
             }
             userTurnSentViaClientText = true;
             armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
@@ -8002,8 +8207,10 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
             sendClientText(
               withBeginnerSpeakRule(
                 formatTeacherNote(
-                  "[Teacher note — do not read aloud] Reply out loud NOW: short reaction + " +
-                    daily1BackToTankSpeak() +
+                  "[Teacher note — do not read aloud] Reply out loud NOW: " +
+                    daily1BridgeTurnInstruction(
+                      lastPendingUserText || recentUserMessages(1)[0] || ""
+                    ) +
                     " Finish speaking. Do not call complete_segment this turn."
                 )
               ),
@@ -8012,6 +8219,37 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
           }
         } else {
           forceDaily1Continue("reply-watch");
+        }
+        if (attempt + 1 < REPLY_WATCH_MAX) {
+          armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
+        } else {
+          awaitingAssistantReply = false;
+          pendingReplyText = "";
+          updateLearnyThinkingUI();
+        }
+        return;
+      }
+      if (getCurrentSegment()?.id === "ch2") {
+        // First miss: only close the audio turn. Forcing a script line too early
+        // stacks on Gemini's in-flight reply and doubles Learny's question.
+        if (attempt === 0) {
+          closeOpenAudioTurn();
+          armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
+          return;
+        }
+        const next = ch2RecoverSpeakLine(userText);
+        if (
+          (ch2Search.phase === "checking" || ch2SeeWasAnswered()) &&
+          !ch2FoundElicitAlreadyDelivered()
+        ) {
+          forceCh2FoundSandElicit("reply-watch");
+        } else {
+          const placeAlreadyAsked = assistantAskedPlaceQuestion(
+            recentAssistantMessages(8).join("\n")
+          );
+          if (!(next === CH2_PLACE_SPEAK && placeAlreadyAsked)) {
+            forceCh2ScriptLine(next, "reply-watch");
+          }
         }
         if (attempt + 1 < REPLY_WATCH_MAX) {
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
@@ -8312,8 +8550,9 @@ function sendUserText(text) {
     !ending1FinaleComplete();
   const endingClientOwnedTurn = endingFishAnswerTurn || endingFinaleAnswerTurn;
 
-  // Daily English: keep coach payload short — long notes stall Live replies.
-  const maxCoach = getCurrentSegment()?.id === "daily1" ? 260 : 420;
+  // Daily English / Ch2: keep coach payload short — long notes stall Live replies.
+  const segId = getCurrentSegment()?.id;
+  const maxCoach = segId === "daily1" || segId === "ch2" ? 220 : 420;
   const outbound =
     handoffNow || endingClientOwnedTurn
       ? ""
@@ -8363,20 +8602,20 @@ function sendUserText(text) {
         sendClientText(withBeginnerSpeakRule(outbound), { force: true })
       );
     };
-    // prepareForUserOutbound() already interrupted playback — send immediately.
-    // Do NOT stack a second forceDaily1BackToTank here; reply-watch handles bridge recovery.
-    if (assistantIsSpeaking()) {
-      whenAssistantIdle(sendNow, "typed-send");
-      setTimeout(() => {
-        if (userTurnSentViaClientText) return;
-        if (actionState !== "active" || !client?.connected) return;
-        if (!outbound.trim()) return;
-        dbg("typed-send safety flush");
-        sendNow();
-      }, 2500);
-    } else {
+  // prepareForUserOutbound() already interrupted playback — send immediately.
+  // Cap wait so a stuck playback clock cannot leave the child on 考え中.
+  if (assistantIsSpeaking()) {
+    whenAssistantIdle(sendNow, "typed-send");
+    setTimeout(() => {
+      if (userTurnSentViaClientText) return;
+      if (actionState !== "active" || !client?.connected) return;
+      if (!outbound.trim()) return;
+      dbg("typed-send safety flush");
       sendNow();
-    }
+    }, 1200);
+  } else {
+    sendNow();
+  }
   }
 }
 

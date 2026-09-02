@@ -37,6 +37,20 @@ export function daily1BackToTankSpeak() {
   return "Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！";
 }
 
+/** Closing Daily English turn: react to their last words, then the exact bridge. */
+export function daily1BridgeTurnInstruction(userText = "") {
+  const t = String(userText || "").trim();
+  const quote = t ? `"${t.slice(0, 40)}"` : "their last words";
+  return (
+    "ONE turn REQUIRED shape: (1) FIRST a short specific reaction that names what they just said (" +
+    quote +
+    ") — e.g. Bamboo! / たけ！ / ふわふわ！ — NOT bare Nice alone; " +
+    "(2) THEN in the SAME turn speak EXACTLY: " +
+    daily1BackToTankSpeak() +
+    " FORBIDDEN: starting with / only saying the back-to-tank line with no reaction to their last words."
+  );
+}
+
 export function final1OpenSpeak() {
   return "Final challenge time! Let's go! さいごのチャレンジだよ！レッツゴー！";
 }
@@ -649,14 +663,17 @@ function daily1Rule() {
     "EACH TURN: (1) react specifically to WHAT THEY JUST SAID (name their words), (2) ONE follow-up about THAT same topic, (3) WAIT.",
     "Stay on their topic for 1–2 turns before changing topic. Soft bridge when you switch (e.g. Nice! By the way…).",
     "FORBIDDEN: starting every turn with the same echo (A dog! / いぬ！) after you already reacted that way.",
-    "FORBIDDEN: asking something they already answered (e.g. Did you have one before? right after 飼ってたよ / I used to).",
+    "FORBIDDEN: asking something they already answered (e.g. Did you have one before? right after 飼ってたよ / I used to; " +
+      "Do you like pandas? / パンダは すき？ right after they named パンダ as their favourite animal).",
+    "After they name an animal: react + ask something NEW (seen one? zoo? why cute?) — NEVER Do you like [that animal]?",
     "FORBIDDEN: abrupt random jumps (dog → video games) with no link to their last line.",
     "If they only say うん/yes: warm ack + ONE gentle follow-up on the SAME topic (help them say a little more) — do NOT leap to a brand-new topic yet.",
     "FORBIDDEN forever: Are you tired? / つかれた？ / What's your favorite color? / すきな いろは？ — color was already chosen in Chapter 4 (favoriteColor).",
     "FORBIDDEN: stopping after Nice / That's right / そうだね with no next question before 4 rallies.",
     "FORBIDDEN: back to the tank before 4 rallies.",
-    "After 4+ rallies, ONE turn: short reaction to their last words, then Speak EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
-      "Finish speaking that full turn before tools. Then call complete_segment(daily1). " +
+    "After 4+ rallies, " +
+      daily1BridgeTurnInstruction() +
+      " Finish speaking that full turn before tools. Then call complete_segment(daily1). " +
       "FORBIDDEN: complete_segment(daily1) before 4 rallies or before the back-to-tank bridge line. Next is Chapter 6 sand.",
     "Never go silent after praise — always lead to the next question or the back-to-tank bridge.",
   ].join(" ");
@@ -664,7 +681,6 @@ function daily1Rule() {
 
 function daily1StartNudge() {
   const open = daily1OpenSpeak();
-  const back = daily1BackToTankSpeak();
   return (
     "[Teacher note — do not read aloud] DAILY ENGLISH start NOW. " +
     "Speak EXACTLY (no intro): " +
@@ -674,7 +690,7 @@ function daily1StartNudge() {
     "Continue 4+ NATURAL chat rallies: react to their exact words, stay on topic 1–2 turns, ONE new question per turn. " +
     "FORBIDDEN: repeating A dog! every turn / re-asking answered facts / abrupt topic jumps / Are you tired? / favorite color (Ch4). " +
     "After 4+ rallies ONLY: " +
-    back +
+    daily1BridgeTurnInstruction() +
     " then complete_segment(daily1)."
   );
 }

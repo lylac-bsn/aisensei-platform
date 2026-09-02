@@ -23,6 +23,90 @@ const PANEL_LABELS = {
 
 let activeLessonId = "part1";
 
+/** In-app confirm (replaces window.confirm) — matches .learny-confirm-* styles. */
+function showLearnyConfirm({
+  title = "確認",
+  message = "",
+  note = "",
+  confirmLabel = "OK",
+  cancelLabel = "キャンセル",
+} = {}) {
+  return new Promise((resolve) => {
+    let overlay = document.getElementById("learny-confirm-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "learny-confirm-overlay";
+      overlay.className = "learny-confirm-overlay";
+      overlay.setAttribute("role", "presentation");
+      overlay.innerHTML = `
+        <div class="learny-confirm-card" role="dialog" aria-modal="true" aria-labelledby="learny-confirm-title" aria-describedby="learny-confirm-msg">
+          <div class="learny-confirm-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7"/>
+              <polyline points="3 4 3 9 8 9"/>
+            </svg>
+          </div>
+          <h2 id="learny-confirm-title"></h2>
+          <p id="learny-confirm-msg"></p>
+          <div class="learny-confirm-note" id="learny-confirm-note" hidden></div>
+          <div class="learny-confirm-actions">
+            <button type="button" class="learny-confirm-btn confirm" data-learny-confirm="ok"></button>
+            <button type="button" class="learny-confirm-btn cancel" data-learny-confirm="cancel"></button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+
+    const titleEl = overlay.querySelector("#learny-confirm-title");
+    const msgEl = overlay.querySelector("#learny-confirm-msg");
+    const noteEl = overlay.querySelector("#learny-confirm-note");
+    const okBtn = overlay.querySelector('[data-learny-confirm="ok"]');
+    const cancelBtn = overlay.querySelector('[data-learny-confirm="cancel"]');
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.textContent = confirmLabel;
+    cancelBtn.textContent = cancelLabel;
+    if (note) {
+      noteEl.hidden = false;
+      noteEl.textContent = note;
+    } else {
+      noteEl.hidden = true;
+      noteEl.textContent = "";
+    }
+
+    const finish = (value) => {
+      overlay.classList.remove("active");
+      overlay.setAttribute("aria-hidden", "true");
+      document.removeEventListener("keydown", onKey);
+      overlay.removeEventListener("click", onOverlayClick);
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      resolve(value);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onOverlayClick = (e) => {
+      if (e.target === overlay) finish(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    };
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlayClick);
+    document.addEventListener("keydown", onKey);
+
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => cancelBtn.focus());
+  });
+}
+
 export function setActiveHomeworkLesson(lessonId) {
   activeLessonId = lessonId === "part2" ? "part2" : "part1";
   refreshDashboardChrome();
@@ -206,11 +290,20 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   panelClose?.addEventListener("click", closePanel);
   backdrop?.addEventListener("click", closePanel);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && activePanel) closePanel();
+    if (e.key !== "Escape" || !activePanel) return;
+    if (document.getElementById("learny-confirm-overlay")?.classList.contains("active")) return;
+    closePanel();
   });
 
-  startOverBtn?.addEventListener("click", () => {
-    if (!confirm("この Part の宿題を最初からやり直しますか？")) return;
+  startOverBtn?.addEventListener("click", async () => {
+    const ok = await showLearnyConfirm({
+      title: "最初からやり直す？",
+      message: "この Part の宿題を最初からやり直しますか？",
+      note: "いままでの進度はリセットされます",
+      confirmLabel: "最初からやり直す",
+      cancelLabel: "やめる",
+    });
+    if (!ok) return;
     resetLesson(activeLessonId, levelId());
     refreshDashboardChrome();
     window.dispatchEvent(new CustomEvent("learny-progress-changed"));

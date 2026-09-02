@@ -385,8 +385,9 @@ export const AQUARIUM_PART1 = {
         "stay on their topic 1–2 turns, ask ONE follow-up about THAT, then WAIT. " +
         "FORBIDDEN: re-asking facts they already answered; abrupt topic jumps (dog→games) with no bridge. " +
         "FORBIDDEN: favorite color / すきな いろ — already chosen in Chapter 4 (favoriteColor). " +
-        "Then ONE turn: short reaction to their last words + EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
-        "Finish speaking before complete_segment(daily1). " +
+        "Then ONE turn: FIRST short specific reaction naming their last words (NOT bare Nice), " +
+        "THEN EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
+        "FORBIDDEN: bridge line alone with no reaction. Finish speaking before complete_segment(daily1). " +
         "FORBIDDEN: Are you tired? / つかれた？",
     },
     {
@@ -543,7 +544,7 @@ export const AQUARIUM_PART1 = {
           promptJa: "赤いガラスを作った！は英語で？",
           promptHira: "あかい がらすを つくった！は えいごで？",
           answer: "I made red glass.",
-          patterns: ["i made red glass", "made red glass", "i made", "glass"],
+          patterns: ["i made red glass", "made red glass", "red glass"],
           choices: ["I made red glass.", "I need a dye.", "I made glass!", "I need water."],
         },
       ],
