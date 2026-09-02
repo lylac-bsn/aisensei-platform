@@ -382,26 +382,19 @@ function buildMidChapterResumeNudge(state = loadLessonState()) {
       return (
         "[Teacher note — do not read aloud] Resume mid-Chapter 4. Color is " +
         color +
-        ". Speak Beat B then WAIT for MCQ: " +
-        ch4BeatBSpeak(color) +
-        beginnerTurnHint()
-      );
-    }
-    if (ch4AssistantSaidLetsMake()) {
-      return (
-        "[Teacher note — do not read aloud] Resume mid-Chapter 4. Color is " +
-        color +
-        ". Speak ONLY Beat B NOW: " +
-        ch4BeatBSpeak(color) +
+        ". Re-speak make+tell if needed, then WAIT for MCQ: " +
+        ch4CombinedMakeAndTellSpeak(color) +
         beginnerTurnHint()
       );
     }
     return (
       "[Teacher note — do not read aloud] Resume mid-Chapter 4. favoriteColor is " +
       color +
-      ". Speak ONLY Beat A2 then WAIT: " +
-      ch4LetsMakeSpeak(color) +
-      " FORBIDDEN: ask favorite color again." +
+      ". Speak EXACTLY (Beat A2+B combined), then WAIT for MCQ: " +
+      ch4CombinedMakeAndTellSpeak(color) +
+      " FORBIDDEN: ask favorite color again / walls / say I made " +
+      color +
+      " glass yourself." +
       beginnerTurnHint()
     );
   }
@@ -1894,7 +1887,10 @@ function buildFinal1OutboundCoach(userText) {
   if (!matchesFinal1Answer(t, item)) {
     return (
       "[Teacher note — do not read aloud] Final1 soft retry — wrong answer for current cue. " +
-      "Do NOT reveal the answer. Ask the SAME cue ONCE more: " +
+      "Speak EXACTLY this soft retry (EN then JP), then ask the SAME cue ONCE more. " +
+      "Do NOT reveal the answer. Say: " +
+      MCQ_RETRY_SPEAK +
+      " Then cue: " +
       cue +
       beginnerTurnHint()
     );
@@ -1948,6 +1944,24 @@ function handleFinal1ChoiceClick(label) {
   lastPendingUserText = label;
 
   const correct = matchesFinal1Answer(label, item);
+  const choices = final1ChoiceLabels(item);
+  const event = recordMcqAttempt({
+    segmentId: "final1",
+    beatId: item.id || final1ItemKey(item) || "final1-item",
+    learnyPrompt: item.promptHira || item.promptJa || item.promptEn || "",
+    choice: label,
+    correct,
+    choices,
+    answer: formatChoiceLabel(item.answer || ""),
+  });
+  try {
+    event.level = getActiveLevelId();
+  } catch {
+    // ignore
+  }
+  notifyMcqActivity(event);
+  notifyParentProgress();
+
   const coach = buildFinal1OutboundCoach(label);
 
   if (correct) {
@@ -1955,13 +1969,16 @@ function handleFinal1ChoiceClick(label) {
   }
 
   const quizDone = correct && !getCurrentFinal1Item();
-  dispatchChildTurn(label, coach || (correct ? "Brief praise, next Final1 cue." : "Soft retry, same cue."));
+  dispatchChildTurn(label, coach || (correct ? "Brief praise, next Final1 cue." : buildMcqWrongRetryCoach()));
 
   if (quizDone) {
     maybeCompleteFinal1FromClient(label);
   }
 
   renderChoiceBar(getCurrentSegment());
+  if (!correct) {
+    flashMcqIncorrectFeedback(label);
+  }
 }
 
 function tryRouteFinal1Answer(text) {
@@ -3110,68 +3127,52 @@ function buildCh4OutboundCoach(userText) {
   if ((colorFromUser || looksLikeColorAnswer(t)) && !saidLetsMake) {
     maybeSaveCh4FavoriteColor(t);
     return (
-        "[Teacher note — do not read aloud] Child named a color (" +
-        colorName +
-        "). Call record_memory(favoriteColor, " +
-        colorName +
-        ") if not saved. " +
-        "Speak ONLY Beat A2: " +
-        ch4LetsMakeSpeak(colorName) +
-        " Then STOP and WAIT. " +
-        "FORBIDDEN this turn: What's your favorite color? / すきな いろは？ / どんな いろが すきかな？ / Beat B / Tell me when you make one / MCQ / I made " +
-        colorName +
-        " glass! / dye/flower phrases." +
-        beginnerTurnHint()
-      );
-  }
-
-  // Color already saved (reconnect / praise-loop recovery) — still force Beat A2.
-  if (rememberedColor && !saidLetsMake) {
-    return (
-      "[Teacher note — do not read aloud] favoriteColor is " +
-      rememberedColor +
-      ". Speak ONLY Beat A2 NOW: " +
-      ch4LetsMakeSpeak(rememberedColor) +
-      " Then STOP and WAIT. FORBIDDEN: praise-only, ask favorite color again, どんな いろが すきかな？, Beat B this turn." +
+      "[Teacher note — do not read aloud] Child named a color (" +
+      colorName +
+      "). Call record_memory(favoriteColor, " +
+      colorName +
+      ") if not saved. " +
+      "Speak EXACTLY Beat A2+B COMBINED in ONE turn, then STOP and WAIT for the 4-button MCQ: " +
+      ch4CombinedMakeAndTellSpeak(colorName) +
+      " FORBIDDEN this turn: What's your favorite color? / すきな いろは？ / split into two turns / walls / " +
+      "say I made " +
+      colorName +
+      " glass yourself / complete_segment(ch4)." +
       beginnerTurnHint()
     );
   }
 
-  if (saidLetsMake && !askedLetMeKnowMake) {
+  // Color already saved (reconnect / praise-loop recovery) — force combined make+tell.
+  if (rememberedColor && !askedLetMeKnowMake) {
     return (
-      "[Teacher note — do not read aloud] Beat A2 is done. Speak ONLY Beat B NOW: " +
-      ch4BeatBSpeak(colorName) +
-      " Then WAIT for 4-button tap. " +
-      "FORBIDDEN: English inside 「」 (NOT 「I made " +
-      colorName +
-      " glass!」). Japanese ONLY: " +
-      ch4BeatBJaLine(colorName) +
-      ". FORBIDDEN: repeat favorite color, repeat Let's make, Did you make one?, say I made " +
-      colorName +
-      " glass yourself." +
+      "[Teacher note — do not read aloud] favoriteColor is " +
+      rememberedColor +
+      ". Speak EXACTLY Beat A2+B COMBINED NOW, then WAIT for MCQ: " +
+      ch4CombinedMakeAndTellSpeak(rememberedColor) +
+      " FORBIDDEN: praise-only, ask favorite color again, walls, complete_segment(ch4)." +
       beginnerTurnHint()
     );
   }
 
   if (saidLetsMake && askedLetMeKnowMake) {
     return (
-      "[Teacher note — do not read aloud] Child is done making coloured glass (or Beat B already spoken). " +
-      "Repeat Beat B if needed: " +
+      "[Teacher note — do not read aloud] Make+tell elicit already spoken. WAIT for I made " +
+      colorName +
+      " glass! on the buttons. " +
+      "If child is stuck, gently repeat: " +
       ch4BeatBSpeak(colorName) +
       " FORBIDDEN: English inside 「」 — use " +
       ch4BeatBJaLine(colorName) +
-      " only. Then WAIT for I made " +
-      colorName +
-      " glass! on the buttons. " +
-      "FORBIDDEN: say the English answer yourself. FORBIDDEN: walls." +
+      " only. FORBIDDEN: say the English answer yourself. FORBIDDEN: walls / complete_segment without the phrase." +
       beginnerTurnHint()
     );
   }
 
   return (
-    "[Teacher note — do not read aloud] Chapter 4: keep leading — favorite color → Let's make [color] coloured glass! → " +
-    "Tell me when you make one! つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ → I made [color] glass! MCQ. " +
-    "FORBIDDEN: Did you make one?, I need a dye, I found a flower, walls." +
+    "[Teacher note — do not read aloud] Chapter 4: favorite color → ONE combined make+tell line → I made [color] glass! MCQ. " +
+    "Combined line: " +
+    ch4CombinedMakeAndTellSpeak(colorName === "that" ? "orange" : colorName) +
+    " FORBIDDEN: Did you make one?, I need a dye, walls, finishing Ch4 on color alone." +
     beginnerTurnHint()
   );
 }
@@ -3246,7 +3247,7 @@ function assistantCh4WrongBeatB(text = lastAssistantText()) {
   }
   if (/つくれたら「[^」]*[a-zA-Z]/i.test(t)) return true;
   if (/「I made .+ glass/i.test(t)) return true;
-  if (/つくれたら「/.test(t) && !/いろの\s*がらすを\s*つくった/.test(t)) return true;
+  if (/つくれたら「/.test(t) && !/いろの\s*(?:がらす|ガラス)を\s*つくった/.test(t)) return true;
   return false;
 }
 
@@ -3267,16 +3268,16 @@ function fixCh4BeatBBubble(text) {
 }
 
 function ch4AssistantSaidLetsMake(past = recentAssistantMessages(12).join("\n")) {
-  return /let'?s make .+(coloured|colored)\s+glass|(?:^|[\s!！])[\w]+\s+(coloured|colored)\s+glass|いろの\s*がらすを\s*つくろう|の\s*がらすを\s*つくろう/i.test(
+  return /let'?s make .+(coloured|colored)\s+glass|(?:^|[\s!！])[\w]+\s+(coloured|colored)\s+glass|いろの\s*(?:がらす|ガラス)を\s*つくろう|の\s*(?:がらす|ガラス)を\s*つくろう/i.test(
     String(past || "")
   );
 }
 
-/** Beat B unlock — Japanese elicit is the source of truth (English phrasing often drifts). */
+/** Combined make+tell unlock — Japanese elicit is the source of truth (English phrasing often drifts). */
 function ch4AssistantSaidBeatB(past = recentAssistantMessages(12).join("\n")) {
   const t = String(past || "");
   const hasJaElicit =
-    /つくれたら「/.test(t) && /いろの\s*がらすを\s*つくった/.test(t);
+    /つくれたら「/.test(t) && /いろの\s*(?:がらす|ガラス)を\s*つくった/.test(t);
   if (!hasJaElicit) return false;
   // Still locked if Learny put the English answer inside 「」.
   if (/つくれたら「[^」]*[A-Za-z]/.test(t) || /「I made .+ glass/i.test(t)) return false;
@@ -3327,17 +3328,18 @@ function forceCh4LetsMake(reason = "stuck-after-color") {
   if (getCurrentSegment()?.id !== "ch4") return false;
   if (!client?.connected || actionState !== "active") return false;
   const color = loadLessonState()?.memories?.favoriteColor || "orange";
-  if (ch4AssistantSaidLetsMake()) return false;
+  if (ch4AssistantSaidBeatB()) return false;
   if (ch4LetsMakeForceAt && Date.now() - ch4LetsMakeForceAt < 10000) return false;
   ch4LetsMakeForceAt = Date.now();
+  ch4BeatBForceAt = Date.now();
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". Speak EXACTLY ONE turn then WAIT: " +
-    ch4LetsMakeSpeak(color) +
-    " FORBIDDEN: praise-only, favorite color again, Beat B, Tell me when you make one, I made " +
+    ". Speak EXACTLY Beat A2+B COMBINED (one turn), then WAIT for MCQ: " +
+    ch4CombinedMakeAndTellSpeak(color) +
+    " FORBIDDEN: praise-only, favorite color again, walls, say I made " +
     color +
-    " glass!." +
+    " glass yourself, complete_segment(ch4)." +
     beginnerTurnHint();
   try {
     closeOpenAudioTurn();
@@ -3345,40 +3347,16 @@ function forceCh4LetsMake(reason = "stuck-after-color") {
   } catch {
     // ignore
   }
-  dbg("force ch4 lets-make", reason);
+  dbg("force ch4 make+tell", reason);
   return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function forceCh4BeatB(reason = "wrong-elicit") {
-  if (getCurrentSegment()?.id !== "ch4") return false;
-  if (!client?.connected || actionState !== "active") return false;
-  const color = loadLessonState()?.memories?.favoriteColor || "orange";
-  if (ch4AssistantSaidBeatB(lastAssistantText()) || ch4AssistantSaidBeatB()) return false;
-  if (ch4BeatBForceAt && Date.now() - ch4BeatBForceAt < 10000) return false;
-  ch4BeatBForceAt = Date.now();
-  patchLastAssistantCh4BeatBIfWrong();
-  const note =
-    "[Teacher note — do not read aloud] " +
-    reason +
-    ". Speak EXACTLY ONE turn: " +
-    ch4BeatBSpeak(color) +
-    " FORBIDDEN: English inside 「」 — NOT 「I made " +
-    color +
-    " glass!」. Japanese ONLY inside 「」: " +
-    ch4BeatBJaLine(color) +
-    " Then WAIT for 4-button tap." +
-    beginnerTurnHint();
-  try {
-    closeOpenAudioTurn();
-    audioPlayer?.interrupt?.();
-  } catch {
-    // ignore
-  }
-  dbg("force ch4 beat B", reason);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+  // Combined flow: if elicit incomplete, re-speak the full make+tell line.
+  return forceCh4LetsMake(reason || "force-beat-b");
 }
 
-/** Unstick Ch4: color saved → Let's make → Beat B + MCQ (Learny often praise-loops). */
+/** Unstick Ch4: color saved → combined make+tell + MCQ (Learny often praise-loops). */
 function maybeCh4BeatBCorrectiveNudge() {
   if (getCurrentSegment()?.id !== "ch4") return;
   const assistant = lastAssistantText();
@@ -3390,56 +3368,50 @@ function maybeCh4BeatBCorrectiveNudge() {
     return;
   }
 
-  // Color already chosen but Learny asked favorite color again — force Beat A2.
+  // Color already chosen but Learny asked favorite color again — force make+tell.
   if (ch4HasFavoriteColor() && ch4AssistantReaskedFavoriteColor(assistant)) {
     whenAssistantIdle(() => {
       if (getCurrentSegment()?.id !== "ch4") return;
       if (!ch4HasFavoriteColor()) return;
-      if (ch4AssistantSaidLetsMake() && !ch4AssistantReaskedFavoriteColor(lastAssistantText())) {
-        return;
-      }
+      if (ch4AssistantSaidBeatB()) return;
       forceCh4LetsMake("ch4-reasked-color");
     }, "ch4-reask-color");
     return;
   }
 
-  // Color chosen but still stuck on praise / favorite-color — force Beat A2.
-  if (ch4HasFavoriteColor() && !ch4AssistantSaidLetsMake(past)) {
+  // Color chosen but still missing つくれたら elicit — force combined line.
+  if (ch4HasFavoriteColor() && !ch4AssistantSaidBeatB(past)) {
     whenAssistantIdle(() => {
       if (getCurrentSegment()?.id !== "ch4") return;
-      if (ch4AssistantSaidLetsMake()) return;
+      if (ch4AssistantSaidBeatB()) {
+        refreshChoiceBarIfNeeded();
+        return;
+      }
       if (!ch4HasFavoriteColor()) return;
       forceCh4LetsMake("ch4-stuck-after-color");
-    }, "ch4-lets-make");
-    return;
+    }, "ch4-make-tell");
   }
-
-  if (!ch4AssistantSaidLetsMake(past)) return;
-
-  // After Beat A2 finishes speaking, advance to Beat B (separate turn; don't wait forever).
-  const shouldAdvanceToBeatB =
-    /coloured glass|colored glass|いろの\s*がらすを\s*つくろう/i.test(assistant) ||
-    assistantCh4WrongBeatB(assistant) ||
-    /tell me when you make|when you make one/i.test(assistant) ||
-    looksLikePraiseOnlyAssistant(assistant) ||
-    !endsWithLeadPrompt(assistant);
-
-  if (!shouldAdvanceToBeatB) return;
-  patchLastAssistantCh4BeatBIfWrong();
-  whenAssistantIdle(() => {
-    if (getCurrentSegment()?.id !== "ch4") return;
-    if (ch4AssistantSaidBeatB()) {
-      refreshChoiceBarIfNeeded();
-      return;
-    }
-    forceCh4BeatB("ch4-advance-beat-b");
-  }, "ch4-beat-b");
 }
 
 function ch4LetsMakeSpeak(colorEn) {
   const color = String(colorEn || "orange").trim();
   const ja = colorToJaLabel(color) + "いろの がらすを つくろう！";
   return "Let's make " + color + " coloured glass! " + ja;
+}
+
+/** Beat A2 + Beat B in one turn (easier for kids). */
+function ch4CombinedMakeAndTellSpeak(colorEn) {
+  const color = String(colorEn || "orange").trim();
+  const colorJa = colorToJaLabel(color);
+  return (
+    "Let's make " +
+    color +
+    " coloured glass! Tell me when you make one! " +
+    colorJa +
+    "いろの がらすを つくろう！つくれたら「" +
+    colorJa +
+    "いろの がらすを つくった！」って えいごで おしえてね！"
+  );
 }
 
 function maybeSaveCh4FavoriteColor(userText) {
@@ -3456,13 +3428,26 @@ function looksLikeColorAnswer(text) {
 }
 
 function userHasMadeColorGlassPhrase(text = "") {
-  const check = (t) => /\bi made\b.+\bglass\b|\bmade\b.+\bglass\b/i.test(String(t || ""));
+  const check = (t) => {
+    const s = String(t || "").trim();
+    if (!s) return false;
+    // Reject bare Chapter 3 "I made glass!" — need a color/word before glass.
+    if (/^\s*i made\s+glass\b/i.test(s) || /\bi made\s+glass\s*[!.]?\s*$/i.test(s)) {
+      return false;
+    }
+    // I made orange glass! / I made red coloured glass!
+    return /\bi made\s+(?:a\s+|some\s+)?[\w-]+(?:\s+(?:coloured|colored|[\w-]+)){0,2}\s+glass\b/i.test(s);
+  };
   if (check(text)) return true;
   return recentUserMessages().some(check);
 }
 
 function canFinishCh4Part1(userText = "") {
-  return userHasMadeColorGlassPhrase(userText);
+  // Never auto-finish on color alone, and never on Ch3's "I made glass!".
+  if (!ch4HasFavoriteColor()) return false;
+  if (!ch4AssistantSaidBeatB()) return false;
+  if (userHasMadeColorGlassPhrase(userText)) return true;
+  return recentUserMessages().some((t) => userHasMadeColorGlassPhrase(t));
 }
 
 function userSaysStillSearchingSand(text) {
@@ -3943,7 +3928,7 @@ function maybeCh1DoneLoopNudge() {
   whenAssistantIdle(() => {
     const note =
       "[Teacher note — do not read aloud] STOP. Chapter 1 is already done. " +
-      "Do NOT ask To make glass… what do we need? or 「すなが ひつよう」って えいごで / Can you say I need sand? again. " +
+      "Do NOT ask To make glass… what do we need? or 「すなが ひつよう」の えいごを 選んでね！ / Can you say I need sand? again. " +
       "Speak EXACTLY Chapter 2 opening NOW: " +
       CH2_PLACE_SPEAK +
       " Then WAIT." +
@@ -4397,12 +4382,12 @@ function buildCh1CoachNote(userText, { postTurn = false } = {}) {
   if (!userHasNeedGlassPhrase()) {
     const glassCtx = userSaidGlassAnswer(user) || recentUserMessages(4).some(userSaidGlassAnswer);
     if (looksLikeCh1PutGlassPhrase(user)) {
-      return "WRONG phrase for Chapter 1. Child said I put glass here — that is later. Redirect ONCE: Nice try! 「がらすが ひつよう」って えいごで いってみて！ FORBIDDEN: ask put-glass again.";
+      return "WRONG phrase for Chapter 1. Child said I put glass here — that is later. Redirect ONCE: Nice try! 「がらすが ひつよう」の えいごを 選んでね！ FORBIDDEN: ask put-glass again.";
     }
     if (glassCtx) {
       if (postTurn) {
         if (looksLikeCh1WrongThankYou(assistant, user)) {
-          return "No Thank you — praise ガラス, then 「がらすが ひつよう」って えいごで いってみて！ ONCE, then wait.";
+          return "No Thank you — praise ガラス, then 「がらすが ひつよう」の えいごを 選んでね！ ONCE, then wait.";
         }
         if (
           looksLikeCh1WrongGlassQuestion(assistant) ||
@@ -4410,7 +4395,7 @@ function buildCh1CoachNote(userText, { postTurn = false } = {}) {
           (/that'?s right/i.test(assistant) &&
             !/\b(i need glass|can you say it in english|がらすが\s*ひつよう|ガラスが必要)/i.test(assistant))
         ) {
-          return "After ガラス: ONE message — praise, then 「がらすが ひつよう」って えいごで いってみて！ ONCE. Do NOT say Can you say, I need glass. FORBIDDEN: I put glass here, 置きたい, sand, making-glass question.";
+          return "After ガラス: ONE message — praise, then 「がらすが ひつよう」の えいごを 選んでね！ ONCE. Do NOT say Can you say, I need glass. FORBIDDEN: I put glass here, 置きたい, sand, making-glass question.";
         }
         if (
           /\bcan you say it in english|がらすが\s*ひつよう|ガラスが必要|「I need glass」|can you say.*i need glass/i.test(
@@ -4421,12 +4406,12 @@ function buildCh1CoachNote(userText, { postTurn = false } = {}) {
           return "";
         }
       } else {
-        return "Child said ガラス/glass (Step 1). Speak ONE short reply out loud now: praise + Can you say it in English? / 「がらすが ひつよう」って えいごで いってみて！ Say each part ONCE — do NOT say the English answer I need glass aloud. NEVER I put glass here / 置きたい.";
+        return "Child said ガラス/glass (Step 1). Speak ONE short reply out loud now: praise + Can you say it in English? / 「がらすが ひつよう」の えいごを 選んでね！ Say each part ONCE — do NOT say the English answer I need glass aloud. NEVER I put glass here / 置きたい.";
       }
     } else if (userSaidCh1Confused(user)) {
       return postTurn
-        ? "Child confused — clarify tank needs glass, then 「がらすが ひつよう」って えいごで いってみて！ ONCE. No sand yet. No I put glass here."
-        : "Child confused at Step 1 — ONE short clarify + 「がらすが ひつよう」って えいごで いってみて！ ONCE. No sand. No I put glass here.";
+        ? "Child confused — clarify tank needs glass, then 「がらすが ひつよう」の えいごを 選んでね！ ONCE. No sand yet. No I put glass here."
+        : "Child confused at Step 1 — ONE short clarify + 「がらすが ひつよう」の えいごを 選んでね！ ONCE. No sand. No I put glass here.";
     }
   } else if (!userHasNeedSandPhrase()) {
     if (/\bi need glass\b/i.test(user) || /\bneed glass\b/i.test(user)) {
@@ -4444,10 +4429,10 @@ function buildCh1CoachNote(userText, { postTurn = false } = {}) {
       );
     }
     if (userSaidSandAnswer(user)) {
-      return "Child said sand — praise, then 「すなが ひつよう」って えいごで いってみて！ ONCE. Do NOT say Can you say, I need sand. Wait after.";
+      return "Child said sand — praise, then 「すなが ひつよう」の えいごを 選んでね！ ONCE. Do NOT say Can you say, I need sand. Wait after.";
     }
     if (userSaidCh1Confused(user)) {
-      return "Step 2 confused — ONE line: glass needs sand in Minecraft, ask what we need, then 「すなが ひつよう」って えいごで いってみて！ Do NOT explain sand twice.";
+      return "Step 2 confused — ONE line: glass needs sand in Minecraft, ask what we need, then 「すなが ひつよう」の えいごを 選んでね！ Do NOT explain sand twice.";
     }
     if (postTurn && assistantCh1SandMonologue(assistant)) {
       return "You explained sand twice — ask To make glass in Minecraft what do we need? ONCE, then wait.";
@@ -4563,7 +4548,7 @@ function buildCh1OutboundCoach(userText) {
       if (!/\b(i need glass|need glass)\b/i.test(user)) {
         return (
           "Chapter 1 ONLY. WRONG: I put glass here / ガラスを置きたい. " +
-          "Praise briefly, then 「がらすが ひつよう」って えいごで いってみて！ WAIT. " +
+          "Praise briefly, then 「がらすが ひつよう」の えいごを 選んでね！ WAIT. " +
           "FORBIDDEN: speak I need glass aloud; sand; Step 2."
         );
       }
@@ -4593,7 +4578,7 @@ function ch1CoachHint() {
   if (!userHasNeedGlassPhrase()) {
     if (recentUserMessages(4).some(userSaidGlassAnswer)) {
       return (
-        " Ch1 Step 1b: child said glass/ガラス — praise then Can you say it in English? / 「がらすが ひつよう」って えいごで いってみて！ " +
+        " Ch1 Step 1b: child said glass/ガラス — praise then Can you say it in English? / 「がらすが ひつよう」の えいごを 選んでね！ " +
         "Do NOT speak the English answer. FORBIDDEN: Can you say, I need glass?, \"What do you need to make glass?\", sand, Step 2."
       );
     }
@@ -4604,7 +4589,7 @@ function ch1CoachHint() {
   }
   if (!userHasNeedSandPhrase()) {
     return (
-      ' Ch1 Step 2: ask "To make glass in Minecraft, what do we need?" → sand → 「すなが ひつよう」って えいごで いってみて！ ' +
+      ' Ch1 Step 2: ask "To make glass in Minecraft, what do we need?" → sand → 「すなが ひつよう」の えいごを 選んでね！ ' +
       "FORBIDDEN: Did you find the glass? / Can you say, I need sand."
     );
   }
@@ -4916,6 +4901,8 @@ function assistantHasBeginnerJapanese(text) {
 
 function assistantHasValidPhraseElicit(text) {
   const t = String(text || "");
+  if (/「[^」]+」の\s*えいごを\s*選んで(?:ね)?/.test(t)) return true;
+  // Legacy forms (older sessions / model drift)
   if (/「[^」]+」(?:って|と)\s*(?:英語|えいご)で\s*(?:言ってみて|いってみて)/.test(t)) return true;
   if (/あ[！!]\s*(?:砂あった|すな\s*あった)/.test(t)) return true;
   return false;
@@ -4945,7 +4932,7 @@ function assistantBeginnerJapaneseIncomplete(text) {
   const latinChars = (withoutQuotedLatin.match(/[a-zA-Z]/g) || []).length;
   if (latinChars < 15) return false;
 
-  if (/っていってみて|っていってみる|(?:って|と)(?:英語|えいご)で(?:言ってみて|いってみて)|いってみて！|言ってみて！|おしえてね/.test(t) && hiraganaChars >= 6) {
+  if (/の\s*えいごを\s*選んで|っていってみて|っていってみる|(?:って|と)(?:英語|えいご)で(?:言ってみて|いってみて)|いってみて！|言ってみて！|おしえてね/.test(t) && hiraganaChars >= 6) {
     return false;
   }
 
@@ -5119,7 +5106,7 @@ function isCh2FreeTalkUi() {
   return p === "chat";
 }
 
-/** Ch4: hide MCQ until Beat B is spoken (after favorite color + Let's make). */
+/** Ch4: hide MCQ until combined make+tell (Beat A2+B) is spoken. */
 function isCh4FreeTalkUi() {
   if (getCurrentSegment()?.id !== "ch4") return false;
   return !ch4AssistantSaidBeatB();
@@ -5161,6 +5148,44 @@ function buildMcqSpeakCoach(beat) {
     choices +
     "). Do not reveal the answer."
   );
+}
+
+const MCQ_RETRY_TITLE = "おしい！ちがうよ — もういちど！";
+const MCQ_RETRY_SPEAK =
+  "Nice try! Not quite — try again! おしい！ちがうよ。もういちど！";
+
+function buildMcqWrongRetryCoach(reaskCoach = "") {
+  return (
+    "[Teacher note — do not read aloud] Wrong MCQ choice. " +
+    "Speak EXACTLY this soft retry (EN then JP), then re-ask the SAME question. " +
+    "Do NOT reveal the correct answer. Do NOT advance. " +
+    "Say: " +
+    MCQ_RETRY_SPEAK +
+    (reaskCoach ? " Then: " + reaskCoach : "")
+  );
+}
+
+/** Instant UI + soft sound so kids know the tap was wrong even before Learny speaks. */
+function flashMcqIncorrectFeedback(wrongLabel) {
+  try {
+    questSfx.playTryAgain();
+  } catch {
+    // ignore
+  }
+  if (!choiceBar || choiceBar.hidden) return;
+  const title = choiceBar.querySelector(".lesson-choice-title");
+  if (title) {
+    title.textContent = MCQ_RETRY_TITLE;
+    title.classList.add("is-retry");
+  }
+  const needle = normalizeMcqChoice(wrongLabel);
+  choiceBar.querySelectorAll(".lesson-choice-btn").forEach((btn) => {
+    btn.classList.remove("is-wrong");
+    if (needle && normalizeMcqChoice(btn.textContent) === needle) {
+      btn.classList.add("is-wrong");
+      btn.setAttribute("aria-invalid", "true");
+    }
+  });
 }
 
 function handleMcqChoiceClick(label) {
@@ -5210,11 +5235,10 @@ function handleMcqChoiceClick(label) {
       return;
     }
     addMessage(label, "user");
-    const retry =
-      "Wrong choice. Softly: おしい！もういちど！ Do NOT reveal the answer. " +
-      buildMcqSpeakCoach(beat);
+    const retry = buildMcqWrongRetryCoach(buildMcqSpeakCoach(beat));
     dispatchChildTurn(label, retry);
     renderChoiceBar(segment);
+    flashMcqIncorrectFeedback(label);
     return;
   }
 
@@ -5351,11 +5375,10 @@ function handleQuiz1ChoiceClick(label) {
 
   if (!correct) {
     addMessage(label, "user");
-    const retry =
-      "Wrong choice. Softly: おしい！もういちど！ Do NOT reveal the answer. " +
-      buildQuiz1SpeakCoach(item);
+    const retry = buildMcqWrongRetryCoach(buildQuiz1SpeakCoach(item));
     dispatchChildTurn(label, retry);
     renderChoiceBar(segment);
+    flashMcqIncorrectFeedback(label);
     return;
   }
 
@@ -5595,7 +5618,7 @@ function assistantDoubledTeachPhrase(text) {
     return true;
   }
 
-  const jpMatches = [...t.matchAll(/「[^」]+」(?:っていってみて|と言ってみて)[！!]?/g)];
+  const jpMatches = [...t.matchAll(/「[^」]+」(?:の\s*えいごを\s*選んでね|っていってみて|と言ってみて)[！!]?/g)];
   if (jpMatches.length >= 2 && jpMatches[0][0] === jpMatches[1][0]) {
     return true;
   }
@@ -5624,7 +5647,9 @@ function trimDuplicateTeachPhrase(text) {
     }
   }
 
-  const jpMatches = [...t.matchAll(/「[^」]+」(?:っていってみて|と言ってみて|って英語で言ってみて)[！!]?/g)];
+  const jpMatches = [
+    ...t.matchAll(/「[^」]+」(?:の\s*えいごを\s*選んでね|っていってみて|と言ってみて|って英語で言ってみて)[！!]?/g),
+  ];
   if (jpMatches.length >= 2) {
     const first = jpMatches[0][0];
     for (let i = 1; i < jpMatches.length; i += 1) {
@@ -5635,7 +5660,9 @@ function trimDuplicateTeachPhrase(text) {
     }
   }
 
-  const sandJa = [...t.matchAll(/あ[！!]?\s*砂あった[^！!]*(?:って英語で言ってみて|っていってみて)[！!]?/g)];
+  const sandJa = [
+    ...t.matchAll(/あ[！!]?\s*砂あった[^！!]*(?:の\s*えいごを\s*選んでね|って英語で言ってみて|っていってみて)[！!]?/g),
+  ];
   if (sandJa.length >= 2) {
     t = t.slice(0, sandJa[1].index).trim();
   }
@@ -5675,7 +5702,9 @@ function trimDuplicateCh2FoundElicit(text) {
     }
   }
 
-  const sandPartial = [...t.matchAll(/(?:あ[！!]?\s*)?砂あった[^！!]*(?:って英語で言ってみて|っていってみて)[！!]?/g)];
+  const sandPartial = [
+    ...t.matchAll(/(?:あ[！!]?\s*)?砂あった[^！!]*(?:の\s*えいごを\s*選んでね|って英語で言ってみて|っていってみて)[！!]?/g),
+  ];
   if (sandPartial.length >= 2) {
     t = t.slice(0, sandPartial[1].index).trim();
   }
@@ -6367,6 +6396,164 @@ function sameTranscriptBubble(lastType, incomingType) {
   return userTypes.has(lastType) && userTypes.has(incomingType);
 }
 
+const VOICE_MIC_ICON_SVG =
+  '<svg class="msg-voice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
+
+function applyUserBubbleContent(bubble, msg) {
+  if (!bubble) return;
+  if (msg.fromMic) {
+    bubble.classList.add("is-voice");
+    bubble.setAttribute("aria-label", "マイクで話した");
+    bubble.title = "マイクで話した";
+    if (!bubble.querySelector(".msg-voice-icon")) {
+      bubble.innerHTML = `${VOICE_MIC_ICON_SVG}<span class="visually-hidden">マイクで話した</span>`;
+    }
+    return;
+  }
+  bubble.classList.remove("is-voice");
+  bubble.removeAttribute("aria-label");
+  bubble.removeAttribute("title");
+  if (bubble.querySelector(".msg-voice-icon")) {
+    bubble.textContent = msg.text || "";
+    return;
+  }
+  if (bubble.textContent !== (msg.text || "")) {
+    bubble.textContent = msg.text || "";
+  }
+}
+
+function addMessage(text, type, mode = "new") {
+  const t = String(text || "");
+  if (!t) return;
+  const fromMic = type === "user-transcript";
+  const storedType = fromMic ? "user" : type;
+  if (storedType === "assistant" && isMetaAssistantLeak(t)) {
+    dbg("drop meta assistant leak", t.slice(0, 64));
+    return;
+  }
+  if (emptyState) emptyState.style.display = "none";
+  if (mode === "append" && chatMessages.length) {
+    const last = chatMessages[chatMessages.length - 1];
+    const canMergeVoice = fromMic && last.type === "user" && last.fromMic;
+    const canMergeAssistant = storedType === "assistant" && last.type === "assistant";
+    const canMergeOther =
+      !fromMic &&
+      storedType !== "assistant" &&
+      (sameTranscriptBubble(last.type, storedType) || sameTranscriptBubble(last.type, type));
+    if (canMergeVoice || canMergeAssistant || canMergeOther) {
+      if (storedType === "assistant" || fromMic || storedType === "user") {
+        last.text =
+          storedType === "assistant"
+            ? sanitizeAssistantBubbleText(mergeTranscriptChunk(last.text, t))
+            : mergeTranscriptChunk(last.text, t);
+      } else {
+        last.text = (last.text || "") + t;
+      }
+      if (fromMic) last.fromMic = true;
+      scheduleRenderChat();
+      return;
+    }
+  }
+  if (mode === "new" && storedType === "assistant") {
+    const last = chatMessages[chatMessages.length - 1];
+    if (last?.type === "assistant" && isLikelySameTurnContinuation(t, last.text)) {
+      last.text = sanitizeAssistantBubbleText(mergeTranscriptChunk(last.text, t));
+      scheduleRenderChat();
+      return;
+    }
+    if (
+      sharesSameLeadQuestion(lastAssistantText(), t) &&
+      Date.now() - lastAssistantBubbleAt < 25000
+    ) {
+      dbg("suppress re-asked lead question addMessage", t.slice(0, 48));
+      return;
+    }
+    if (last?.type === "assistant" && sharesCh2FoundElicitBeat(t, last.text)) {
+      dbg("suppress ch2 duplicate elicit bubble", t.slice(0, 48));
+      return;
+    }
+    if (shouldSuppressBackToBackAssistant(t)) {
+      dbg("suppress back-to-back assistant", t.slice(0, 48));
+      return;
+    }
+  }
+  chatMessages.push({
+    type: storedType,
+    text: storedType === "assistant" ? sanitizeAssistantBubbleText(t) : t,
+    fromMic: Boolean(fromMic),
+    sttEnterPending: storedType === "assistant",
+  });
+  if (storedType === "assistant") lastAssistantBubbleAt = Date.now();
+  scheduleRenderChat();
+  if (storedType === "assistant") updateLearnyThinkingUI();
+}
+
+function renderChatNow() {
+  if (!chatArea) return;
+  const rows = Array.from(chatArea.querySelectorAll(":scope > .msg-row"));
+
+  if (!chatMessages.length) {
+    rows.forEach((row) => row.remove());
+    appendChatChrome();
+    updateLearnyThinkingUI();
+    return;
+  }
+
+  // Shrink without wiping — full innerHTML rebuild re-fired fade animations on every bubble.
+  while (rows.length > chatMessages.length) {
+    rows.pop()?.remove();
+  }
+
+  const insertBeforeChrome = (row) => {
+    if (learnyThinkingEl && learnyThinkingEl.parentElement === chatArea) {
+      chatArea.insertBefore(row, learnyThinkingEl);
+    } else {
+      chatArea.appendChild(row);
+    }
+  };
+
+  chatMessages.forEach((msg, i) => {
+    let row = rows[i];
+    if (!row) {
+      row = document.createElement("div");
+      row.className = `msg-row ${msg.type}`;
+      const bubble = document.createElement("div");
+      bubble.className = "msg-bubble";
+      if (msg.type === "user") {
+        applyUserBubbleContent(bubble, msg);
+      } else {
+        bubble.textContent = msg.text;
+      }
+      row.appendChild(bubble);
+      insertBeforeChrome(row);
+      rows[i] = row;
+      if (msg.type === "assistant" && msg.sttEnterPending) {
+        row.classList.add("stt-enter");
+      } else if (msg.type === "user" || msg.type === "system") {
+        row.classList.add("msg-enter");
+      }
+      msg.sttEnterPending = false;
+      return;
+    }
+
+    if (!row.classList.contains(msg.type)) {
+      row.className = `msg-row ${msg.type}`;
+    }
+    const bubble = row.querySelector(".msg-bubble");
+    if (msg.type === "user") {
+      applyUserBubbleContent(bubble, msg);
+    } else if (bubble && bubble.textContent !== msg.text) {
+      bubble.textContent = msg.text;
+    }
+    // Never re-apply enter animations on existing rows (causes chat flicker).
+    msg.sttEnterPending = false;
+  });
+
+  appendChatChrome();
+  updateLearnyThinkingUI();
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
 function shouldShowLearnyThinking() {
   if (actionState !== "active" || !client?.connected) return false;
   if (isHandoffRunning || isChapterHandoff || skipOutboundForHandoff) return false;
@@ -6435,123 +6622,6 @@ function appendChatChrome() {
   if (learnyThinkingEl && learnyThinkingEl.parentElement !== chatArea) {
     chatArea.appendChild(learnyThinkingEl);
   }
-}
-
-function addMessage(text, type, mode = "new") {
-  const t = String(text || "");
-  if (!t) return;
-  const storedType = type === "user-transcript" ? "user" : type;
-  if (storedType === "assistant" && isMetaAssistantLeak(t)) {
-    dbg("drop meta assistant leak", t.slice(0, 64));
-    return;
-  }
-  if (emptyState) emptyState.style.display = "none";
-  if (mode === "append" && chatMessages.length) {
-    const last = chatMessages[chatMessages.length - 1];
-    if (sameTranscriptBubble(last.type, storedType) || sameTranscriptBubble(last.type, type)) {
-      if (storedType === "assistant" || type === "user-transcript" || storedType === "user") {
-        last.text =
-          storedType === "assistant"
-            ? sanitizeAssistantBubbleText(mergeTranscriptChunk(last.text, t))
-            : mergeTranscriptChunk(last.text, t);
-      } else {
-        last.text = (last.text || "") + t;
-      }
-      scheduleRenderChat();
-      return;
-    }
-  }
-  if (mode === "new" && storedType === "assistant") {
-    const last = chatMessages[chatMessages.length - 1];
-    if (last?.type === "assistant" && isLikelySameTurnContinuation(t, last.text)) {
-      last.text = sanitizeAssistantBubbleText(mergeTranscriptChunk(last.text, t));
-      scheduleRenderChat();
-      return;
-    }
-    if (
-      sharesSameLeadQuestion(lastAssistantText(), t) &&
-      Date.now() - lastAssistantBubbleAt < 25000
-    ) {
-      dbg("suppress re-asked lead question addMessage", t.slice(0, 48));
-      return;
-    }
-    if (last?.type === "assistant" && sharesCh2FoundElicitBeat(t, last.text)) {
-      dbg("suppress ch2 duplicate elicit bubble", t.slice(0, 48));
-      return;
-    }
-    if (shouldSuppressBackToBackAssistant(t)) {
-      dbg("suppress back-to-back assistant", t.slice(0, 48));
-      return;
-    }
-  }
-  chatMessages.push({
-    type: storedType,
-    text: storedType === "assistant" ? sanitizeAssistantBubbleText(t) : t,
-    sttEnterPending: storedType === "assistant",
-  });
-  if (storedType === "assistant") lastAssistantBubbleAt = Date.now();
-  scheduleRenderChat();
-  if (storedType === "assistant") updateLearnyThinkingUI();
-}
-
-function renderChatNow() {
-  if (!chatArea) return;
-  const rows = Array.from(chatArea.querySelectorAll(":scope > .msg-row"));
-
-  if (!chatMessages.length) {
-    rows.forEach((row) => row.remove());
-    appendChatChrome();
-    updateLearnyThinkingUI();
-    return;
-  }
-
-  // Shrink without wiping — full innerHTML rebuild re-fired fade animations on every bubble.
-  while (rows.length > chatMessages.length) {
-    rows.pop()?.remove();
-  }
-
-  const insertBeforeChrome = (row) => {
-    if (learnyThinkingEl && learnyThinkingEl.parentElement === chatArea) {
-      chatArea.insertBefore(row, learnyThinkingEl);
-    } else {
-      chatArea.appendChild(row);
-    }
-  };
-
-  chatMessages.forEach((msg, i) => {
-    let row = rows[i];
-    if (!row) {
-      row = document.createElement("div");
-      row.className = `msg-row ${msg.type}`;
-      const bubble = document.createElement("div");
-      bubble.className = "msg-bubble";
-      bubble.textContent = msg.text;
-      row.appendChild(bubble);
-      insertBeforeChrome(row);
-      rows[i] = row;
-      if (msg.type === "assistant" && msg.sttEnterPending) {
-        row.classList.add("stt-enter");
-      } else if (msg.type === "user" || msg.type === "system") {
-        row.classList.add("msg-enter");
-      }
-      msg.sttEnterPending = false;
-      return;
-    }
-
-    if (!row.classList.contains(msg.type)) {
-      row.className = `msg-row ${msg.type}`;
-    }
-    const bubble = row.querySelector(".msg-bubble");
-    if (bubble && bubble.textContent !== msg.text) {
-      bubble.textContent = msg.text;
-    }
-    // Never re-apply enter animations on existing rows (causes chat flicker).
-    msg.sttEnterPending = false;
-  });
-
-  appendChatChrome();
-  updateLearnyThinkingUI();
-  chatArea.scrollTop = chatArea.scrollHeight;
 }
 
 function scheduleRenderChat() {
@@ -6993,7 +7063,7 @@ function endsWithLeadPrompt(text) {
   if (/[？?]/.test(tail)) return true;
   if (assistantAskedQuestion(tail)) return true;
   if (/let me know|when you find|find sand|みつけたら|おしえて|tell me when/i.test(tail)) return true;
-  return /(かな|できる|つくれる|作れる|いる|どっち|なに|何|どう|しよう|してみ|いえる|言える|いってみて|ってみて|will you|what do|what's|what color|what time|shall we|can you|do you|can we|are you|say with me|try saying|repeat after|in english|together)\s*[!！.。]*$/i.test(
+  return /(かな|できる|つくれる|作れる|いる|どっち|なに|何|どう|しよう|してみ|いえる|言える|いってみて|ってみて|選んでね|will you|what do|what's|what color|what time|shall we|can you|do you|can we|are you|say with me|try saying|repeat after|in english|together)\s*[!！.。]*$/i.test(
     tail
   );
 }
@@ -7063,7 +7133,7 @@ function needsContinuationNudge(text) {
   if (
     getCurrentSegment()?.id === "ch5" &&
     !/[？?]/.test(t) &&
-    !/can you say|っていってみて|いってみて/i.test(t) &&
+    !/can you say|っていってみて|いってみて|の\s*えいごを\s*選んで/i.test(t) &&
     /\b(i'?m building a tank|i made a tank|it looks good|i put glass)\b|すいそうを\s*作ってる|すいそうを\s*作った|いい感じに\s*できた/i.test(t)
   ) {
     return true;
@@ -7092,28 +7162,25 @@ function segmentContinuationHint() {
     return " Ch3 Step 1: Let's make some glass! " + PART1_ELICIT_JA.ch3NeedGlass + " → I need to make glass.";
   }
   if (seg?.id === "ch4") {
-    if (userHasMadeColorGlassPhrase()) {
+    if (userHasMadeColorGlassPhrase() && ch4AssistantSaidBeatB()) {
       return " Ch4 done: praise + complete_segment(ch4) → Chapter 5 walls.";
     }
     if (ch4AssistantSaidBeatB()) {
-      return " Ch4 Beat B spoken — WAIT for I made [color] glass! MCQ tap. FORBIDDEN: repeat favorite color.";
-    }
-    if (ch4AssistantSaidLetsMake()) {
-      return " Ch4: speak Beat B ONLY (Tell me when you make one! + つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！). FORBIDDEN: repeat Let's make / favorite color.";
+      return " Ch4 make+tell spoken — WAIT for I made [color] glass! MCQ tap. FORBIDDEN: complete_segment / walls / repeat favorite color.";
     }
     if (ch4HasFavoriteColor()) {
       const color = loadLessonState().memories.favoriteColor;
       return (
         " Ch4: color saved (" +
         color +
-        "). Speak ONLY Beat A2 NOW: " +
-        ch4LetsMakeSpeak(color) +
-        " FORBIDDEN: praise-only / ask favorite color again."
+        "). Speak EXACTLY Beat A2+B COMBINED NOW: " +
+        ch4CombinedMakeAndTellSpeak(color) +
+        " Then WAIT for MCQ. FORBIDDEN: praise-only / ask favorite color again / complete_segment."
       );
     }
     return (
-      " Ch4 Beat A: What's your favorite color? → Let's make [color] coloured glass! (separate turns) → " +
-      "Beat B → I made [color] glass! MCQ. FORBIDDEN: [color] glass! Great job, MCQ before Beat B."
+      " Ch4: What's your favorite color? → ONE combined make+tell line → I made [color] glass! MCQ. " +
+      "FORBIDDEN: finishing Ch4 on color alone / MCQ before つくれたら elicit."
     );
   }
   if (seg?.id === "ch5") {

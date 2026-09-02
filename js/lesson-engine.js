@@ -517,8 +517,9 @@ function scaffoldingLine(levelId) {
 
 function japaneseElicitBracketRule() {
   return [
-    "JAPANESE PHRASE ELICITS (って英語で言ってみて / ってえいごでいってみて):",
-    "Always wrap the Japanese phrase in 「」 before って — e.g. 「がらすが ひつよう」って えいごで いってみて!",
+    "JAPANESE PHRASE ELICITS (「…」の えいごを 選んでね！):",
+    "Always wrap the Japanese phrase in 「」 then say の えいごを 選んでね！ — e.g. 「がらすが ひつよう」の えいごを 選んでね！",
+    "FORBIDDEN old form: 〜って えいごで いってみて！ / って英語で言ってみて — always use の えいごを 選んでね！ instead.",
     `Ch1 glass: ${PART1_ELICIT_JA.needGlass} Ch1 sand: ${PART1_ELICIT_JA.needSand}`,
     `Ch2 found sand: ${PART1_ELICIT_JA.foundSand}`,
     `Ch3: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,

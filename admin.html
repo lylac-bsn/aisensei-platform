@@ -669,34 +669,6 @@
             cursor: pointer;
         }
 
-        .progress-activity-list {
-            list-style: none;
-            margin: 0.5rem 0 0;
-            padding: 0;
-            max-height: 220px;
-            overflow-y: auto;
-        }
-
-        .progress-activity-item {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 0.15rem 0.5rem;
-            padding: 0.4rem 0;
-            border-bottom: 1px solid #eee;
-            font-size: 0.75rem;
-        }
-
-        .progress-activity-type { font-weight: 800; color: #333; }
-        .progress-activity-item.type-skip .progress-activity-type { color: #e65100; }
-        .progress-activity-item.type-star .progress-activity-type { color: #f9a825; }
-        .progress-activity-item.type-badge .progress-activity-type { color: #2e7d32; }
-        .progress-activity-detail { color: #555; }
-        .progress-activity-meta {
-            grid-column: 1 / -1;
-            color: #999;
-            font-size: 0.68rem;
-        }
-
         .progress-activity-empty,
         .progress-empty-inline {
             color: #888;
@@ -1790,6 +1762,28 @@
             if (!btn) return;
             const action = btn.dataset.action;
             const userId = btn.dataset.userId;
+
+            if (action === 'filter-activity') {
+                const timeline = btn.closest('.progress-timeline');
+                if (!timeline) return;
+                const filter = btn.dataset.filter || 'all';
+                timeline.querySelectorAll('.tl-filter').forEach((chip) => {
+                    chip.classList.toggle('is-active', chip === btn);
+                });
+                timeline.querySelectorAll('.progress-timeline-day').forEach((day) => {
+                    let visible = 0;
+                    day.querySelectorAll('.progress-timeline-item').forEach((item) => {
+                        const show = filter === 'all' || item.dataset.type === filter;
+                        item.hidden = !show;
+                        if (show) visible += 1;
+                    });
+                    day.classList.toggle('is-filtered-empty', visible === 0);
+                    const countEl = day.querySelector('.tl-day-count');
+                    if (countEl) countEl.textContent = String(visible);
+                });
+                return;
+            }
+
             if (!userId) return;
 
             if (action === 'load-activity') {

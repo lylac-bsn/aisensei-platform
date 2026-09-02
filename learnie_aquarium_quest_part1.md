@@ -33,7 +33,7 @@
 | Chapter 2 砂みつけたフレーズ          | **あり**（Beat 4 のあとすぐ再表示）  |
 | Mini quiz 1                  | **あり**（3問・Learny は日本語のみ） |
 | Chapter 4「すきないろは？」           | **なし**（自由会話中はボタン非表示）     |
-| Chapter 4「I made ___ glass!」 | **あり**（いろを答えたあと）         |
+| Chapter 4「I made ___ glass!」 | **あり**（いろのあと make+tell 合体ライン） |
 | Daily English                | **なし**                   |
 | Chapter 3 / 5 / 6 / Final    | **あり**                   |
 | Ending                       | なし（会話ビート）                |
@@ -90,7 +90,7 @@
 
 **Learny:**  
 `Can you say it in English?`  
-`「がらすが ひつよう」って えいごで いってみて！`  
+`「がらすが ひつよう」の えいごを 選んでね！`  
 ※ 英語の答え `I need glass` を Learny が先に言わない
 
 **4択:** I need glass. / I found glass. / I made sand. / I need water. → **正解: I need glass.**
@@ -108,7 +108,7 @@
 
 **Learny:**  
 `Can you say it in English?`  
-`「すなが ひつよう」って えいごで いってみて！`
+`「すなが ひつよう」の えいごを 選んでね！`
 
 **4択:** I need sand. / I found sand. / I need glass. / I made glass. → **正解: I need sand.**  
 → **Chapter 2 へ**
@@ -156,8 +156,8 @@
 
 **Learny:**  
 `We found some sand! Can you say it in English?`  
-`あ！すな あった！「すなを みつけた！」って えいごで いってみて！`  
-※ `Can you say, I found some sand!` / 「I found some sand!」いってみて！ は禁止（英語の答えを先に言わない）
+`あ！すな あった！「すなを みつけた！」の えいごを 選んでね！`  
+※ `Can you say, I found some sand!` / 「I found some sand!」いってみて！ は禁止（英語の答えを先に言わない — 「すなを みつけた！」の えいごを 選んでね！ を使う）
 
 **4択:** I found some sand! / I need sand. / I made glass! / I put sand here. → **正解: I found some sand!**  
 → **Chapter 3 へ**（Live 再接続 → `Let's make some glass!`）
@@ -170,8 +170,8 @@
 
 **Learny:**  
 `Let's make some glass!`  
-`「がらすを つくらないと」って えいごで いってみて！`  
-※ `Can you say, I need to make glass` / 「I need to make glass」いってみて！ は禁止（英語の答えを先に言わない）
+`「がらすを つくらないと」の えいごを 選んでね！`  
+※ `Can you say, I need to make glass` / 「I need to make glass」いってみて！ は禁止（英語の答えを先に言わない — 「がらすを つくらないと」の えいごを 選んでね！ を使う）
 
 **4択:** I need to make glass. / I found some sand! / I need sand. / I put glass here.  
 → **正解: I need to make glass.**
@@ -180,8 +180,8 @@
 
 **Learny:**  
 `Are you done making the glass?`  
-`「がらすを つくった」って えいごで いってみて！`  
-※ `Can you say, I made glass?` / 「I made glass」いってみて！ は禁止（英語の答えを先に言わない）
+`「がらすを つくった」の えいごを 選んでね！`  
+※ `Can you say, I made glass?` / 「I made glass」いってみて！ は禁止（英語の答えを先に言わない — 「がらすを つくった」の えいごを 選んでね！ を使う）
 
 **4択:** I made glass! / I need glass. / I found sand. / I made a tank!  
 → **正解: I made glass!** → **Mini quiz 1 へ**
@@ -220,7 +220,7 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 # CHAPTER 4 — 好きな色を選ぼう
 
-**流れ:** Beat A1 → Beat A2 → Beat B（MCQ）— **1ビートずつ、別ターンで**
+**流れ:** Beat A1 → **Beat A2+B 合体**（MCQ）
 
 ## Beat A1 — すきないろ（ボタンなし）
 
@@ -228,28 +228,21 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 `What's your favorite color?`  
 `すきな いろは？`  
 → 子どもが色を言う（例: orange）→ `favoriteColor` を記録  
-→ **ここで MCQ は出さない**
+→ **ここで MCQ は出さない / Chapter 5 へ進まない**
 
-## Beat A2 — その色のガラスを作ろう（ボタンなし）
+## Beat A2+B — その色のガラスを作ろう＋できたらいってね（1ターン）
 
-**Learny:**  
-`Let's make orange coloured glass!`  
-`おれんじいろの がらすを つくろう！`  
+**Learny（1メッセージ）:**  
+`Let's make orange coloured glass! Tell me when you make one!`  
+`おれんじいろの がらすを つくろう！つくれたら「おれんじいろの がらすを つくった！」って えいごで おしえてね！`  
 （色は子どもの答えに合わせて変える）  
-→ **次のターンまで Beat B / MCQ は出さない**
-
-## Beat B — I made ___ glass!（4択）
-
-**Learny:**  
-`Tell me when you make one!`  
-`つくれたら「おれんじいろの がらすを つくった！」って えいごで おしえてね！`  
-（`おれんじ` の部分は `favoriteColor` に合わせて変える — 例: あか → `つくれたら「あかいろの がらすを つくった！」って えいごで おしえてね！`）  
 → **このあと 4択 MCQ を表示**
 
 **4択例:** I made orange glass! / I need a dye. / I put glass here. / I made a tank!  
 → **正解: I made [その色] glass!** → **Chapter 5 へ**  
 ※ 染料／花探しフレーズは教えない（花壇に用意済み）  
-※ `[color] glass! Great job` のような省略は禁止 — A2 は必ず `Let's make … coloured glass!`
+※ Chapter 3 の `I made glass!` だけではクリアしない — 色つき `I made [color] glass!` が必要  
+※ `[color] glass! Great job` のような省略は禁止 — 必ず `Let's make … coloured glass! Tell me when you make one!` を含める
 
 ---
 
@@ -266,21 +259,21 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 **Learny:**  
 `Tell me what you're building!`  
-`「すいそうを つくってる」って えいごで いってみて！`  
+`「すいそうを つくってる」の えいごを 選んでね！`  
 **4択:** I'm building a tank. / I made a tank! / It looks good! / I need sand. → **I'm building a tank.**
 
 ## Beat 3
 
 **Learny:**  
 `Are you done making it?`  
-`「すいそうを つくった」って えいごで いってみて！`  
+`「すいそうを つくった」の えいごを 選んでね！`  
 **4択:** I made a tank! / I'm building a tank. / I put glass here. / My tank is ready! → **I made a tank!**
 
 ## Beat 4
 
 **Learny:**  
 `How does it look?`  
-`「いい かんじに できた！」って えいごで いってみて！`  
+`「いい かんじに できた！」の えいごを 選んでね！`  
 **4択:** It looks good! / I made glass! / I'm done! / I need more sand. → **It looks good!**  
 → **Daily English へ**
 
@@ -328,21 +321,21 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 **Learny:**  
 `Do we have enough sand?`  
-`「もっと すなが ひつよう」って えいごで いってみて！`  
+`「もっと すなが ひつよう」の えいごを 選んでね！`  
 **4択:** I need more sand. / I need glass. / I'm done! / I found some sand! → **I need more sand.**
 
 ## Beat 3
 
 **Learny:**  
 `Are you done?`  
-`「できた！」って えいごで いってみて！`  
+`「できた！」の えいごを 選んでね！`  
 **4択:** I'm done! / My tank is ready! / I put sand here. / It looks good! → **I'm done!**
 
 ## Beat 4
 
 **Learny:**  
 `Is the tank ready for the fishes to swim?`  
-`「さかなを いれられる じゅんびが できた！」って えいごで いってみて！`  
+`「さかなを いれられる じゅんびが できた！」の えいごを 選んでね！`  
 **4択:** My tank is ready! / I'm done! / I need fish. / I made a tank! → **My tank is ready!**  
 → **Final challenge へ**  
 ※ 魚はまだ入れない（水族館完成ではない）

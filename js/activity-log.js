@@ -120,6 +120,17 @@ export async function logUserActivity(db, userId, event) {
       // ignore — event row is enough for timeline
     }
   }
+
+  if (payload.type === ACTIVITY_TYPES.RESET && payload.level) {
+    try {
+      // Drop rollup MCQ totals for this level so admin does not resurrect pre-reset clicks.
+      await updateDoc(doc(db, "users", userId), {
+        [`mcqStats.${payload.level}`]: {},
+      });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /**

@@ -179,6 +179,19 @@ export function recordMcqAttempt({
   row.lastAt = at;
   summary[key] = row;
   state.mcqSummary = summary;
+
+  // Feed admin phrase checklist — correct taps count as spoken phrases.
+  if (correct) {
+    const spoken = String(entry.answer || entry.choice || "").trim();
+    if (spoken) {
+      const list = Array.isArray(state.phrasesSpoken) ? state.phrasesSpoken.slice() : [];
+      if (!list.some((p) => String(typeof p === "string" ? p : p?.english || "").trim() === spoken)) {
+        list.push(spoken);
+        state.phrasesSpoken = list.slice(-200);
+      }
+    }
+  }
+
   saveLessonState(state);
 
   return {

@@ -307,7 +307,16 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     resetLesson(activeLessonId, levelId());
     refreshDashboardChrome();
     window.dispatchEvent(new CustomEvent("learny-progress-changed"));
+    const resetEvent = {
+      type: "reset",
+      level: levelId(),
+      questTitle: activeLessonId,
+      segmentId: activeLessonId,
+      source: "client",
+    };
     try {
+      // Same window as page1.js — use CustomEvent only (postMessage would double-log).
+      window.dispatchEvent(new CustomEvent("learny-activity", { detail: resetEvent }));
       window.parent?.postMessage?.({ type: "gc_reset_lesson", lessonId: activeLessonId }, "*");
       window.parent?.postMessage?.({ type: "gc_quest_progress_update" }, "*");
       document

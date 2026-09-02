@@ -88,13 +88,14 @@ export class QuestSfx {
     }
   }
 
-  /** Quick bright ping — next quest loading (plays on handoff disconnect, not reconnect). */
-  async playQuestReady() {
+  /** Soft descending cue — wrong MCQ choice, try again (gentle, not harsh). */
+  async playTryAgain() {
     try {
       const ctx = await this.ensureContext();
       const t = ctx.currentTime;
-      this._tone(ctx, 880, t, 0.12, this.volume * 0.85);
-      this._tone(ctx, 1174.66, t + 0.08, 0.18, this.volume * 0.7);
+      const vol = Math.min(this.volume * 0.75, 0.28);
+      this._tone(ctx, 523.25, t, 0.14, vol, "triangle");
+      this._tone(ctx, 392.0, t + 0.12, 0.2, vol * 0.85, "sine");
     } catch {
       // ignore
     }

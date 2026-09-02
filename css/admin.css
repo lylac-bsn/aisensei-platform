@@ -636,7 +636,7 @@
   color: #d7ccc8;
 }
 
-/* —— Activity feed —— */
+/* —— Activity feed / timeline —— */
 .progress-activity-feed {
   margin-top: 0.85rem;
   padding-top: 0.65rem;
@@ -666,48 +666,291 @@
   color: var(--primary-red);
 }
 
-.progress-activity-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  max-height: 240px;
-  overflow-y: auto;
+.progress-timeline {
+  margin-top: 0.4rem;
 }
 
-.progress-activity-item {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr;
-  gap: 0.1rem 0.5rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid #f0ebe4;
-  font-size: 0.74rem;
+.progress-timeline-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
 }
 
-.progress-activity-type {
-  font-weight: 800;
+.tl-filter {
+  border: 1px solid var(--admin-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--admin-muted);
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.tl-filter:hover {
+  border-color: #bcaaa4;
   color: var(--text-dark);
 }
 
-.progress-activity-item.type-poke .progress-activity-type {
+.tl-filter.is-active {
+  background: #3e2723;
+  border-color: #3e2723;
+  color: #fff;
+}
+
+.progress-timeline-scroll {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 0.15rem 0.15rem 0.35rem 0;
+  border: 1px solid var(--admin-line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #faf8f6 0%, #fff 48%);
+}
+
+.progress-timeline-day {
+  padding: 0.55rem 0.65rem 0.15rem;
+}
+
+.progress-timeline-day + .progress-timeline-day {
+  border-top: 1px dashed #e8e0d8;
+}
+
+.progress-timeline-day.is-filtered-empty {
+  display: none;
+}
+
+.progress-timeline-day-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #5d4037;
+  letter-spacing: 0.01em;
+}
+
+.tl-day-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #efebe9;
+  color: #6d4c41;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.progress-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.35rem;
+}
+
+.progress-timeline-item {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr;
+  gap: 0 0.55rem;
+  position: relative;
+  padding: 0 0 0.7rem;
+}
+
+.progress-timeline-item:last-child {
+  padding-bottom: 0.25rem;
+}
+
+.tl-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.tl-rail::before {
+  content: "";
+  position: absolute;
+  top: 0.55rem;
+  bottom: -0.7rem;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: #e0d5cc;
+}
+
+.progress-timeline-item:last-child .tl-rail::before {
+  display: none;
+}
+
+.tl-dot {
+  position: relative;
+  z-index: 1;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-top: 0.45rem;
+  border-radius: 50%;
+  background: #a1887f;
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.progress-timeline-item.type-mcq_correct .tl-dot {
+  background: #2e7d32;
+}
+.progress-timeline-item.type-mcq_incorrect .tl-dot {
+  background: #c62828;
+}
+.progress-timeline-item.type-poke .tl-dot {
+  background: #7b1fa2;
+}
+.progress-timeline-item.type-star .tl-dot {
+  background: #f9a825;
+}
+.progress-timeline-item.type-reset .tl-dot {
+  background: #ef6c00;
+}
+.progress-timeline-item.type-badge .tl-dot,
+.progress-timeline-item.type-badge_revoke .tl-dot {
+  background: #1565c0;
+}
+
+.tl-card {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #efe8e1;
+  border-radius: 9px;
+  padding: 0.4rem 0.55rem 0.45rem;
+  box-shadow: 0 1px 0 rgba(62, 39, 35, 0.04);
+}
+
+.tl-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+  margin-bottom: 0.28rem;
+}
+
+.tl-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: #efebe9;
+  color: #4e342e;
+}
+
+.tl-badge.type-mcq_correct {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+.tl-badge.type-mcq_incorrect {
+  background: #ffebee;
+  color: #b71c1c;
+}
+.tl-badge.type-poke {
+  background: #f3e5f5;
   color: #6a1b9a;
 }
-
-.progress-activity-item.type-mcq_correct .progress-activity-type {
-  color: var(--admin-ok);
+.tl-badge.type-star {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.tl-badge.type-reset {
+  background: #fff3e0;
+  color: #e65100;
+}
+.tl-badge.type-badge,
+.tl-badge.type-badge_revoke {
+  background: #e3f2fd;
+  color: #0d47a1;
 }
 
-.progress-activity-item.type-mcq_incorrect .progress-activity-type {
-  color: #c62828;
-}
-
-.progress-activity-detail {
+.tl-level,
+.tl-src {
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--admin-muted);
+  background: #f5f0eb;
+  border-radius: 4px;
+  padding: 0.08rem 0.3rem;
 }
 
-.progress-activity-meta {
-  grid-column: 1 / -1;
+.tl-time {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--admin-muted-2);
-  font-size: 0.66rem;
+}
+
+.tl-card-body {
+  font-size: 0.74rem;
+  color: var(--text-dark);
+}
+
+.tl-mcq {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.28rem 0.35rem;
+}
+
+.tl-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 5px;
+  padding: 0.1rem 0.35rem;
+  background: #f5f0eb;
+  color: #5d4037;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tl-tag-soft {
+  background: #faf7f4;
+  color: var(--admin-muted);
+  font-weight: 600;
+}
+
+.tl-choice {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 5px;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.tl-choice.is-ok {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.tl-choice.is-ng {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
+.tl-attempt {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--admin-muted-2);
+}
+
+.tl-muted {
+  color: var(--admin-muted);
+  font-size: 0.72rem;
 }
 
 .progress-activity-empty,

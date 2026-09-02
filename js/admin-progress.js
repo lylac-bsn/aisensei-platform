@@ -12,12 +12,17 @@ const LEVEL_META = [
   { id: "advanced", label: "上級", field: "advancedProgress" },
 ];
 
-/** Chapters / quizzes that show 4-option MCQ in Part 1. */
-const PART1_MCQ_SEGMENTS = (AQUARIUM_PART1.segments || []).filter(
-  (s) =>
-    (s.mcqBeats && s.mcqBeats.length) ||
-    (s.items?.length && (s.type === "quiz" || s.type === "final_challenge"))
-);
+/** Chapters / quizzes that show 4-option MCQ in a lesson. */
+function mcqSegmentsForLesson(lesson) {
+  return (lesson?.segments || []).filter(
+    (s) =>
+      (s.mcqBeats && s.mcqBeats.length) ||
+      (s.items?.length && (s.type === "quiz" || s.type === "final_challenge"))
+  );
+}
+
+const PART1_MCQ_SEGMENTS = mcqSegmentsForLesson(AQUARIUM_PART1);
+const PART2_MCQ_SEGMENTS = mcqSegmentsForLesson(AQUARIUM_PART2);
 
 export function escapeHtml(text) {
   return String(text ?? "")
@@ -60,19 +65,34 @@ function normalizePhraseKey(text) {
     .trim();
 }
 
-function phraseMatchesCatalog(spoken, catalogPhrase) {
+function spokenMatchesPattern(spokenNorm, pattern) {
+  const np = normalizePhraseKey(pattern);
+  if (!spokenNorm || !np) return false;
+  if (spokenNorm === np) return true;
+  // Avoid loose "need sand" ⊆ "need more sand" — pattern must cover most of spoken.
+  if (spokenNorm.includes(np) && np.length >= Math.max(8, spokenNorm.length * 0.7)) return true;
+  return false;
+}
+
+function phraseMatchesCatalog(spoken, catalogItem) {
+  const phrase = typeof catalogItem === "string" ? catalogItem : catalogItem?.phrase;
+  const patterns = typeof catalogItem === "string" ? [] : catalogItem?.patterns || [];
   const a = normalizePhraseKey(spoken);
-  const b = normalizePhraseKey(catalogPhrase);
+  const b = normalizePhraseKey(phrase);
   if (!a || !b) return false;
   if (a === b) return true;
+  if (patterns.some((p) => spokenMatchesPattern(a, p))) return true;
   // Color / blank templates: "I made ___ glass." ↔ "I made orange glass!"
-  if (b.includes("glass") && a.includes("glass") && /i made/.test(a) && /i made/.test(b)) {
+  if (
+    /i made/.test(a) &&
+    /glass/.test(a) &&
+    /i made/.test(b) &&
+    /glass/.test(b) &&
+    (/\[color\]|_/.test(String(phrase || "")) || b === "i made glass")
+  ) {
     return true;
   }
-  if (b.includes("fish") && a.includes("fish") && (a.includes(b.slice(0, 8)) || b.includes(a.slice(0, 8)))) {
-    return true;
-  }
-  return a.includes(b) || b.includes(a);
+  return false;
 }
 
 /** Unique target phrases across Part 1 + Part 2 chapters. */
@@ -90,6 +110,7 @@ export function buildPhraseCatalog() {
         out.push({
           id: t.id || key,
           phrase,
+          patterns: Array.isArray(t.patterns) ? t.patterns : [],
           chapterId: seg.id,
           chapterTitle: seg.title || seg.id,
           partLabel,
@@ -123,7 +144,7 @@ function phraseChecklist(user) {
   const spoken = collectSpokenPhrases(user);
   return PHRASE_CATALOG.map((item) => ({
     ...item,
-    earned: spoken.some((s) => phraseMatchesCatalog(s, item.phrase)),
+    earned: spoken.some((s) => phraseMatchesCatalog(s, item)),
   }));
 }
 
@@ -131,8 +152,11 @@ function summarizeUserMcqFromParts(user) {
   let correct = 0;
   let incorrect = 0;
   let attempts = 0;
+  let sawProgressDoc = false;
   for (const meta of LEVEL_META) {
-    const field = user[meta.field] || {};
+    const field = user[meta.field];
+    if (!field) continue;
+    sawProgressDoc = true;
     for (const part of [field.part1, field.part2]) {
       const summary = part?.mcqSummary || {};
       for (const row of Object.values(summary)) {
@@ -143,8 +167,9 @@ function summarizeUserMcqFromParts(user) {
       }
     }
   }
-  // Fallback: top-level mcqStats rollup
-  if (!attempts && user.mcqStats) {
+  // Only use legacy rollup when the student has never synced part progress
+  // (after reset, part docs exist with empty mcqSummary — do not resurrect stale mcqStats).
+  if (!attempts && !sawProgressDoc && user.mcqStats) {
     for (const levelMap of Object.values(user.mcqStats)) {
       if (!levelMap || typeof levelMap !== "object") continue;
       for (const row of Object.values(levelMap)) {
@@ -203,11 +228,15 @@ export function collectUserBadges() {
 }
 
 export function buildProgressSummary(users) {
-  const accounts = users;
+  const accounts = (users || []).filter((u) => u.role !== "admin");
   const withProgress = accounts.filter(
     (u) => u.beginnerProgress || u.intermediateProgress || u.advancedProgress
   );
-  const lessonComplete = accounts.filter((u) => u.beginnerProgress?.part1Complete).length;
+  const lessonComplete = accounts.filter((u) => {
+    const bp = u.beginnerProgress;
+    if (!bp) return false;
+    return Boolean(bp.part1Complete || (bp.part1?.complete && bp.part2?.complete));
+  }).length;
   const totalStars = accounts.reduce((sum, u) => {
     return (
       sum +
@@ -217,14 +246,10 @@ export function buildProgressSummary(users) {
       }, 0)
     );
   }, 0);
-  const phraseStats = accounts.reduce(
-    (acc, u) => {
-      const list = phraseChecklist(u);
-      acc.earned += list.filter((p) => p.earned).length;
-      return acc;
-    },
-    { earned: 0 }
-  );
+  const phraseEarnedSum = accounts.reduce((sum, u) => {
+    return sum + phraseChecklist(u).filter((p) => p.earned).length;
+  }, 0);
+  const avgPhrases = accounts.length ? Math.round(phraseEarnedSum / accounts.length) : 0;
   const totalPokes = accounts.reduce((sum, u) => sum + totalPokeCount(u.pokeStats), 0);
   const mcq = accounts.reduce(
     (acc, u) => {
@@ -238,12 +263,12 @@ export function buildProgressSummary(users) {
   );
 
   return {
-    studentCount: accounts.filter((u) => u.role !== "admin").length,
-    accountCount: accounts.length,
+    studentCount: accounts.length,
+    accountCount: (users || []).length,
     syncedCount: withProgress.length,
     lessonCompleteCount: lessonComplete,
     totalStars,
-    totalPhrases: phraseStats.earned,
+    totalPhrases: avgPhrases,
     phraseCatalogSize: PHRASE_CATALOG.length,
     totalPokes,
     mcqCorrect: mcq.correct,
@@ -255,10 +280,11 @@ export function buildProgressSummary(users) {
 function renderHomeworkParts(meta, raw) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
-  const row = (label, part) => {
+  const row = (label, part, lesson) => {
+    const segCount = (lesson?.segments || []).length || "—";
     const done = part.complete
       ? "完了"
-      : `章 ${(part.segmentIndex || 0) + 1}/${(AQUARIUM_PART1.segments || []).length || "—"}`;
+      : `章 ${(Number(part.segmentIndex) || 0) + 1}/${segCount}`;
     const mem = Object.entries(part.memories || {})
       .map(([k, v]) => `${k}:${v}`)
       .join("、 ");
@@ -271,35 +297,59 @@ function renderHomeworkParts(meta, raw) {
       <h4>${escapeHtml(meta.label)}</h4>
       <span class="progress-level-meta">${raw?.part1Complete ? "Part1完了" : "Part1進行中"}</span>
     </header>
-    ${row("Part 1", p1)}
-    ${row("Part 2", p2)}
+    ${row("Part 1", p1, AQUARIUM_PART1)}
+    ${row("Part 2", p2, AQUARIUM_PART2)}
   </section>`;
 }
 
-function resolveBeatChoices(beat) {
-  return (beat.choices || []).slice(0, 4).map((c) => formatChoiceLabel(String(c)));
+function resolveBeatChoices(beat, memories = {}) {
+  return (beat.choices || []).slice(0, 4).map((c) => expandChoiceTemplate(String(c), memories));
 }
 
-function resolveBeatAnswer(beat) {
-  return formatChoiceLabel(String(beat.answer || ""));
+function resolveBeatAnswer(beat, memories = {}) {
+  return expandChoiceTemplate(String(beat.answer || ""), memories);
 }
 
-function isCorrectChoiceLabel(choice, answer) {
+function expandChoiceTemplate(label, memories = {}) {
+  const color = String(memories?.favoriteColor || "").trim();
+  let out = formatChoiceLabel(String(label || ""));
+  if (color) {
+    out = out.replace(/\[color\]/gi, color).replace(/_{2,}/g, color);
+  }
+  return out;
+}
+
+function isCorrectChoiceLabel(choice, beat, memories = {}) {
   const c = normalizeMcqChoice(choice);
+  if (!c || !beat) return false;
+
+  if (Array.isArray(beat.acceptAnyOf) && beat.acceptAnyOf.length) {
+    return beat.acceptAnyOf.some((p) => {
+      const np = normalizeMcqChoice(p);
+      return np && (c === np || c.includes(np) || np.includes(c));
+    });
+  }
+
+  const answer = resolveBeatAnswer(beat, memories);
   const a = normalizeMcqChoice(answer);
-  if (!c || !a) return false;
-  if (c === a) return true;
-  // Color / blank templates: "I made [color] glass!" ↔ "I made orange glass!"
+  if (a && c === a) return true;
+
+  const rawAnswer = String(beat.answer || "");
   if (
-    /i made/.test(a) &&
-    /glass/.test(a) &&
-    (/\[color\]|_/.test(a) || a === "i made glass") &&
     /i made/.test(c) &&
-    /glass/.test(c)
+    /glass/.test(c) &&
+    /i made/.test(normalizeMcqChoice(rawAnswer)) &&
+    /glass/.test(normalizeMcqChoice(rawAnswer)) &&
+    (/\[color\]|_/.test(rawAnswer) || normalizeMcqChoice(rawAnswer) === "i made glass")
   ) {
     return true;
   }
-  return false;
+
+  const patterns = beat.patterns || [];
+  return patterns.some((p) => {
+    const np = normalizeMcqChoice(p);
+    return np && (c === np || c.includes(np));
+  });
 }
 
 /**
@@ -325,36 +375,30 @@ function beatStatsFromPart(part, segmentId, beatId) {
     correct: Boolean(e.correct),
     at: e.at || null,
   }));
+  const logCorrect = clickOrder.filter((c) => c.correct).length;
+  const logIncorrect = clickOrder.filter((c) => !c.correct).length;
   return {
-    attempts: Number(summary?.attempts) || log.length || 0,
-    correct: Number(summary?.correct) || clickOrder.filter((c) => c.correct).length,
-    incorrect: Number(summary?.incorrect) || clickOrder.filter((c) => !c.correct).length,
+    attempts: summary?.attempts != null ? Number(summary.attempts) : log.length,
+    correct: summary?.correct != null ? Number(summary.correct) : logCorrect,
+    incorrect: summary?.incorrect != null ? Number(summary.incorrect) : logIncorrect,
     choiceCounts,
     clickOrder,
   };
 }
 
-function pickPrimaryPart(user) {
-  // Prefer beginner Part 1 (current homework); fall back to any level with data.
-  for (const meta of LEVEL_META) {
-    const field = user[meta.field];
-    if (field?.part1?.mcqSummary || field?.part1?.mcqLog?.length || field?.part1) {
-      return { meta, part: field.part1 || {}, partKey: "part1" };
-    }
-  }
-  return { meta: LEVEL_META[0], part: {}, partKey: "part1" };
-}
-
 function renderMcqChapterBlock(seg, part) {
+  const memories = part?.memories || {};
   const beats =
     seg.mcqBeats?.length
       ? seg.mcqBeats
       : (seg.items || []).map((item, i) => ({
           id: item.id || `item-${i}`,
-          learnyEn: item.promptJa || item.prompt || item.id || `Q${i + 1}`,
-          learnyJa: "",
+          learnyEn: item.promptEn || item.promptJa || item.prompt || item.id || `Q${i + 1}`,
+          learnyJa: item.promptJa || "",
           choices: item.choices || [],
           answer: item.answer || "",
+          acceptAnyOf: item.acceptAnyOf || [],
+          patterns: item.patterns || [],
         }));
 
   if (!beats.length) return "";
@@ -362,8 +406,7 @@ function renderMcqChapterBlock(seg, part) {
   const beatHtml = beats
     .map((beat, idx) => {
       const stats = beatStatsFromPart(part, seg.id, beat.id);
-      const choices = resolveBeatChoices(beat);
-      const answer = resolveBeatAnswer(beat);
+      const choices = resolveBeatChoices(beat, memories);
       const labels = [...choices];
       for (const k of Object.keys(stats.choiceCounts)) {
         if (!labels.some((c) => normalizeMcqChoice(c) === normalizeMcqChoice(k))) {
@@ -380,7 +423,7 @@ function renderMcqChapterBlock(seg, part) {
               )?.[1]
             ) ||
             0;
-          const ok = isCorrectChoiceLabel(label, answer);
+          const ok = isCorrectChoiceLabel(label, beat, memories);
           return `<li class="progress-mcq-option${ok ? " is-correct" : ""}">
             <span class="progress-mcq-option-label">${escapeHtml(label)}</span>
             <span class="progress-mcq-option-count">${count}</span>
@@ -433,12 +476,44 @@ function renderMcqChapterBlock(seg, part) {
 }
 
 function renderMcqActivity(user) {
-  const { part } = pickPrimaryPart(user);
-  const blocks = PART1_MCQ_SEGMENTS.map((seg) => renderMcqChapterBlock(seg, part)).join("");
-  if (!blocks) {
-    return '<p class="progress-activity-empty">4択チャプターがありません</p>';
+  const sections = [];
+  for (const meta of LEVEL_META) {
+    const field = user[meta.field];
+    if (!field) continue;
+    for (const [partKey, segs] of [
+      ["part1", PART1_MCQ_SEGMENTS],
+      ["part2", PART2_MCQ_SEGMENTS],
+    ]) {
+      const part = field[partKey];
+      if (!part) continue;
+      const attempts = segs.reduce((sum, seg) => {
+        const beats = seg.mcqBeats?.length
+          ? seg.mcqBeats
+          : (seg.items || []).map((item, i) => ({ id: item.id || `item-${i}` }));
+        return (
+          sum +
+          beats.reduce((s, beat) => s + (beatStatsFromPart(part, seg.id, beat.id).attempts || 0), 0)
+        );
+      }, 0);
+      const hasLog = Array.isArray(part.mcqLog) && part.mcqLog.length > 0;
+      if (!attempts && !part.complete && !hasLog) continue;
+
+      const blocks = segs.map((seg) => renderMcqChapterBlock(seg, part)).join("");
+      if (!blocks) continue;
+      sections.push(
+        `<h4 class="progress-mcq-part-title">${escapeHtml(meta.label)} · ${
+          partKey === "part1" ? "Part 1" : "Part 2"
+        }</h4>
+        <div class="progress-mcq-board">${blocks}</div>`
+      );
+    }
   }
-  return `<div class="progress-mcq-board">${blocks}</div>`;
+  if (!sections.length) {
+    const blocks = PART1_MCQ_SEGMENTS.map((seg) => renderMcqChapterBlock(seg, {})).join("");
+    if (!blocks) return '<p class="progress-activity-empty">4択チャプターがありません</p>';
+    return `<div class="progress-mcq-board">${blocks}</div>`;
+  }
+  return sections.join("");
 }
 
 function renderPhrasesList(checklist) {
@@ -471,46 +546,189 @@ function renderPhrasesList(checklist) {
   return `<p class="progress-phrases-summary">${earned} / ${checklist.length} フレーズ</p><div class="progress-phrases-scroll">${body}</div>`;
 }
 
+function eventDate(ts) {
+  if (!ts) return null;
+  try {
+    const date = typeof ts.toDate === "function" ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  } catch {
+    return null;
+  }
+}
+
+function formatDayHeading(date) {
+  if (!date) return "日時不明";
+  return date.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function formatTimeOnly(date) {
+  if (!date) return "—";
+  return date.toLocaleTimeString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function dayKeyJst(date) {
+  if (!date) return "unknown";
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" }); // YYYY-MM-DD
+}
+
+const SEGMENT_LABELS = (() => {
+  const map = Object.create(null);
+  for (const lesson of [AQUARIUM_PART1, AQUARIUM_PART2]) {
+    for (const seg of lesson.segments || []) {
+      if (!seg?.id) continue;
+      map[seg.id] = seg.title || seg.titleEn || seg.id;
+    }
+  }
+  return map;
+})();
+
+const LEVEL_LABEL = {
+  beginner: "ビギナー",
+  intermediate: "中級",
+  advanced: "上級",
+};
+
+const ACTIVITY_TYPE_META = {
+  poke: { label: "つつく", short: "つつく" },
+  star: { label: "スター", short: "★" },
+  badge: { label: "バッジ", short: "バッジ" },
+  badge_revoke: { label: "バッジ取消", short: "取消" },
+  reset: { label: "最初から", short: "リセット" },
+  mcq_correct: { label: "4択 正解", short: "正解" },
+  mcq_incorrect: { label: "4択 不正解", short: "不正解" },
+  skip: { label: "スキップ（旧）", short: "スキップ" },
+};
+
+function activityTypeMeta(type) {
+  return ACTIVITY_TYPE_META[type] || { label: type || "その他", short: type || "?" };
+}
+
+function renderActivityDetail(ev) {
+  if (ev.type === "poke") {
+    const seg = ev.segmentId ? SEGMENT_LABELS[ev.segmentId] || ev.segmentId : "";
+    return seg
+      ? `<span class="tl-tag">${escapeHtml(seg)}</span>`
+      : `<span class="tl-muted">つついた</span>`;
+  }
+  if (ev.type === "mcq_correct" || ev.type === "mcq_incorrect") {
+    const segLabel = SEGMENT_LABELS[ev.segmentId] || ev.segmentId || "章不明";
+    const beat = ev.beatId || "";
+    const choice = ev.choice || "(未選択)";
+    const ok = ev.type === "mcq_correct";
+    return `<div class="tl-mcq">
+      <span class="tl-tag">${escapeHtml(segLabel)}</span>
+      ${beat ? `<span class="tl-tag tl-tag-soft">${escapeHtml(beat)}</span>` : ""}
+      <span class="tl-choice ${ok ? "is-ok" : "is-ng"}">${escapeHtml(choice)}</span>
+      ${ev.attempt ? `<span class="tl-attempt">${escapeHtml(String(ev.attempt))}回目</span>` : ""}
+    </div>`;
+  }
+  if (ev.type === "star" || ev.type === "reset") {
+    return `<span class="tl-tag">${escapeHtml(ev.questTitle || ev.segmentId || "—")}</span>`;
+  }
+  if (ev.badgeId) {
+    return `<span class="tl-tag">${escapeHtml(ev.badgeId)}</span>`;
+  }
+  if (ev.learnyPrompt) {
+    return `<span class="tl-muted">${escapeHtml(String(ev.learnyPrompt).slice(0, 80))}</span>`;
+  }
+  return "";
+}
+
 export function renderActivityTimeline(events) {
   if (!events?.length) {
     return '<p class="progress-activity-empty">まだアクティビティがありません</p>';
   }
 
-  const typeLabel = {
-    poke: "つつく",
-    star: "スター獲得",
-    badge: "バッジ獲得",
-    badge_revoke: "バッジ取消",
-    reset: "最初から",
-    mcq_correct: "4択正解",
-    mcq_incorrect: "4択不正解",
-    skip: "スキップ（旧）",
+  const counts = {
+    all: events.length,
+    mcq_correct: 0,
+    mcq_incorrect: 0,
+    poke: 0,
+    star: 0,
+    reset: 0,
+    other: 0,
   };
+  for (const ev of events) {
+    if (ev.type in counts && ev.type !== "all") counts[ev.type] += 1;
+    else counts.other += 1;
+  }
 
-  return `<ul class="progress-activity-list">${events
-    .map((ev) => {
-      const when = formatProgressTimestamp(ev.at);
-      const level = ev.level ? ` · ${escapeHtml(ev.level)}` : "";
-      let detail = "";
-      if (ev.type === "poke") {
-        detail = escapeHtml(ev.segmentId || "つつく");
-      } else if (ev.type === "mcq_correct" || ev.type === "mcq_incorrect") {
-        detail = `${escapeHtml(ev.segmentId || "")}/${escapeHtml(ev.beatId || "")} → ${escapeHtml(ev.choice || "")}${
-          ev.attempt ? ` (${ev.attempt}回目)` : ""
-        }`;
-      } else if (ev.type === "star" || ev.type === "reset") {
-        detail = escapeHtml(ev.questTitle || ev.segmentId || "");
-      } else if (ev.badgeId) {
-        detail = escapeHtml(ev.badgeId);
-      }
-      const src = ev.source === "admin" ? "admin" : "生徒";
-      return `<li class="progress-activity-item type-${escapeHtml(ev.type)}">
-        <span class="progress-activity-type">${escapeHtml(typeLabel[ev.type] || ev.type)}</span>
-        <span class="progress-activity-detail">${detail}${level}</span>
-        <span class="progress-activity-meta">${escapeHtml(when)} · ${src}</span>
-      </li>`;
+  const filterChips = [
+    ["all", `すべて ${counts.all}`],
+    ["mcq_correct", `正解 ${counts.mcq_correct}`],
+    ["mcq_incorrect", `不正解 ${counts.mcq_incorrect}`],
+    ["poke", `つつく ${counts.poke}`],
+    ["star", `スター ${counts.star}`],
+    ["reset", `リセット ${counts.reset}`],
+  ]
+    .filter(([key]) => key === "all" || counts[key] > 0)
+    .map(
+      ([key, label], i) =>
+        `<button type="button" class="tl-filter${i === 0 ? " is-active" : ""}" data-action="filter-activity" data-filter="${escapeHtml(
+          key
+        )}">${escapeHtml(label)}</button>`
+    )
+    .join("");
+
+  const byDay = new Map();
+  for (const ev of events) {
+    const d = eventDate(ev.at);
+    const key = dayKeyJst(d);
+    if (!byDay.has(key)) byDay.set(key, { date: d, items: [] });
+    byDay.get(key).items.push(ev);
+  }
+
+  const daysHtml = [...byDay.entries()]
+    .map(([, group]) => {
+      const itemsHtml = group.items
+        .map((ev) => {
+          const d = eventDate(ev.at);
+          const meta = activityTypeMeta(ev.type);
+          const level = ev.level
+            ? `<span class="tl-level">${escapeHtml(LEVEL_LABEL[ev.level] || ev.level)}</span>`
+            : "";
+          const src = ev.source === "admin" ? '<span class="tl-src">admin</span>' : "";
+          return `<li class="progress-timeline-item type-${escapeHtml(ev.type || "other")}" data-type="${escapeHtml(
+            ev.type || "other"
+          )}">
+            <span class="tl-rail" aria-hidden="true"><span class="tl-dot"></span></span>
+            <div class="tl-card">
+              <div class="tl-card-head">
+                <span class="tl-badge type-${escapeHtml(ev.type || "other")}">${escapeHtml(meta.label)}</span>
+                ${level}
+                ${src}
+                <time class="tl-time" datetime="${escapeHtml(d ? d.toISOString() : "")}">${escapeHtml(
+                  formatTimeOnly(d)
+                )}</time>
+              </div>
+              <div class="tl-card-body">${renderActivityDetail(ev)}</div>
+            </div>
+          </li>`;
+        })
+        .join("");
+
+      return `<section class="progress-timeline-day" data-day="${escapeHtml(dayKeyJst(group.date))}">
+        <h5 class="progress-timeline-day-title">${escapeHtml(formatDayHeading(group.date))}<span class="tl-day-count">${group.items.length}</span></h5>
+        <ol class="progress-timeline-list">${itemsHtml}</ol>
+      </section>`;
     })
-    .join("")}</ul>`;
+    .join("");
+
+  return `<div class="progress-timeline">
+    <div class="progress-timeline-filters" role="toolbar" aria-label="イベントの種類で絞り込み">${filterChips}</div>
+    <div class="progress-timeline-scroll">${daysHtml}</div>
+  </div>`;
 }
 
 export function renderProgressDashboard(users, searchQuery = "") {
@@ -620,7 +838,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.totalPhrases}/${summary.phraseCatalogSize}</span>
-        <span class="progress-summary-label">フレーズ習得</span>
+        <span class="progress-summary-label">フレーズ習得（平均）</span>
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.totalPokes || 0}</span>
@@ -631,4 +849,4 @@ export function renderProgressDashboard(users, searchQuery = "") {
     <div class="progress-student-grid">${cardsHtml}</div>`;
 }
 
-export { LEVEL_META, PHRASE_CATALOG, PART1_MCQ_SEGMENTS };
+export { LEVEL_META, PHRASE_CATALOG, PART1_MCQ_SEGMENTS, PART2_MCQ_SEGMENTS };

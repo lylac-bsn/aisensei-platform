@@ -1,18 +1,18 @@
 /** Homework lesson: aquarium Part 1 (week-2 review of week-1 tank prep). No fish. */
 
-/** Japanese phrase elicits — phrase MUST be inside 「」 before って英語/えいごで言ってみて. */
+/** Japanese phrase elicits — phrase MUST be inside 「」 then の えいごを 選んでね！ */
 export const PART1_ELICIT_JA = {
-  needGlass: "「がらすが ひつよう」って えいごで いってみて！",
-  needSand: "「すなが ひつよう」って えいごで いってみて！",
-  foundSand: "あ！すな あった！「すなを みつけた！」って えいごで いってみて！",
-  ch3NeedGlass: "「がらすを つくらないと」って えいごで いってみて！",
-  ch3MadeGlass: "「がらすを つくった」って えいごで いってみて！",
-  ch5Building: "「すいそうを つくってる」って えいごで いってみて！",
-  ch5MadeTank: "「すいそうを つくった」って えいごで いってみて！",
-  ch5LooksGood: "「いい かんじに できた！」って えいごで いってみて！",
-  ch6MoreSand: "「もっと すなが ひつよう」って えいごで いってみて！",
-  ch6ImDone: "「できた！」って えいごで いってみて！",
-  ch6TankReady: "「さかなを いれられる じゅんびが できた！」って えいごで いってみて！",
+  needGlass: "「がらすが ひつよう」の えいごを 選んでね！",
+  needSand: "「すなが ひつよう」の えいごを 選んでね！",
+  foundSand: "あ！すな あった！「すなを みつけた！」の えいごを 選んでね！",
+  ch3NeedGlass: "「がらすを つくらないと」の えいごを 選んでね！",
+  ch3MadeGlass: "「がらすを つくった」の えいごを 選んでね！",
+  ch5Building: "「すいそうを つくってる」の えいごを 選んでね！",
+  ch5MadeTank: "「すいそうを つくった」の えいごを 選んでね！",
+  ch5LooksGood: "「いい かんじに できた！」の えいごを 選んでね！",
+  ch6MoreSand: "「もっと すなが ひつよう」の えいごを 選んでね！",
+  ch6ImDone: "「できた！」の えいごを 選んでね！",
+  ch6TankReady: "「さかなを いれられる じゅんびが できた！」の えいごを 選んでね！",
 };
 
 export const CH6_BEAT1_SPEAK =
@@ -293,8 +293,8 @@ export const AQUARIUM_PART1 = {
       mcqBeats: [
         {
           id: "made_color_glass",
-          learnyEn: "Tell me when you make one!",
-          learnyJa: "つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！",
+          learnyEn: "Let's make [color] coloured glass! Tell me when you make one!",
+          learnyJa: "[colorJa]いろの がらすを つくろう！つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！",
           choices: ["I made [color] glass!", "I need a dye.", "I put glass here.", "I made a tank!"],
           answer: "I made [color] glass!",
           patterns: ["i made", "glass"],
@@ -304,9 +304,10 @@ export const AQUARIUM_PART1 = {
       ],
       coach:
         "CHAPTER 4 — Beat A1: What's your favorite color? (NO buttons). Record favoriteColor. " +
-        "Beat A2 (next turn): Let's make [color] coloured glass! / [colorJa]いろの がらすを つくろう！ — ONE turn only. " +
-        "Beat B (next turn): Tell me when you make one! + つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ THEN show MCQ. " +
-        "Wrong: soft retry. Correct I made [color] glass! → complete_segment(ch4). NEVER show MCQ before Beat B.",
+        "THEN ONE combined turn (A2+B): Let's make [color] coloured glass! Tell me when you make one! / " +
+        "[colorJa]いろの がらすを つくろう！つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ " +
+        "THEN show MCQ. Wrong: soft retry. Correct I made [color] glass! → complete_segment(ch4). " +
+        "NEVER complete_segment on color alone. NEVER show MCQ before つくれたら.",
     },
     {
       id: "ch5",
