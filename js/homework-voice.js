@@ -842,6 +842,11 @@ const ENDING1_INTRO_SPEAK =
   "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
   "What kind of fish should we catch? どんな おさかなを つかまえよう？";
 
+/** Second half of Turn A — used when Perfect already played so we never re-say Perfect. */
+const ENDING1_INTRO_REMAINDER_SPEAK =
+  "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
+  "What kind of fish should we catch? どんな おさかなを つかまえよう？";
+
 const ENDING1_HOW_MANY_SPEAK = "How many do we want? なんびき ほしい？";
 
 const ENDING1_FINALE_SPEAK =
@@ -910,10 +915,21 @@ function ending1BeatSpeak(beat) {
   return (String(beat.en || "").trim() + " " + String(beat.jp || "").trim()).trim();
 }
 
+/** Full Turn A reached the fish question. */
 function assistantSaidEnding1Intro(text = lastAssistantText()) {
   const t = String(text || "");
-  // Combined intro must reach the fish question (end of old line 3).
   return /what kind of fish|どんな\s*おさかな/.test(t);
+}
+
+/** Perfect lead only (partial Turn A — do not re-force Perfect). */
+function assistantSaidEnding1PerfectLead(text = lastAssistantText()) {
+  const t = String(text || "");
+  return /perfect!?\s*we made a fish tank|ぱーふぇくと/i.test(t);
+}
+
+function ending1HasPerfectLeadInChat() {
+  if (assistantSaidEnding1PerfectLead()) return true;
+  return recentAssistantMessages(10).some((m) => assistantSaidEnding1PerfectLead(m));
 }
 
 function assistantSaidEnding1AutoBeat(beatIndex, text = lastAssistantText()) {
@@ -997,6 +1013,10 @@ function forceEnding1Intro(reason = "kick-intro") {
   if (!client?.connected || actionState !== "active") return false;
   syncEnding1AutoProgress();
   if (ending1AutoIntroComplete()) return false;
+  // Perfect already played but fish question missing — continue, never re-say Perfect.
+  if (ending1HasPerfectLeadInChat()) {
+    return forceEnding1IntroRemainder(reason);
+  }
   if (!ending1ForceAllowed("intro")) return false;
   ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
   const note =
@@ -1004,7 +1024,7 @@ function forceEnding1Intro(reason = "kick-intro") {
     reason +
     ". ENDING intro — Speak EXACTLY this ONE message (old lines 1+2+3 combined), then WAIT: " +
     ENDING1_INTRO_SPEAK +
-    " FORBIDDEN: splitting into multiple messages / You're welcome / free chat.";
+    " FORBIDDEN: splitting into multiple messages / repeating Perfect alone / You're welcome / free chat.";
   try {
     closeOpenAudioTurn();
     audioPlayer?.interrupt?.();
@@ -1012,6 +1032,30 @@ function forceEnding1Intro(reason = "kick-intro") {
     // ignore
   }
   dbg("force ending1 intro", reason);
+  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+}
+
+/** Continue Turn A after Perfect without repeating Perfect. */
+function forceEnding1IntroRemainder(reason = "intro-remainder") {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (!client?.connected || actionState !== "active") return false;
+  syncEnding1AutoProgress();
+  if (ending1AutoIntroComplete()) return false;
+  if (!ending1ForceAllowed("intro-remainder")) return false;
+  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+  const note =
+    "[Teacher note — do not read aloud] " +
+    reason +
+    ". ENDING intro CONTINUATION — Perfect was already said. Speak EXACTLY this ONLY (do NOT say Perfect / Thank you again): " +
+    ENDING1_INTRO_REMAINDER_SPEAK +
+    " Then WAIT for the child's fish answer. FORBIDDEN: repeating Perfect! / We made a fish tank together.";
+  try {
+    closeOpenAudioTurn();
+    audioPlayer?.interrupt?.();
+  } catch {
+    // ignore
+  }
+  dbg("force ending1 intro remainder", reason);
   return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
 }
 
@@ -3705,6 +3749,15 @@ function assistantMessagesTooSimilar(a, b) {
     if (assistantSaidEnding1Beat4(a) && assistantSaidEnding1Beat4(b)) return true;
     if (assistantSaidEnding1Intro(a) && assistantSaidEnding1Intro(b)) return true;
     if (assistantSaidEnding1Finale(a) && assistantSaidEnding1Finale(b)) return true;
+    // Partial Perfect lead repeating (before fish question lands).
+    if (
+      assistantSaidEnding1PerfectLead(a) &&
+      assistantSaidEnding1PerfectLead(b) &&
+      !assistantSaidEnding1Intro(a) &&
+      !assistantSaidEnding1Intro(b)
+    ) {
+      return true;
+    }
   }
   return sharesPhraseTeachTarget(a, b);
 }
@@ -6489,28 +6542,47 @@ function stripForeignScriptsFromAssistantText(text) {
 }
 
 /**
- * After the Japanese half starts, STT sometimes restarts English mid-bubble
- * (e.g. そっか！そうだ！Today I want…). Cut that restart — JP half is ひらがな only.
+ * Strip STT garble where Latin is glued onto Japanese (そうだ！Today…),
+ * or where the opening English is wrongly restarted after Japanese.
+ * Do NOT cut legitimate beginner EN→JA→EN→JA pairs (e.g. ending: ありがとう！ Hold on…).
  */
-function trimEnglishRestartAfterJapanese(text) {
-  const t = String(text || "");
+function trimCorruptEnglishRestartAfterJapanese(text) {
+  let t = String(text || "");
+  // Glued Latin right after kana/JP punct (common after foreign-script strip).
+  // Remove the whole glued English token, not just the first letter (そうだ！Today → そうだ！).
+  t = t.replace(/([\u3040-\u309F\u30A0-\u30FF！？。])([A-Za-z][A-Za-z'’]*)/g, "$1");
+
   const jpStart = t.search(/[\u3040-\u309F]{2,}/);
   if (jpStart < 0) return t;
   const head = t.slice(0, jpStart);
-  let jp = t.slice(jpStart);
-  const latinAt = jp.search(/[A-Za-z]/);
-  if (latinAt > 0) {
-    jp = jp.slice(0, latinAt).trim();
-  } else if (latinAt === 0) {
-    // Unusual: Japanese matcher found kana but Latin is first in slice — keep as-is.
+  const rest = t.slice(jpStart);
+  const latinAt = rest.search(/[A-Za-z]/);
+  if (latinAt < 0) return t;
+  const enAfter = rest.slice(latinAt).trim();
+  // Legitimate next English beats after a Japanese half.
+  if (
+    /^(hold on|what kind of fish|how many|hmm\b|next minecraft|that's for next|tell me what|are you done|let'?s make|do we have|is the tank)/i.test(
+      enAfter
+    )
+  ) {
+    return t;
   }
-  return (head + jp).replace(/\s{2,}/g, " ").trim();
+  const enBefore = head.toLowerCase();
+  const afterHead = enAfter.toLowerCase().slice(0, 64);
+  // Warmup-style STT loop: Japanese then a repeat of the invite English.
+  if (
+    /today i want|will you help|make a fish|i want to make|okay!?\s*oh|oh!?\s*today/i.test(afterHead) &&
+    /today i want|will you help|make a fish|okay|oh!?\s*today/i.test(enBefore)
+  ) {
+    return (head + rest.slice(0, latinAt)).replace(/\s{2,}/g, " ").trim();
+  }
+  return t;
 }
 
 function sanitizeAssistantBubbleText(text) {
   let t = ensureJapaneseElicitBrackets(String(text || "").trim());
   t = stripForeignScriptsFromAssistantText(t);
-  t = trimEnglishRestartAfterJapanese(t);
+  t = trimCorruptEnglishRestartAfterJapanese(t);
   t = fixCh4BeatBBubble(t);
   t = stripCh4FavoriteColorReask(t);
   if (getCurrentSegment()?.id === "quiz1") {
