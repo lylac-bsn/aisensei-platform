@@ -547,7 +547,9 @@ function memoryBlock(memories) {
 function japaneseOutputRule(levelId) {
   const hiraganaOnly =
     "JAPANESE OUTPUT (mandatory whenever you speak Japanese): Write ONLY in ひらがな — no kanji, no katakana, no romaji. " +
-    "This is for TTS pronunciation. Examples: がらす (not ガラス), すな (not 砂), すいそう (not 水槽), とうめい (transparent — NOT みえて), マインクラフト → まいんくらふと.";
+    "This is for TTS pronunciation. Examples: がらす (not ガラス), すな (not 砂), すいそう (not 水槽), とうめい (transparent — NOT みえて), マインクラフト → まいんくらふと. " +
+    "LANGUAGE LOCK: Spoken text may use ONLY English (Latin letters) and Japanese (ひらがな). " +
+    "FORBIDDEN: Arabic, Bengali, Chinese characters as Chinese, Korean, Cyrillic, Thai, Hindi, or any other script — never mix them into transcriptions.";
   if (levelId === "beginner") {
     return (
       hiraganaOnly +
@@ -596,7 +598,7 @@ function japaneseElicitBracketRule() {
     `Ch1 glass: ${PART1_ELICIT_JA.needGlass} Ch1 sand: ${PART1_ELICIT_JA.needSand}`,
     `Ch2 found sand: ${PART1_ELICIT_JA.foundSand}`,
     `Ch3: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
-    `Ch5: ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
+    `Ch5: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
     `Ch6: ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
     "FORBIDDEN: ガラスが必要って… / がらすがひつようって… without 「」 around the phrase.",
   ].join(" ");
@@ -676,7 +678,9 @@ function ch4StartNudge() {
 function ch5StoryRule() {
   return [
     "CHAPTER 5 ONLY — build tank walls with glass. 4 MCQ beats in order (English then Japanese, ONE beat per turn):",
-    "Beat 1: Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！ → MCQ I put glass here.",
+    "Beat 1: Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？" +
+      PART1_ELICIT_JA.ch5PutGlass +
+      " → MCQ I put glass here.",
     `Beat 2: Tell me what you're building! ${PART1_ELICIT_JA.ch5Building} → MCQ I'm building a tank.`,
     `Beat 3: Are you done making it? ${PART1_ELICIT_JA.ch5MadeTank} → MCQ I made a tank!.`,
     `Beat 4: How does it look? ${PART1_ELICIT_JA.ch5LooksGood} → MCQ It looks good! → complete_segment(ch5).`,
@@ -690,8 +694,9 @@ function ch5StoryRule() {
 function ch5StartNudge() {
   return (
     "[Teacher note — do not read aloud] CHAPTER 5 walls start NOW. Speak EXACTLY Beat 1: " +
-    "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！ " +
-    "Then WAIT for 4-button tap (I put glass here). FORBIDDEN: How big, Let me know when you put, dye/color restart."
+    "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？" +
+    PART1_ELICIT_JA.ch5PutGlass +
+    " Then WAIT for 4-button tap (I put glass here). FORBIDDEN: How big, Let me know when you put, dye/color restart."
   );
 }
 
@@ -1131,7 +1136,8 @@ export function buildHandoffOpeningNudge(
     ch4:
       "What's your favorite color? すきな いろは？",
     ch5:
-      "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！",
+      "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？" +
+      PART1_ELICIT_JA.ch5PutGlass,
     daily1: daily1OpenSpeak(),
     ch6: CH6_BEAT1_SPEAK,
     final1: final1OpenSpeak(),

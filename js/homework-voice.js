@@ -5125,6 +5125,107 @@ function isCh4FreeTalkUi() {
   return !ch4AssistantSaidBeatB();
 }
 
+/** True while tap-choice MCQ / quiz buttons are on screen (mic must stay off). */
+function isMcqChoiceUiActive(segment = getCurrentSegment()) {
+  if (
+    actionState !== "active" ||
+    chapterTransitionActive ||
+    isHandoffRunning ||
+    isChapterHandoff ||
+    skipOutboundForHandoff
+  ) {
+    return false;
+  }
+  if (isCh2FreeTalkUi() || isCh4FreeTalkUi()) return false;
+
+  if (segment?.id === "quiz1") {
+    return Boolean(getCurrentQuiz1Item());
+  }
+
+  if (segment?.id === "final1" && segment?.input === "speak_or_click") {
+    if (!assistantAskedFinal1QuizQuestion(lastAssistantText())) return false;
+    const displayed = getDisplayedFinal1Item();
+    const item = displayed?.item || getCurrentFinal1Item();
+    return Boolean(item);
+  }
+
+  const unlocked = mcqUnlockFlags(segment);
+  const cur = getCurrentMcqBeat(segment, { unlocked });
+  return Boolean(cur?.beat);
+}
+
+/** Remember mute preference across free-talk ↔ MCQ so we don't force-unmute forever. */
+let micMutedBeforeMcq = null;
+
+function forceMicMutedForMcq() {
+  isMuted = true;
+  try {
+    audioStreamer?.setMuted?.(true);
+    closeOpenAudioTurn();
+    audioStreamer?.pauseStreaming?.();
+  } catch {
+    // ignore
+  }
+  audioStreaming = false;
+}
+
+async function restoreMicAfterMcqIfNeeded() {
+  if (micMutedBeforeMcq === null) return;
+  const wantUnmute = micMutedBeforeMcq === false;
+  micMutedBeforeMcq = null;
+  if (!wantUnmute) return;
+  if (actionState !== "active" || !audioStreamer || isMcqChoiceUiActive()) return;
+  isMuted = false;
+  try {
+    audioStreamer.setMuted(false);
+    await audioStreamer.ensureStreaming();
+    audioStreamer.resumeStreaming();
+    audioStreaming = true;
+  } catch {
+    isMuted = true;
+    audioStreaming = false;
+  }
+  updateActionUI();
+}
+
+function paintMuteButton() {
+  if (!btnMute) return;
+  const callLive = actionState === "active";
+  const handoffBusy = isHandoffRunning || isChapterHandoff || chapterTransitionActive;
+  const mcqLocksMic = callLive && isMcqChoiceUiActive();
+  btnMute.classList.add("visible");
+  btnMute.disabled = !callLive || handoffBusy || mcqLocksMic;
+  btnMute.classList.toggle("muted", (isMuted || mcqLocksMic) && callLive);
+  btnMute.innerHTML = (isMuted || mcqLocksMic) && callLive ? ICON_MIC_OFF : ICON_MIC;
+  btnMute.title = !callLive
+    ? "はじめるとマイクはオフのまま（ボタンで答えよう）"
+    : mcqLocksMic
+      ? "4択のときはマイクオフ（ボタンで答えよう）"
+      : isMuted
+        ? "マイクオフ（タップでオン）"
+        : "タップでマイクをオフ";
+  btnMute.setAttribute(
+    "aria-label",
+    !callLive || mcqLocksMic || isMuted ? "マイクオフ" : "マイクオン"
+  );
+}
+
+/** Mute + lock mic whenever MCQ buttons are showing; restore prior mute when they hide. */
+function syncMicForMcqMode() {
+  const mcqOn = isMcqChoiceUiActive();
+  if (mcqOn) {
+    if (micMutedBeforeMcq === null) micMutedBeforeMcq = isMuted;
+    if (!isMuted || audioStreaming) forceMicMutedForMcq();
+    paintMuteButton();
+    return;
+  }
+  if (micMutedBeforeMcq !== null) {
+    void restoreMicAfterMcqIfNeeded();
+  } else {
+    paintMuteButton();
+  }
+}
+
 function refreshChoiceBarIfNeeded() {
   renderChoiceBar(getCurrentSegment());
 }
@@ -5519,12 +5620,14 @@ function renderChoiceBar(segment) {
     skipOutboundForHandoff
   ) {
     hide();
+    syncMicForMcqMode();
     return;
   }
 
   // Free-talk stretches (Ch2 chat/wait, Ch4 color ask before Beat B, etc.): no buttons.
   if (isCh2FreeTalkUi() || isCh4FreeTalkUi()) {
     hide();
+    syncMicForMcqMode();
     return;
   }
 
@@ -5552,6 +5655,7 @@ function renderChoiceBar(segment) {
     const total = getQuiz1Items().length || 3;
     if (!item) {
       hide();
+      syncMicForMcqMode();
       return;
     }
     appendChoices(
@@ -5562,12 +5666,14 @@ function renderChoiceBar(segment) {
       (label) => handleQuiz1ChoiceClick(label),
       `答えをタップ（${quiz1State.cursor + 1} / ${total}）`
     );
+    syncMicForMcqMode();
     return;
   }
 
   if (segment?.id === "final1" && segment?.input === "speak_or_click") {
     if (!assistantAskedFinal1QuizQuestion(lastAssistantText())) {
       hide();
+      syncMicForMcqMode();
       return;
     }
     syncFinal1CursorFromAssistant(lastAssistantText());
@@ -5575,6 +5681,7 @@ function renderChoiceBar(segment) {
     const item = displayed?.item || getCurrentFinal1Item();
     if (!item) {
       hide();
+      syncMicForMcqMode();
       return;
     }
     appendChoices(
@@ -5585,6 +5692,7 @@ function renderChoiceBar(segment) {
       (label) => handleFinal1ChoiceClick(label),
       "答えをタップしてね"
     );
+    syncMicForMcqMode();
     return;
   }
 
@@ -5592,6 +5700,7 @@ function renderChoiceBar(segment) {
   const cur = getCurrentMcqBeat(segment, { unlocked });
   if (!cur?.beat) {
     hide();
+    syncMicForMcqMode();
     return;
   }
 
@@ -5600,6 +5709,7 @@ function renderChoiceBar(segment) {
     (label) => handleMcqChoiceClick(label),
     `答えをタップ（${cur.index + 1} / ${cur.total}）`
   );
+  syncMicForMcqMode();
 }
 
 function normalizeUserText(text) {
@@ -6229,7 +6339,8 @@ const HANDOFF_SPEAK_LINES = {
   ch3: `Let's make some glass! ${PART1_ELICIT_JA.ch3NeedGlass}`,
   ch4: "What's your favorite color? すきな いろは？",
   ch5:
-    "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！",
+    "Now let's make a tank wall! Where do you want to put the glass? Tell me! すいそうの かべを つくろう！どこに がらすを おく？" +
+    PART1_ELICIT_JA.ch5PutGlass,
   ch6: CH6_BEAT1_SPEAK,
 };
 
@@ -6359,8 +6470,47 @@ function ensureJapaneseElicitBrackets(text) {
   return t;
 }
 
+/**
+ * Learny may only speak English + Japanese. Live STT sometimes injects
+ * Arabic/Bengali/etc. — strip any script outside the allowlist.
+ */
+function stripForeignScriptsFromAssistantText(text) {
+  let t = String(text || "");
+  // Allow: Latin (incl. accents), digits, JP kana/kanji, CJK/fullwidth punct, common punct, emoji/misc symbols.
+  t = t.replace(
+    /[^\sA-Za-z0-9.,!?;:'"“”‘’`~@#%&*()\-_=+[\]{}<>|/\\^+…·•—–〜ー。、「」『』（）？！：；・￥¥€£$\u00C0-\u024F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u9FFF\uF900-\uFAFF\u3000-\u303F\uFF01-\uFF5E\u2600-\u27BF\u{1F300}-\u{1FAFF}]/gu,
+    ""
+  );
+  // Collapse gaps left by removed foreign glyphs; keep normal English spacing.
+  t = t.replace(/[ \t]{2,}/g, " ");
+  t = t.replace(/\s+([。、！？「」『』（）])/g, "$1");
+  t = t.replace(/([。、！？])\s{2,}/g, "$1");
+  return t.trim();
+}
+
+/**
+ * After the Japanese half starts, STT sometimes restarts English mid-bubble
+ * (e.g. そっか！そうだ！Today I want…). Cut that restart — JP half is ひらがな only.
+ */
+function trimEnglishRestartAfterJapanese(text) {
+  const t = String(text || "");
+  const jpStart = t.search(/[\u3040-\u309F]{2,}/);
+  if (jpStart < 0) return t;
+  const head = t.slice(0, jpStart);
+  let jp = t.slice(jpStart);
+  const latinAt = jp.search(/[A-Za-z]/);
+  if (latinAt > 0) {
+    jp = jp.slice(0, latinAt).trim();
+  } else if (latinAt === 0) {
+    // Unusual: Japanese matcher found kana but Latin is first in slice — keep as-is.
+  }
+  return (head + jp).replace(/\s{2,}/g, " ").trim();
+}
+
 function sanitizeAssistantBubbleText(text) {
   let t = ensureJapaneseElicitBrackets(String(text || "").trim());
+  t = stripForeignScriptsFromAssistantText(t);
+  t = trimEnglishRestartAfterJapanese(t);
   t = fixCh4BeatBBubble(t);
   t = stripCh4FavoriteColorReask(t);
   if (getCurrentSegment()?.id === "quiz1") {
@@ -6677,24 +6827,11 @@ function updateActionUI() {
     btnAction.className = "action-btn idle header-call-btn";
     setActionBtnContent(ICON_PHONE, "はじめる");
   }
+  // Choice bar may force-mute for MCQ — sync before painting the mic button.
+  updateLessonBanner();
+  paintMuteButton();
   const callLive = actionState === "active";
   const handoffBusy = isHandoffRunning || isChapterHandoff || chapterTransitionActive;
-  if (btnMute) {
-    btnMute.classList.add("visible");
-    btnMute.disabled = !callLive || handoffBusy;
-    btnMute.classList.toggle("muted", isMuted && callLive);
-    btnMute.innerHTML = isMuted && callLive ? ICON_MIC_OFF : ICON_MIC;
-    btnMute.title =
-      !callLive
-        ? "はじめるとマイクはオフのまま（ボタンで答えよう）"
-        : isMuted
-          ? "マイクオフ（4択ボタンで答えよう）"
-          : "タップでマイクをオフ";
-    btnMute.setAttribute(
-      "aria-label",
-      !callLive ? "マイクオフ" : isMuted ? "マイクオフ" : "マイクオン"
-    );
-  }
   if (btnRetry) {
     btnRetry.hidden = actionState === "idle";
     btnRetry.disabled = !callLive || handoffBusy || isAutoReconnecting;
@@ -6702,7 +6839,6 @@ function updateActionUI() {
   if (btnSend) btnSend.disabled = !callLive || handoffBusy;
   if (chatInput) chatInput.disabled = !callLive || handoffBusy;
   notifyCallState();
-  updateLessonBanner();
 }
 
 function sendClientText(text, { force = false } = {}) {
@@ -6998,7 +7134,7 @@ function bindVoiceGateActivity() {
   audioStreamer.voiceGateHangoverMs = 450;
   audioStreamer.onVoiceGateChange = (open) => {
     if (actionState !== "active" || !client?.connected) return;
-    if (isMuted) return;
+    if (isMuted || isMcqChoiceUiActive()) return;
     if (open) {
       // Don't open a user turn while Learny is still talking.
       if (assistantIsSpeaking()) return;
@@ -7118,7 +7254,7 @@ function needsContinuationNudge(text) {
   // Warmup: never invent a next beat while waiting after How are you / What did you do…
   if (getCurrentSegment()?.type === "warmup") {
     if (countWarmupUserReplies() < 1) return false;
-    if (findWarmupAgreeAfterInvite()) return false;
+    if (findWarmupReplyAfterInvite()) return false;
   }
   if (assistantAskedQuestion(t)) return false;
   if (looksLikePraiseOnlyAssistant(t)) return true;
@@ -7740,17 +7876,17 @@ function assistantBeforeLastUserMessage() {
 }
 
 function canCompleteWarmupPart1(userQuote = "") {
-  const agreeText = userQuote || findWarmupAgreeAfterInvite() || recentUserMessages(1)[0] || "";
-  if (findWarmupAgreeAfterInvite()) {
-    return looksLikeAgree(agreeText, { afterTankInvite: true });
-  }
-  const inviteMsg = assistantBeforeLastUserMessage();
-  if (!assistantWarmupInviteOnly(inviteMsg)) return false;
-  return looksLikeAgree(agreeText, { afterTankInvite: true });
+  const quote = String(
+    userQuote || findWarmupReplyAfterInvite() || recentUserMessages(1)[0] || ""
+  ).trim();
+  if (!quote) return false;
+  // Any reply after the tank invite advances — yes, no, or anything else.
+  if (findWarmupReplyAfterInvite()) return true;
+  return assistantWarmupInviteOnly(assistantBeforeLastUserMessage());
 }
 
-/** User said yes/ok after the tank invite but warmup segment is still open. */
-function findWarmupAgreeAfterInvite() {
+/** Any user message that came right after Learny's fish-tank invite. */
+function findWarmupReplyAfterInvite() {
   if (getCurrentSegment()?.type !== "warmup") return "";
   for (let i = 0; i < chatMessages.length; i += 1) {
     const m = chatMessages[i];
@@ -7759,22 +7895,25 @@ function findWarmupAgreeAfterInvite() {
     if (!quote) continue;
     for (let j = i - 1; j >= 0; j -= 1) {
       if (chatMessages[j].type !== "assistant") continue;
-      if (assistantWarmupInviteOnly(chatMessages[j].text) && looksLikeAgree(quote, { afterTankInvite: true })) {
-        return quote;
-      }
+      if (assistantWarmupInviteOnly(chatMessages[j].text)) return quote;
       break;
     }
   }
   return "";
 }
 
+/** @deprecated alias — invite reply no longer requires agree wording */
+function findWarmupAgreeAfterInvite() {
+  return findWarmupReplyAfterInvite();
+}
+
 function tryCompleteWarmupIfUserAgreedAfterInvite() {
   if (getCurrentSegment()?.type !== "warmup") return false;
-  const quote = findWarmupAgreeAfterInvite();
+  const quote = findWarmupReplyAfterInvite();
   if (!quote) return false;
   const advance = maybeCompleteWarmupFromClient(quote);
   if (advance) {
-    dbg("warmup recovered after agree", quote.slice(0, 24));
+    dbg("warmup recovered after invite reply", quote.slice(0, 24));
     return true;
   }
   return false;
@@ -7801,9 +7940,8 @@ function suggestWarmupFollowUpHint(userText) {
 
 function buildWarmupUserCoachNote(userText) {
   if (getCurrentSegment()?.type !== "warmup") return "";
-  if (looksLikeAgree(userText) && assistantWarmupInviteOnly(assistantBeforeLastUserMessage())) {
-    // Warmup will complete + soft-handoff to Ch1 — do not coach a spoken Thank you here
-    // (that raced with handoff and made Learny re-ask the tank invite).
+  // After tank invite, any reply advances to Ch1 — do not coach more warmup chat.
+  if (assistantWarmupInviteOnly(assistantBeforeLastUserMessage())) {
     return "";
   }
   if (looksLikeAgree(userText)) return "";
@@ -7817,7 +7955,7 @@ function buildWarmupUserCoachNote(userText) {
     if (replies >= 3 || warmupTankInviteAllowedYet()) {
       return (
         `Child said "${snippet}" (no/nothing). Short Okay! / そっか！ THEN Oh! Today I want to make a fish tank. Will you help me make it? ` +
-        `いっしょに つくれる？ WAIT for yes.` +
+        `いっしょに つくれる？ Then WAIT — any reply advances to Chapter 1.` +
         antiRepeat
       );
     }
@@ -7858,7 +7996,7 @@ function buildWarmupUserCoachNote(userText) {
   }
   return (
     `Invite turn: short reaction to "${snippet}" THEN Oh! Today I want to make a fish tank. Will you help me make it? ` +
-    `そっか！そうだ！きょうは…いっしょに つくれる？ WAIT for yes. FORBIDDEN: bare Oh! Today with no reaction.` +
+    `そっか！そうだ！きょうは…いっしょに つくれる？ Then WAIT — any child reply advances to Chapter 1. FORBIDDEN: bare Oh! Today with no reaction.` +
     antiRepeat
   );
 }
@@ -7967,7 +8105,7 @@ function maybeWarmupCoachNudge() {
       "On the invite turn use: short reaction + Oh! Today… help question only — no extra What did you do… chat question.";
   } else if (assistantSkippedWarmupWait(assistant)) {
     note +=
-      "You combined tank invite + Chapter 1. Invite only (reaction + いっしょに つくれる？), then WAIT for yes — no Thank you, no glass question.";
+      "You combined tank invite + Chapter 1. Invite only (reaction + いっしょに つくれる？), then WAIT — any reply advances — no Thank you, no glass question.";
   } else {
     note += "ONE question per turn only — then WAIT for the child to answer before your next line.";
   }
@@ -8816,9 +8954,10 @@ function handleTools(functionCalls) {
           {
             result: "not_yet",
             message:
-              "Warmup NOT done. Ask: Will you help me make a fish tank? (いっしょに つくれる？) on its OWN turn — then STOP and WAIT for yes/ok. " +
+              "Warmup NOT done. Ask: Will you help me make a fish tank? (いっしょに つくれる？) on its OWN turn — then STOP and WAIT. " +
+              "Any child reply after that invite completes warmup — do NOT require yes/ok specifically. " +
               "Do NOT combine everyday chat + tank invite in one message. " +
-              "Do NOT say Thank you or ask about glass/sand until the child agrees on a later turn.",
+              "Do NOT say Thank you or ask about glass/sand until the child has replied on a later turn.",
           },
           toolReplyScheduling()
         );
@@ -9766,6 +9905,7 @@ function disconnectAPI() {
   connected = false;
   openingSent = false;
   userActivityOpen = false;
+  micMutedBeforeMcq = null;
 }
 
 async function resumeSessionAfterDrop() {
@@ -9902,6 +10042,12 @@ function showLessonCompleteModal() {
 
 async function toggleMute() {
   if (actionState !== "active" || !audioStreamer) return;
+  // MCQ / quiz buttons on screen: mic stays locked off (tap answers only).
+  if (isMcqChoiceUiActive()) {
+    forceMicMutedForMcq();
+    updateActionUI();
+    return;
+  }
   isMuted = !isMuted;
   audioStreamer.setMuted(isMuted);
   if (isMuted) {

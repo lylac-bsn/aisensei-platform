@@ -7,6 +7,7 @@ export const PART1_ELICIT_JA = {
   foundSand: "あ！すな あった！「すなを みつけた！」の えいごを 選んでね！",
   ch3NeedGlass: "「がらすを つくらないと」の えいごを 選んでね！",
   ch3MadeGlass: "「がらすを つくった」の えいごを 選んでね！",
+  ch5PutGlass: "「ここにガラスをおく」のえいごを選んでね！",
   ch5Building: "「すいそうを つくってる」の えいごを 選んでね！",
   ch5MadeTank: "「すいそうを つくった」の えいごを 選んでね！",
   ch5LooksGood: "「いい かんじに できた！」の えいごを 選んでね！",
@@ -60,7 +61,8 @@ export const AQUARIUM_PART1 = {
         "When they share news (studied / cafe / school / game…): show real interest (name it + a tiny human comment), ask ONE curious follow-up about THAT, WAIT — never hollow Oh! then jump mid-chat; never robotic You X! What did you X? every time. " +
         "After 3+ real chat exchanges, ONE invite turn: warm short reaction to their last line + Oh! Today… in the SAME message — " +
         "e.g. Okay! Oh! Today I want to make a fish tank. Will you help me make it? そっか！そうだ！きょうは らーにーせんせいの すいそうづくりを てつだってほしいんだ。いっしょに つくれる？ " +
-        "FORBIDDEN: bare Oh! Today with no reaction; everyday chat question + tank invite; Japanese-only invite; doubled greetings. After yes/ok: call complete_segment(ch0) — do NOT ask about glass/sand until Chapter 1.",
+        "FORBIDDEN: bare Oh! Today with no reaction; everyday chat question + tank invite; Japanese-only invite; doubled greetings. " +
+        "After the invite, ANY child reply (yes/no/ok/anything) → call complete_segment(ch0) immediately — do NOT ask again, do NOT ask about glass/sand until Chapter 1.",
       completeWithoutEnglish: true,
     },
     {
@@ -329,7 +331,8 @@ export const AQUARIUM_PART1 = {
         {
           id: "put_glass",
           learnyEn: "Now let's make a tank wall! Where do you want to put the glass? Tell me!",
-          learnyJa: "すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！",
+          learnyJa:
+            "すいそうの かべを つくろう！どこに がらすを おく？" + PART1_ELICIT_JA.ch5PutGlass,
           choices: ["I put glass here.", "I put sand here.", "I made glass!", "I need glass."],
           answer: "I put glass here.",
           patterns: ["i put glass", "put glass here"],
@@ -361,7 +364,8 @@ export const AQUARIUM_PART1 = {
         },
       ],
       coach:
-        "CHAPTER 5 — 4-choice MCQ in order: Beat1 Now let's make a tank wall! Where do you want to put the glass? Tell me! → I put glass here → " +
+        "CHAPTER 5 — 4-choice MCQ in order: Beat1 Now let's make a tank wall! Where do you want to put the glass? Tell me! " +
+        "すいそうの かべを つくろう！どこに がらすを おく？「ここにガラスをおく」のえいごを選んでね！ → I put glass here → " +
         "Beat2 Tell me what you're building! 「すいそうを つくってる」→ I'm building a tank → Beat3 Are you done making it? 「すいそうを つくった」→ I made a tank! → " +
         "Beat4 How does it look? 「いい かんじに できた！」→ It looks good! Wrong: soft retry, never reveal. Last correct → complete_segment(ch5).",
     },

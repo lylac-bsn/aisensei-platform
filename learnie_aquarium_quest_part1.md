@@ -252,7 +252,7 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 **Learny:**  
 `Now let's make a tank wall! Where do you want to put the glass? Tell me!`  
-`すいそうの かべを つくろう！どこに がらすを おく？おけたら えいごで おしえて！`  
+`すいそうの かべを つくろう！どこに がらすを おく？「ここにガラスをおく」のえいごを選んでね！`  
 **4択:** I put glass here. / I put sand here. / I made glass! / I need glass. → **I put glass here.**
 
 ## Beat 2
