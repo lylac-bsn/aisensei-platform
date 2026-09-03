@@ -336,6 +336,53 @@
   color: var(--admin-muted);
 }
 
+.progress-part-block + .progress-part-block {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed var(--admin-line);
+}
+
+.progress-chapter-plays {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.progress-chapter-play {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 8px;
+  background: var(--admin-surface);
+  border: 1px solid transparent;
+  font-size: 0.7rem;
+}
+
+.progress-chapter-play.is-done {
+  border-color: rgba(67, 160, 71, 0.35);
+  background: #f1f8e9;
+}
+
+.progress-chapter-play-title {
+  color: var(--text-dark);
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-chapter-play-count {
+  flex-shrink: 0;
+  font-weight: 800;
+  color: var(--admin-muted-2);
+  font-variant-numeric: tabular-nums;
+}
+
 /* —— Details / progressive disclosure —— */
 .progress-detail-block,
 .progress-phrases-details {

@@ -28,6 +28,7 @@ import {
   isPart1Complete,
   getSegmentChapterMeta,
   resetLesson,
+  ensureChapterPlayCounted,
   getActiveLevelId,
   setLearnerDisplayName,
   daily1OpenSpeak,
@@ -9221,6 +9222,129 @@ function resetVoiceSessionUI({ lessonId } = {}) {
   updateActionUI();
 }
 
+/**
+ * Parent lesson panel jumped chapters — localStorage already updated.
+ * Refresh UI; if in a live call, reconnect with the new chapter opening.
+ * Do NOT call jumpToSegment here (would double-count plays).
+ */
+async function applyChapterJumpFromParent({ lessonId, segmentId: _segmentId } = {}) {
+  const activeLesson = getActiveLessonId();
+  if (lessonId && lessonId !== activeLesson) return;
+
+  const wasLive = actionState === "active" || actionState === "connecting";
+
+  openingSent = false;
+  pendingOpeningKickOpts = null;
+  sessionResumeHandle = null;
+  postTurnNudgesForUserKey = "";
+  lastPendingUserText = "";
+  bannerSegmentId = "";
+  resetCh2Search();
+  ch4BeatBForceAt = 0;
+  ch4LetsMakeForceAt = 0;
+  resetDaily1Chat();
+  resetFinal1Quiz();
+  resetQuiz1State();
+  resetEnding1Beat();
+  clearPendingReplyWatch();
+  clearLeadWatch();
+  clearEnding1HangUpWatch();
+  cancelAssistantTurnEnd();
+  chatMessages = [];
+  resetLearnyThinking();
+  assistantTranscriptOpen = false;
+  resetAssistantTurnTranscript();
+  blockCoachUntilUserSpeaks = false;
+  turnEndProcessed = false;
+  awaitingAssistantReply = false;
+  sentTeacherNotes.clear();
+  bumpIdleGeneration();
+  if (questModal) {
+    questModal.classList.remove("active");
+    questModal.setAttribute("aria-hidden", "true");
+  }
+
+  restoreChapterUiFromLessonState();
+  renderChatNow();
+  updateLessonBanner();
+  renderChoiceBar(getCurrentSegment());
+  notifyParentProgress();
+
+  if (!wasLive) {
+    addMessage("章を切り替えたよ。はじめるを押してね。", "system");
+    updateActionUI();
+    return;
+  }
+
+  if (isHandoffRunning || isAutoReconnecting) {
+    addMessage("章を切り替えたよ。はじめるを押してね。", "system");
+    disconnectAPI();
+    actionState = "idle";
+    updateActionUI();
+    return;
+  }
+
+  isHandoffRunning = true;
+  isChapterHandoff = true;
+  beginChapterTransition(getCurrentSegment());
+  actionState = "connecting";
+  updateActionUI();
+  addMessage("章を切り替えたよ…", "system");
+  teardownLiveForHandoff();
+
+  try {
+    intentionalDisconnect = false;
+    if (!audioPlayer || audioPlayer.destroyed || !audioPlayer.isInitialized) {
+      audioPlayer = new AudioPlayer();
+      await audioPlayer.init();
+    } else {
+      audioPlayer.interrupt();
+    }
+    audioPlayer.setVolume(volumeLevel / 100);
+    await connectAPI();
+    if (audioStreamer) {
+      audioStreamer.updateClient(client);
+      bindVoiceGateActivity();
+      audioStreamer.setMuted(isMuted);
+      if (!isMuted) {
+        await audioStreamer.ensureStreaming();
+        audioStreamer.resumeStreaming();
+        audioStreaming = true;
+      } else {
+        audioStreamer.pauseStreaming();
+        audioStreaming = false;
+      }
+    }
+    actionState = "active";
+    openingSent = false;
+    pendingOpeningKickOpts = null;
+    if (handoffKickWatchId) {
+      clearTimeout(handoffKickWatchId);
+      handoffKickWatchId = null;
+    }
+    handoffKickWatchId = setTimeout(() => {
+      handoffKickWatchId = null;
+      if (openingSent || actionState !== "active" || !client?.connected) return;
+      client.sessionReady = true;
+      kickOpeningTurn();
+    }, 1200);
+    if (client.sessionReady) kickOpeningTurn();
+    updateActionUI();
+  } catch (error) {
+    dbg("chapter jump reconnect failed", String(error?.message || error));
+    addMessage("つなぎなおせなかったよ。はじめるを押してみてね。", "system");
+    endChapterTransition();
+    disconnectAPI();
+    actionState = "idle";
+    updateActionUI();
+  } finally {
+    isHandoffRunning = false;
+    isChapterHandoff = false;
+    intentionalDisconnect = false;
+    updateActionUI();
+  }
+}
+
 function shouldHandoffAfter(completedSegmentId) {
   return getActiveLessonId() === "part1" && PART1_HANDOFF_AFTER.has(completedSegmentId);
 }
@@ -9739,6 +9863,9 @@ async function handleActionButton() {
       addMessage("おかえり！ つづきから いこう！", "system");
     }
     updateActionUI();
+    // First open of the current chapter counts as a play if never recorded.
+    const cur = getCurrentSegment();
+    if (cur?.id) ensureChapterPlayCounted(cur.id);
     // SETUP_COMPLETE can arrive while still "connecting"; retry opening once active.
     kickOpeningTurn();
   } catch (error) {
@@ -9925,6 +10052,12 @@ window.addEventListener("message", (e) => {
     const lessonId = e.data.lessonId || getActiveLessonId();
     resetLesson(lessonId, getActiveLevelId());
     resetVoiceSessionUI({ lessonId });
+  }
+  if (e.data?.type === "gc_jump_segment") {
+    applyChapterJumpFromParent({
+      lessonId: e.data.lessonId || getActiveLessonId(),
+      segmentId: e.data.segmentId,
+    });
   }
   if (e.data?.type === "gc_user_profile") {
     setLearnerDisplayName(e.data.displayName || "");

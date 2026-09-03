@@ -4,6 +4,7 @@ import {
   getSegments,
   loadLessonStateFor,
   resetLesson,
+  jumpToSegment,
   isPart1Complete,
   loadEarnedLessonBadges,
   getBadgeCatalogForLesson,
@@ -158,28 +159,59 @@ function renderChapters(container) {
   const lesson = getLesson(activeLessonId);
   const st = state();
   const segments = getSegments(activeLessonId);
+  const playCounts = st.chapterPlayCounts || {};
   container.innerHTML = `<p class="dashboard-panel-empty" style="margin-bottom:12px">${lesson.title}<br><span class="mission-select-desc">${lesson.weekNote}</span></p>
+    <p class="mission-select-note">好きな章をタップして、何度でもやりなおせるよ</p>
     <ul class="mission-select-list">${segments
       .map((seg, i) => {
         const done = st.completedSegmentIds.includes(seg.id);
         const current = i === st.segmentIndex && !st.complete;
+        const plays = Number(playCounts[seg.id]) || 0;
         const badge = done
           ? '<span class="mission-select-badge mission-select-badge--done">できた</span>'
           : current
             ? '<span class="mission-select-badge">いま</span>'
             : "";
+        const playBadge =
+          plays > 0
+            ? `<span class="mission-select-plays">${plays}回プレイ</span>`
+            : "";
         const meta = getSegmentChapterMeta(seg);
         const chapter = formatSegmentChapter(seg);
-        return `<li class="mission-select-item${current ? " selected" : ""}">
+        return `<li class="mission-select-item${current ? " selected" : ""}" role="button" tabindex="0" data-segment-id="${seg.id}" aria-label="${chapter} ${seg.title}">
           <span class="mission-select-num" title="${chapter}">${meta.num === "" ? meta.label.slice(0, 1) : meta.num}</span>
           <div class="mission-select-body">
             <strong class="mission-select-title">${chapter} · ${seg.title}</strong>
             <span class="mission-select-desc">${seg.titleEn || ""}</span>
-            ${badge}
+            <span class="mission-select-meta-row">${badge}${playBadge}</span>
           </div>
         </li>`;
       })
       .join("")}</ul>`;
+}
+
+function broadcastChapterJump(segmentId) {
+  const msg = { type: "gc_jump_segment", lessonId: activeLessonId, segmentId };
+  try {
+    window.parent?.postMessage?.(msg, "*");
+    window.dispatchEvent(new CustomEvent("learny-progress-changed"));
+    document
+      .querySelectorAll("#iframe-part1, #iframe-part2, #server-iframe-1, #server-iframe-2")
+      .forEach((f) => {
+        f.contentWindow?.postMessage(msg, "*");
+      });
+  } catch {
+    // ignore
+  }
+}
+
+function jumpToChapterFromPanel(segmentId) {
+  const seg = getSegments(activeLessonId).find((s) => s.id === segmentId);
+  if (!seg) return false;
+  jumpToSegment(segmentId, activeLessonId, levelId());
+  refreshDashboardChrome();
+  broadcastChapterJump(segmentId);
+  return true;
 }
 
 function renderWords(container) {
@@ -293,6 +325,22 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     if (e.key !== "Escape" || !activePanel) return;
     if (document.getElementById("learny-confirm-overlay")?.classList.contains("active")) return;
     closePanel();
+  });
+
+  panelBody.addEventListener("click", (e) => {
+    if (activePanel !== "missions") return;
+    const item = e.target.closest?.(".mission-select-item[data-segment-id]");
+    if (!item) return;
+    e.preventDefault();
+    if (jumpToChapterFromPanel(item.dataset.segmentId)) closePanel();
+  });
+  panelBody.addEventListener("keydown", (e) => {
+    if (activePanel !== "missions") return;
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const item = e.target.closest?.(".mission-select-item[data-segment-id]");
+    if (!item) return;
+    e.preventDefault();
+    if (jumpToChapterFromPanel(item.dataset.segmentId)) closePanel();
   });
 
   startOverBtn?.addEventListener("click", async () => {

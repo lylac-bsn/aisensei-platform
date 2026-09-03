@@ -126,6 +126,8 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     mcqSummary: {},
     /** In-chapter UI state (e.g. Ch2 free-talk phase) for reconnect resume. */
     segmentUi: {},
+    /** How many times the learner started each chapter (jump + natural entry). */
+    chapterPlayCounts: {},
   };
 }
 
@@ -202,7 +204,12 @@ export function revokeBadgesForLesson(lessonId = ACTIVE_LESSON_ID) {
 }
 
 export function resetLesson(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  const prev = loadLessonStateFor(lessonId, levelId);
   const state = emptyState(lessonId);
+  // Keep lifetime play counts across full resets so admin totals stay meaningful.
+  if (prev?.chapterPlayCounts && typeof prev.chapterPlayCounts === "object") {
+    state.chapterPlayCounts = { ...prev.chapterPlayCounts };
+  }
   saveLessonStateFor(state, lessonId, levelId);
   if (lessonId === "part1") {
     try {
@@ -213,6 +220,57 @@ export function resetLesson(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_
   }
   revokeBadgesForLesson(lessonId);
   return state;
+}
+
+/** Increment play count when the learner starts a chapter (jump or natural advance). */
+export function recordChapterPlay(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  const id = String(segmentId || "").trim();
+  if (!id) return 0;
+  const state = loadLessonStateFor(lessonId, levelId);
+  const counts = { ...(state.chapterPlayCounts || {}) };
+  counts[id] = (Number(counts[id]) || 0) + 1;
+  state.chapterPlayCounts = counts;
+  saveLessonStateFor(state, lessonId, levelId);
+  return counts[id];
+}
+
+/** Ensure first visit is counted once (session open / kick opening). */
+export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  const id = String(segmentId || "").trim();
+  if (!id) return 0;
+  const state = loadLessonStateFor(lessonId, levelId);
+  const counts = { ...(state.chapterPlayCounts || {}) };
+  if ((Number(counts[id]) || 0) > 0) return counts[id];
+  counts[id] = 1;
+  state.chapterPlayCounts = counts;
+  saveLessonStateFor(state, lessonId, levelId);
+  return 1;
+}
+
+/**
+ * Free chapter select / replay — keeps stars & できた history, restarts chapter-local UI.
+ */
+export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  const lesson = getLesson(lessonId);
+  const idx = (lesson.segments || []).findIndex((s) => s.id === segmentId);
+  if (idx < 0) return { ok: false, reason: "unknown_segment" };
+  const state = loadLessonStateFor(lessonId, levelId);
+  const id = lesson.segments[idx].id;
+  state.segmentIndex = idx;
+  state.complete = false;
+  state.mcqCursor = { ...(state.mcqCursor || {}), [id]: 0 };
+  if (state.segmentUi && typeof state.segmentUi === "object") {
+    const ui = { ...state.segmentUi };
+    delete ui[id];
+    // Ch2 stores under segmentUi.ch2 sometimes as nested — clear common keys.
+    if (id === "ch2" && ui.ch2) delete ui.ch2;
+    state.segmentUi = ui;
+  }
+  const counts = { ...(state.chapterPlayCounts || {}) };
+  counts[id] = (Number(counts[id]) || 0) + 1;
+  state.chapterPlayCounts = counts;
+  saveLessonStateFor(state, lessonId, levelId);
+  return { ok: true, state, segmentIndex: idx, segmentId: id, playCount: counts[id] };
 }
 
 export function getSegments(lessonId = ACTIVE_LESSON_ID) {
@@ -339,7 +397,14 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
   if (state.completedSegmentIds.includes(segment.id)) {
     const idxDone = lesson.segments.findIndex((s) => s.id === segment.id);
     if (idxDone >= 0 && state.segmentIndex <= idxDone) {
+      const prevId = lesson.segments[state.segmentIndex]?.id;
       state.segmentIndex = Math.min(idxDone + 1, lesson.segments.length - 1);
+      const next = lesson.segments[state.segmentIndex];
+      if (next?.id && next.id !== prevId && next.id !== segment.id) {
+        const counts = { ...(state.chapterPlayCounts || {}) };
+        counts[next.id] = (Number(counts[next.id]) || 0) + 1;
+        state.chapterPlayCounts = counts;
+      }
       saveLessonState(state);
     }
     return {
@@ -389,6 +454,14 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
   if (segment.type === "ending" || idx === lesson.segments.length - 1) {
     state.complete = true;
     state.segmentIndex = lesson.segments.length - 1;
+  } else {
+    // Count a play for the chapter we just entered via natural advance.
+    const next = lesson.segments[state.segmentIndex];
+    if (next?.id && next.id !== segment.id) {
+      const counts = { ...(state.chapterPlayCounts || {}) };
+      counts[next.id] = (Number(counts[next.id]) || 0) + 1;
+      state.chapterPlayCounts = counts;
+    }
   }
 
   // Badges paused — scoring / end-of-lesson awards come later.

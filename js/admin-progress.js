@@ -277,6 +277,26 @@ export function buildProgressSummary(users) {
   };
 }
 
+function renderChapterPlayCounts(part, lesson) {
+  const segments = lesson?.segments || [];
+  if (!segments.length) return "";
+  const counts = part?.chapterPlayCounts && typeof part.chapterPlayCounts === "object"
+    ? part.chapterPlayCounts
+    : {};
+  const doneIds = new Set(Array.isArray(part?.completedSegmentIds) ? part.completedSegmentIds : []);
+  const items = segments
+    .map((seg) => {
+      const n = Number(counts[seg.id]) || 0;
+      const done = doneIds.has(seg.id);
+      return `<li class="progress-chapter-play${done ? " is-done" : ""}">
+        <span class="progress-chapter-play-title">${escapeHtml(seg.title || seg.id)}</span>
+        <span class="progress-chapter-play-count">${n}回</span>
+      </li>`;
+    })
+    .join("");
+  return `<ul class="progress-chapter-plays" aria-label="章プレイ回数">${items}</ul>`;
+}
+
 function renderHomeworkParts(meta, raw) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
@@ -288,9 +308,12 @@ function renderHomeworkParts(meta, raw) {
     const mem = Object.entries(part.memories || {})
       .map(([k, v]) => `${k}:${v}`)
       .join("、 ");
-    return `<p class="progress-level-now">${escapeHtml(label)} — ${escapeHtml(done)} · ★${Number(part.stars) || 0}${
-      mem ? ` · ${escapeHtml(mem)}` : ""
-    }</p>`;
+    return `<div class="progress-part-block">
+      <p class="progress-level-now">${escapeHtml(label)} — ${escapeHtml(done)} · ★${Number(part.stars) || 0}${
+        mem ? ` · ${escapeHtml(mem)}` : ""
+      }</p>
+      ${renderChapterPlayCounts(part, lesson)}
+    </div>`;
   };
   return `<section class="progress-level-block">
     <header class="progress-level-header">
@@ -462,12 +485,13 @@ function renderMcqChapterBlock(seg, part) {
   const attemptsOnChapter = beats.reduce((sum, beat) => {
     return sum + (beatStatsFromPart(part, seg.id, beat.id).attempts || 0);
   }, 0);
+  const plays = Number(part?.chapterPlayCounts?.[seg.id]) || 0;
 
   return `<details class="progress-mcq-chapter${completed ? " is-done" : ""}">
     <summary>
       <span class="progress-mcq-chapter-title">
         <span>${escapeHtml(seg.title || seg.id)}</span>
-        <span class="progress-mcq-chapter-en">${escapeHtml(seg.titleEn || seg.id)} · ${attemptsOnChapter}回</span>
+        <span class="progress-mcq-chapter-en">${escapeHtml(seg.titleEn || seg.id)} · プレイ${plays}回 · 4択${attemptsOnChapter}回</span>
       </span>
       <span class="progress-mcq-chapter-status">${completed ? "クリア" : "未クリア"}</span>
     </summary>
@@ -845,7 +869,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
         <span class="progress-summary-label">つつく合計</span>
       </div>
     </div>
-    <p class="progress-legend">緑 = 正解の選択肢 · 数字 = クリック回数 · 章・クリック順は折りたたみで詳細表示</p>
+    <p class="progress-legend">章プレイ回数 = その章を開始した回数 · 緑 = 正解の選択肢 · 4択の数字 = クリック回数</p>
     <div class="progress-student-grid">${cardsHtml}</div>`;
 }
 
