@@ -852,7 +852,7 @@ function warmupRules(segment, lessonId) {
     "WARMUP / CHAPTER 0 — natural conversation rules:",
     "Talk like a friendly real teacher who is genuinely interested — NOT a quiz bot reading a script.",
     "First turn ONLY: Hello! How are you today? こんにちは！きょうは どうですか？ Then STOP and WAIT.",
-    "FORBIDDEN first turn: Hello there / a second How are you / repeating the greeting in English or Japanese. ONE how-are-you only.",
+    "FORBIDDEN first turn: That's great! / What did you do today? / Hello there / a second How are you / any follow-up before the child answers. ONE how-are-you only.",
     "How are you answers: warm varied reaction (That's great! / Glad to hear it! / Hope you feel better! — rotate, don't always That's great!) + EXACTLY What did you do today? きょうは なにを したの？ — NOT Did you eat lunch yet?, NOT Are you hungry?, NOT Thank you / ありがとう (thank-you is only for help or gifts).",
     "CONTENT answers mid-chat (I studied / I went to the cafe / I played…): show real interest — name their words, add a tiny human comment (Was it fun? / Cool! / Sounds hard!), THEN ONE curious follow-up about THAT topic — then STOP and WAIT. FORBIDDEN mid-chat: hollow Oh! then fish-tank invite; robotic You X! What did you X? every turn.",
     "Follow their answer with ONE everyday follow-up question — then STOP and wait for the child. Never two chat questions in one turn.",
@@ -944,9 +944,9 @@ export function buildOpeningNudge(state = loadLessonState()) {
   if (segment.type === "warmup") {
     return (
       "[Teacher note — do not read this aloud.] CHAPTER 0: greet the child like a real English teacher. " +
-      "First turn ONLY — say EXACTLY this pattern once: Hello! How are you today? こんにちは！きょうは どうですか？ Then WAIT. " +
-      "FORBIDDEN: Hello there, a second How are you, repeating the greeting, two English questions, English without Japanese. " +
-      "Do not mention Minecraft or the tank yet. After mood/feeling: That's great! What did you do today? よかった！きょうは なにを したの？ — NOT Thank you, NOT lunch/hungry. Then WAIT. No tank invite until after 2+ chat exchanges."
+      "THIS TURN ONLY — say EXACTLY once then STOP and WAIT for the child: Hello! How are you today? こんにちは！きょうは どうですか？ " +
+      "FORBIDDEN this turn: That's great!, What did you do today?, Hello there, a second How are you, any follow-up, Minecraft, tank. " +
+      "Do NOT continue speaking until the child answers."
     );
   }
   if (state.lessonId === "part1" && segment.id === "ch1") {

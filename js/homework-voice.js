@@ -3804,8 +3804,11 @@ function runPostTurnCoachNudges() {
   } else {
     maybeEnding1OffScriptNudge();
   }
-  maybeWarmupMoodFollowUpNudge();
-  maybeWarmupCoachNudge();
+  // Warmup corrective coaches only after the child has spoken at least once.
+  if (!(getCurrentSegment()?.type === "warmup" && countWarmupUserReplies() < 1)) {
+    maybeWarmupMoodFollowUpNudge();
+    maybeWarmupCoachNudge();
+  }
   maybeCh1InviteLoopNudge();
   maybeCh3StartLoopNudge();
 
@@ -4340,8 +4343,12 @@ function looksLikeCh1WrongThankYou(assistantText, userText) {
 
 function maybeWarmupMoodFollowUpNudge() {
   if (getCurrentSegment()?.type !== "warmup") return;
+  if (countWarmupUserReplies() < 1) return;
   const user = lastPendingUserText || recentUserMessages(1)[0] || "";
+  if (!user.trim()) return;
   const assistant = lastAssistantText();
+  // Already on the correct after-mood beat — do not re-force it (causes loops / silent audio).
+  if (looksLikeWarmupAfterMoodFollowUp(assistant)) return;
   if (!shouldCoachWarmupAfterMoodFollowUp(user)) return;
 
   let note = "";
@@ -4364,7 +4371,12 @@ function maybeWarmupMoodFollowUpNudge() {
     // ignore
   }
   whenAssistantIdle(() => {
-    sendClientText(withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint())), { force: true });
+    if (countWarmupUserReplies() < 1) return;
+    if (looksLikeWarmupAfterMoodFollowUp(lastAssistantText())) return;
+    sendTeacherNote(
+      "warmup-mood-followup",
+      withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint()))
+    );
   }, "warmup-mood-followup");
 }
 
@@ -6872,6 +6884,7 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
     key.startsWith("lead-cont-") ||
     key.startsWith("lead-") ||
     key === "warmup-stack" ||
+    key.startsWith("warmup-") ||
     key.startsWith("ch2-no-tired") ||
     key.startsWith("ch2-elicit") ||
     key.startsWith("ch2-rally") ||
@@ -6901,6 +6914,7 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
     key.startsWith("no-system") ||
     key.startsWith("lead-cont-") ||
     key.startsWith("lead-") ||
+    key.startsWith("warmup-") ||
     key.startsWith("ch2-no-tired") ||
     key.startsWith("ch2-elicit") ||
     key.startsWith("ch2-repeat");
@@ -7099,8 +7113,12 @@ function needsContinuationNudge(text) {
     return false;
   }
   // Final1 user-turn coach already says praise + next cue — global continuation nudge caused double speech.
-  if (getCurrentSegment()?.id === "final1") return false;
-  if (getCurrentSegment()?.type === "warmup" && findWarmupAgreeAfterInvite()) return false;
+  if (getCurrentSegment()?.type === "final1") return false;
+  // Warmup: never invent a next beat while waiting after How are you / What did you do…
+  if (getCurrentSegment()?.type === "warmup") {
+    if (countWarmupUserReplies() < 1) return false;
+    if (findWarmupAgreeAfterInvite()) return false;
+  }
   if (assistantAskedQuestion(t)) return false;
   if (looksLikePraiseOnlyAssistant(t)) return true;
   // Ch4: color saved but still not past Let's make / Beat B — do not stop on praise.
@@ -7715,9 +7733,8 @@ function assistantBeforeLastUserMessage() {
       return String(chatMessages[i].text || "");
     }
   }
-  for (let i = chatMessages.length - 1; i >= 0; i--) {
-    if (chatMessages[i].type === "assistant") return String(chatMessages[i].text || "");
-  }
+  // No user turn yet — do NOT fall back to the latest assistant line
+  // (that falsely looked like a "repeated question" and auto-spoke That's great!).
   return "";
 }
 
@@ -7852,33 +7869,47 @@ function maybeWarmupCoachOnUserTurn(_userText, { fromVoice: _fromVoice = false }
 function maybeWarmupCoachNudge() {
   const seg = getCurrentSegment();
   if (seg?.type !== "warmup") return;
+  // Opening beat must WAIT — never invent "That's great!" before the child answers.
+  if (countWarmupUserReplies() < 1) return;
+  if (waitingOnChildAfterQuestion() && !assistantWarmupStackedTurn(lastAssistantText())) return;
+
   const assistant = lastAssistantText();
   const lastUser = lastUserMessageText();
+  if (!lastUser.trim()) return;
   const priorAssistant = assistantBeforeLastUserMessage();
   const jumped = assistantJumpedTopicWithoutReacting(assistant, lastUser);
   const inviteNeedsLead =
     looksLikeTankInvite(assistant) &&
     assistantTankInviteMissingLeadReaction(assistant) &&
     !hasSubstantiveWarmupContent(lastUser);
-  const repeatedQ = assistantRepeatedWarmupQuestion(assistant, priorAssistant);
+  const repeatedQ =
+    Boolean(priorAssistant) &&
+    assistantRepeatedWarmupQuestion(assistant, priorAssistant);
 
   if (repeatedQ && !looksLikeTankInvite(assistant)) {
+    // Already on the correct after-mood line — stop looping silent audio / re-asks.
+    if (looksLikeWarmupAfterMoodFollowUp(assistant) && looksLikeWarmupAfterMoodFollowUp(priorAssistant)) {
+      return;
+    }
     const note =
       "[Teacher note — do not read aloud] WRONG: you repeated the same question after the child already answered (\"" +
       lastUser.slice(0, 40) +
       "\"). Do NOT ask that again. " +
       (looksLikeWarmupNegativeReply(lastUser) || countWarmupUserReplies() >= 3
         ? "Say Okay! / そっか！ then Oh! Today I want to make a fish tank. Will you help me make it? いっしょに つくれる？ WAIT."
-        : `Say EXACTLY: ${WARMUP_AFTER_MOOD_SPEAK} — never a second question; never Did you eat lunch yet? after mood.`);
+        : shouldCoachWarmupAfterMoodFollowUp(lastUser)
+          ? `Say EXACTLY: ${WARMUP_AFTER_MOOD_SPEAK} — never a second question; never Did you eat lunch yet? after mood.`
+          : "Warm reaction to their words + ONE DIFFERENT follow-up. FORBIDDEN: repeat the same question; invent That's great! without their mood answer.");
     try {
       audioPlayer?.interrupt?.();
       closeOpenAudioTurn();
     } catch {
       // ignore
     }
-    sendClientText(withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint())), {
-      force: true,
-    });
+    sendTeacherNote(
+      `warmup-repeat-${normalizeUserText(lastUser).slice(0, 24)}`,
+      withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint()))
+    );
     return;
   }
 
@@ -7904,9 +7935,10 @@ function maybeWarmupCoachNudge() {
     } catch {
       // ignore
     }
-    sendClientText(withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint())), {
-      force: true,
-    });
+    sendTeacherNote(
+      `warmup-jump-${normalizeUserText(lastUser).slice(0, 24)}`,
+      withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint()))
+    );
     return;
   }
   if (inviteNeedsLead) {
@@ -7922,9 +7954,10 @@ function maybeWarmupCoachNudge() {
     } catch {
       // ignore
     }
-    sendClientText(withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint())), {
-      force: true,
-    });
+    sendTeacherNote(
+      `warmup-invite-lead-${normalizeUserText(lastUser).slice(0, 24)}`,
+      withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint()))
+    );
     return;
   }
   if (looksLikeTankInvite(assistant) && looksLikeWarmupChatQuestion(assistant)) {
@@ -7939,6 +7972,7 @@ function maybeWarmupCoachNudge() {
   }
 
   whenAssistantIdle(() => {
+    if (countWarmupUserReplies() < 1) return;
     sendTeacherNote("warmup-stack", note + beginnerTurnHint());
   }, "warmup-stack");
 }
