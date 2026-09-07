@@ -132,7 +132,7 @@ const voice = "Kore";
 const temperature = 0.9;
 const volumeLevel = 80;
 /** Part 1: reconnect Live after these segments complete (fresh system instructions). */
-const PART1_HANDOFF_AFTER = new Set(["ch0", "ch1", "ch2", "ch3", "quiz1", "ch4", "ch5", "daily1", "ch6", "final1"]);
+const PART1_HANDOFF_AFTER = new Set(["ch0", "ch1", "ch2", "ch3", "quiz1", "ch4", "ch5", "daily1", "ch6"]);
 const HANDOFF_MARKER = "__HANDOFF__";
 /**
  * Chapter handoff uses a FAST hard reconnect (reuse mic/speaker; new Live session).
@@ -906,8 +906,6 @@ const ENDING1_BEATS = [
 
 /** Pending delayed kick after final1 → ending1 (cancel on reset / second schedule). */
 let ending1OpeningTimerId = null;
-/** Watch for Perfect bubble seeded without audio. */
-let ending1IntroAudioWatchId = null;
 
 let ending1Beat = {
   userTurns: 0,
@@ -923,6 +921,8 @@ let ending1Beat = {
   introHeardHoldOn: false,
   introHeardFishQ: false,
   introHeardFishQAt: 0,
+  /** After first Turn A speak finishes — drop any further Perfect audio. */
+  introSpeechComplete: false,
   finaleSpoken: 0,
   finaleCoachSent: 0,
   finaleForceScheduled: false,
@@ -937,15 +937,89 @@ let ending1Beat = {
   lastForceKind: "",
 };
 
-function resetEnding1Beat() {
+/** Clears the delayed final1→ending kick timer when Turn A already started. */
+function cancelEnding1OpeningTimer() {
   if (ending1OpeningTimerId) {
     clearTimeout(ending1OpeningTimerId);
     ending1OpeningTimerId = null;
   }
-  if (ending1IntroAudioWatchId) {
-    clearTimeout(ending1IntroAudioWatchId);
-    ending1IntroAudioWatchId = null;
+}
+
+let ending1IntroQuietTimerId = null;
+
+function clearEnding1IntroQuietTimer() {
+  if (ending1IntroQuietTimerId) {
+    clearTimeout(ending1IntroQuietTimerId);
+    ending1IntroQuietTimerId = null;
   }
+}
+
+/** Seal Turn A so a second Perfect generation cannot play. */
+function sealEnding1IntroSpeech(reason = "seal") {
+  if (ending1Beat.introSpeechComplete) return;
+  ending1Beat.introSpeechComplete = true;
+  ending1Beat.introAudioSent = true;
+  ending1Beat.introNoteSent = true;
+  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+  ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, 1);
+  cancelEnding1OpeningTimer();
+  clearEnding1IntroQuietTimer();
+  dbg("ending1 intro speech sealed", reason);
+}
+
+/** Drop duplicate Turn A audio (Gemini often speaks Perfect twice from one kick). */
+function shouldDropEnding1IntroAudio() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return false;
+  if (ending1Beat.introSpeechComplete) return true;
+  return false;
+}
+
+/** After fish/hold STT, a short quiet means the first speak ended — seal before a restart. */
+function armEnding1IntroQuietSeal() {
+  if (ending1Beat.introSpeechComplete) return;
+  if (!ending1Beat.introHeardFishQ && !ending1Beat.introHeardHoldOn) return;
+  clearEnding1IntroQuietTimer();
+  ending1IntroQuietTimerId = setTimeout(() => {
+    ending1IntroQuietTimerId = null;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return;
+    if (ending1Beat.introHeardFishQ || ending1Beat.introHeardHoldOn) {
+      sealEnding1IntroSpeech("quiet-after-intro");
+      try {
+        audioPlayer?.interrupt?.();
+        closeOpenAudioTurn();
+      } catch {
+        // ignore
+      }
+    }
+  }, 2200);
+}
+
+/**
+ * Gemini sometimes freestyles Perfect before the client kick — claim it as Turn A
+ * instead of sending a second Perfect coach.
+ */
+function claimEnding1IntroIfGeminiStarted() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1Beat.introAudioSent || ending1Beat.introNoteSent || ending1Beat.introKickInFlight) {
+    return false;
+  }
+  if (!ending1Beat.introHeardPerfect && !ending1HasPerfectLeadInChat()) return false;
+  cancelEnding1OpeningTimer();
+  ending1Beat.introAudioSent = true;
+  ending1Beat.introNoteSent = true;
+  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+  if (!ending1Beat.introDisplayLocked) {
+    seedEnding1IntroBubble();
+  }
+  dbg("ending1 intro claimed; Gemini already started Perfect");
+  return true;
+}
+
+function resetEnding1Beat() {
+  cancelEnding1OpeningTimer();
+  clearEnding1IntroQuietTimer();
   ending1Beat = {
     userTurns: 0,
     autoSpoken: 0,
@@ -960,6 +1034,7 @@ function resetEnding1Beat() {
     introHeardHoldOn: false,
     introHeardFishQ: false,
     introHeardFishQAt: 0,
+    introSpeechComplete: false,
     finaleSpoken: 0,
     finaleCoachSent: 0,
     finaleForceScheduled: false,
@@ -1201,8 +1276,11 @@ function forceEnding1Intro(reason = "kick-intro") {
   if (!client?.connected || (actionState !== "active" && actionState !== "connecting")) {
     return false;
   }
+  // Gemini already started Perfect — claim it; never send a second Perfect coach.
+  if (claimEnding1IntroIfGeminiStarted()) return false;
   // Hard one-shot audio gate — never send Perfect twice.
   if (
+    ending1Beat.introSpeechComplete ||
     ending1Beat.introKickInFlight ||
     ending1Beat.introAudioSent ||
     ending1Beat.introNoteSent ||
@@ -1216,13 +1294,13 @@ function forceEnding1Intro(reason = "kick-intro") {
   if (ending1AutoIntroComplete() && !ending1Beat.introDisplayLocked) return false;
   // Already hearing/speaking Turn A — never re-kick.
   if (ending1Beat.introHeardPerfect || ending1HasPerfectLeadInChat()) {
-    markEnding1IntroKickSent();
+    claimEnding1IntroIfGeminiStarted();
     dbg("force ending1 intro skipped; Perfect already heard", reason);
     return false;
   }
   if (!ending1ForceAllowed("intro")) return false;
+  cancelEnding1OpeningTimer();
   // Lock BEFORE send so a parallel kickOpening / delayed timer cannot race a second Perfect.
-  // sendClientText allows this one send while introKickInFlight is true.
   ending1Beat.introKickInFlight = true;
   ending1Beat.introAudioSent = true;
   ending1Beat.introNoteSent = true;
@@ -1230,8 +1308,8 @@ function forceEnding1Intro(reason = "kick-intro") {
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". Speak the following words EXACTLY once, then STOP and WAIT. Do not say them twice. " +
-    "FORBIDDEN: saying Perfect / Hold on / what kind of fish a second time.\n" +
+    ". Speak the following words EXACTLY ONCE in ONE turn, then STOP and WAIT. " +
+    "Do NOT say Perfect / Hold on / what kind of fish twice. Do NOT restart from Perfect after finishing.\n" +
     ENDING1_INTRO_SPEAK;
   try {
     closeOpenAudioTurn();
@@ -1387,13 +1465,23 @@ function maybeChainEnding1AutoBeat() {
   if (getCurrentSegment()?.id !== "ending1") return;
   syncEnding1AutoProgress();
   updateLessonBanner();
+  // Full Turn A finished (fish Q heard) — seal so a second Perfect cannot play.
+  // Do NOT seal on Perfect-only TURN_COMPLETE — Gemini sometimes splits Hold-on into turn 2.
+  if (ending1Beat.introAudioSent && ending1Beat.introHeardFishQ) {
+    sealEnding1IntroSpeech("turn-complete-fish");
+  }
   if (ending1AutoIntroComplete()) {
     enterEnding1FreeTalkIfReady();
     return;
   }
-  // Turn A already kicked — never re-force from turn-end (STT lag caused a second Perfect!).
-  // Repairs only run from maybeEnding1OffScriptNudge after the transcript has settled.
-  if (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0) {
+  // Turn A already kicked / heard — never re-force (STT lag caused a second Perfect!).
+  if (
+    ending1Beat.introSpeechComplete ||
+    ending1Beat.introNoteSent ||
+    ending1Beat.autoCoachSent > 0 ||
+    ending1Beat.introHeardPerfect ||
+    ending1Beat.introDisplayLocked
+  ) {
     return;
   }
   whenAssistantIdle(() => {
@@ -1403,7 +1491,14 @@ function maybeChainEnding1AutoBeat() {
       enterEnding1FreeTalkIfReady();
       return;
     }
-    if (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0) return;
+    if (
+      ending1Beat.introSpeechComplete ||
+      ending1Beat.introNoteSent ||
+      ending1Beat.autoCoachSent > 0 ||
+      ending1Beat.introHeardPerfect
+    ) {
+      return;
+    }
     forceEnding1Intro("auto-intro");
   }, "ending1-auto-intro");
 }
@@ -1735,12 +1830,24 @@ function needsEnding1Opening() {
 
 function forceEnding1OpeningAfterFinal1(reason = "final1-complete") {
   if (getCurrentSegment()?.id !== "ending1") return false;
+  // Cut any freestyle Perfect immediately — client owns the one Turn A kick.
+  try {
+    audioPlayer?.interrupt?.();
+    closeOpenAudioTurn();
+  } catch {
+    // ignore
+  }
+  if (claimEnding1IntroIfGeminiStarted()) {
+    dbg("force ending1 opening skipped; claimed freestyle Perfect", reason);
+    return false;
+  }
   // Recover stuck kick ONLY when nothing was ever seeded/heard (never mid-Turn A).
   if (
     (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0 || ending1Beat.introAudioSent) &&
     !ending1AutoIntroComplete() &&
     !ending1Beat.introDisplayLocked &&
     !ending1Beat.introHeardPerfect &&
+    !ending1Beat.introSpeechComplete &&
     !ending1HasPerfectLeadInChat() &&
     /poke|recover|retry|already/i.test(String(reason || ""))
   ) {
@@ -1754,34 +1861,44 @@ function forceEnding1OpeningAfterFinal1(reason = "final1-complete") {
     }
   }
   if (
+    ending1Beat.introSpeechComplete ||
     ending1Beat.introNoteSent ||
     ending1Beat.autoCoachSent > 0 ||
     ending1Beat.introAudioSent ||
-    ending1Beat.introDisplayLocked
+    ending1Beat.introDisplayLocked ||
+    ending1Beat.introHeardPerfect
   ) {
     dbg("force ending1 opening skipped; already kicked", reason);
     return false;
   }
   dbg("force ending1 opening", reason);
-  if (ending1OpeningTimerId) {
-    clearTimeout(ending1OpeningTimerId);
-    ending1OpeningTimerId = null;
-  }
-  ending1OpeningTimerId = setTimeout(() => {
-    ending1OpeningTimerId = null;
+  cancelEnding1OpeningTimer();
+  // Wait for residual final1 audio to drain so Turn A is not stacked (double Perfect).
+  const delayMs = isIntermediateVoiceOnly() ? 1100 : 700;
+  const runKick = () => {
     if (getCurrentSegment()?.id !== "ending1") return;
+    if (claimEnding1IntroIfGeminiStarted()) return;
     syncEnding1AutoProgress();
     if (
+      ending1Beat.introSpeechComplete ||
       ending1Beat.introNoteSent ||
       ending1Beat.introAudioSent ||
       ending1Beat.introDisplayLocked ||
+      ending1Beat.introHeardPerfect ||
       ending1AutoIntroComplete()
     ) {
       return;
     }
     kickEnding1AutoIntro();
-  }, 500);
-  // No delayed repair — a second kick cut Turn A mid どんなおさかな and re-spoke Perfect.
+  };
+  ending1OpeningTimerId = setTimeout(() => {
+    ending1OpeningTimerId = null;
+    if (assistantIsSpeaking()) {
+      whenAssistantIdle(() => runKick(), "ending1-after-final1");
+      return;
+    }
+    runKick();
+  }, delayMs);
   return true;
 }
 
@@ -2534,13 +2651,9 @@ function maybeCompleteFinal1FromClient(userText) {
   }
   updateLessonBanner();
   renderChoiceBar(getCurrentSegment());
-  // Prefer a fresh Live session for Ending Turn A. Same-socket soft kicks after a
-  // voice answer (esp. intermediate) often seed the Perfect bubble with no audio
-  // and leave the banner stuck as if ending never loaded.
-  if (afterSegmentAdvanced("final1", result, { lastQuote: quote })) {
-    return true;
-  }
   if (client) configureGeminiClient(client);
+  // Same one-shot soft kick as beginner — hard handoff / audio-recover re-kicks
+  // caused Perfect Turn A to play twice on intermediate.
   forceEnding1OpeningAfterFinal1(result.alreadyDone ? "auto-complete-already" : "auto-complete");
   return true;
 }
@@ -6768,25 +6881,28 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
   if (!c && !finished) return false;
   if (c && isMetaAssistantLeak(c)) return false;
 
-  // Ending Turn A display is client-owned exact script — ignore STT for the bubble,
-  // but interrupt a second Perfect audio if Gemini restarts mid-lock.
+  // Always track Perfect progress on ending1 (even before display lock) so we can
+  // claim freestyle Perfect and cancel a second client kick.
+  if (getCurrentSegment()?.id === "ending1" && c && !ending1Beat.finaleRequested) {
+    trackEnding1IntroSttProgress(c);
+    if (shouldInterruptEnding1IntroRestart(c)) {
+      dbg("interrupt ending1 Turn A restart audio", c.slice(0, 40));
+      sealEnding1IntroSpeech("stt-restart");
+      try {
+        audioPlayer?.interrupt?.();
+        closeOpenAudioTurn();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Ending Turn A display is client-owned exact script — ignore STT for the bubble.
   if (
     getCurrentSegment()?.id === "ending1" &&
     ending1Beat.introDisplayLocked &&
     !ending1Beat.finaleRequested
   ) {
-    if (c) {
-      trackEnding1IntroSttProgress(c);
-      if (shouldInterruptEnding1IntroRestart(c)) {
-        dbg("interrupt ending1 Turn A restart audio", c.slice(0, 40));
-        try {
-          audioPlayer?.interrupt?.();
-          closeOpenAudioTurn();
-        } catch {
-          // ignore
-        }
-      }
-    }
     scheduleRenderChat();
     updateLearnyThinkingUI();
     return true;
@@ -7239,6 +7355,8 @@ function trackEnding1IntroSttProgress(chunk) {
   const t = String(chunk || "");
   if (/perfect!?\s*we made|ぱーふぇくと/i.test(t)) {
     ending1Beat.introHeardPerfect = true;
+    // Freestyle Perfect before client kick — claim so we never send a second coach.
+    claimEnding1IntroIfGeminiStarted();
   }
   if (/hold on|don'?t have any fish|おさかなが\s*1ぴき|おさかなが\s*いっぴき/i.test(t)) {
     ending1Beat.introHeardHoldOn = true;
@@ -7249,6 +7367,9 @@ function trackEnding1IntroSttProgress(chunk) {
     }
     ending1Beat.introHeardFishQ = true;
     ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, 1);
+  }
+  if (ending1Beat.introHeardFishQ || ending1Beat.introHeardHoldOn) {
+    armEnding1IntroQuietSeal();
   }
 }
 
@@ -7300,44 +7421,6 @@ function seedEnding1IntroBubble() {
   updateLessonBanner();
   paintEndingEndButton();
   scheduleEnding1IntroUnlock();
-  armEnding1IntroAudioWatch();
-}
-
-/** If Perfect bubble was seeded but Gemini never spoke, reconnect Ending on a fresh session. */
-function armEnding1IntroAudioWatch() {
-  if (ending1IntroAudioWatchId) {
-    clearTimeout(ending1IntroAudioWatchId);
-    ending1IntroAudioWatchId = null;
-  }
-  const seededAt = ending1Beat.introSeededAt || Date.now();
-  const audioBefore = lastAssistantAudioAt || 0;
-  ending1IntroAudioWatchId = setTimeout(() => {
-    ending1IntroAudioWatchId = null;
-    if (actionState !== "active" || !client?.connected) return;
-    if (getCurrentSegment()?.id !== "ending1") return;
-    if (!ending1Beat.introDisplayLocked || ending1Beat.finaleRequested) return;
-    const heardAudio =
-      (lastAssistantAudioAt || 0) > audioBefore || (lastAssistantAudioAt || 0) >= seededAt - 250;
-    if (heardAudio || assistantIsSpeaking()) return;
-    dbg("ending1 intro audio missing — recovering with handoff");
-    ending1Beat.introDisplayLocked = false;
-    ending1Beat.introNoteSent = false;
-    ending1Beat.introAudioSent = false;
-    ending1Beat.autoCoachSent = 0;
-    ending1Beat.introKickInFlight = false;
-    ending1Beat.introSeededAt = 0;
-    ending1Beat.lastForceAt = 0;
-    ending1Beat.lastForceKind = "";
-    // Drop the silent Perfect bubble so reconnect can seed a fresh spoken Turn A.
-    const last = chatMessages[chatMessages.length - 1];
-    if (last?.type === "assistant" && last.ending1Exact) {
-      chatMessages.pop();
-      scheduleRenderChat();
-    }
-    if (!isHandoffRunning && !isChapterHandoff) {
-      scheduleChapterHandoff({ reason: "ending1-intro-audio-recover", lastQuote: "" });
-    }
-  }, 4500);
 }
 
 let ending1FinaleSpeechWatchId = null;
@@ -7733,8 +7816,9 @@ function sendClientText(text, { force = false } = {}) {
   // Hard block: never send a second Ending Turn A Perfect-script to Live (ghost second audio).
   // Allow the in-flight first kick (introKickInFlight) — blocking that left empty chat on はじめる.
   if (
-    ending1Beat.introAudioSent &&
-    !ending1Beat.introKickInFlight &&
+    (ending1Beat.introSpeechComplete ||
+      ending1Beat.introHeardPerfect ||
+      (ending1Beat.introAudioSent && !ending1Beat.introKickInFlight)) &&
     /what kind of fish should we catch|perfect!?\s*we made a fish tank/i.test(t)
   ) {
     dbg("sendClientText blocked; ending1 intro audio already sent", t.slice(0, 48));
@@ -7894,12 +7978,20 @@ function kickOpeningTurn(opts = {}) {
   const state = loadLessonState();
   // Ending Turn A: only forceEnding1Intro may speak — never also send ending1StartNudge.
   if (getCurrentSegment(state)?.id === "ending1") {
+    if (claimEnding1IntroIfGeminiStarted()) {
+      openingSent = true;
+      pendingOpeningKickOpts = null;
+      return false;
+    }
     const ok = forceEnding1Intro(kickOpts.reason || kickOpts.handoff ? "opening-handoff" : "opening");
     // Only lock openingSent after a successful kick so SETUP_COMPLETE→active retry works.
     if (ok) {
       openingSent = true;
       pendingOpeningKickOpts = null;
       blockCoachUntilUserSpeaks = false;
+    } else if (ending1Beat.introAudioSent || ending1Beat.introNoteSent || ending1Beat.introSpeechComplete) {
+      openingSent = true;
+      pendingOpeningKickOpts = null;
     } else {
       dbg("ending1 opening kick failed; will retry", kickOpts.reason || "opening");
     }
@@ -10194,12 +10286,31 @@ function handleMessage(message) {
       break;
     case MultimodalLiveResponseType.AUDIO:
       if (!audioPlayer || audioPlayer.destroyed) break;
+      // Hard drop: second Perfect generation after Turn A already finished.
+      if (shouldDropEnding1IntroAudio()) {
+        dbg("drop ending1 duplicate Perfect audio packet");
+        try {
+          audioPlayer.interrupt?.();
+        } catch {
+          // ignore
+        }
+        break;
+      }
       lastAssistantAudioAt = Date.now();
       updateLearnyThinkingUI();
       markChapterTransitionSpeaking();
       // Stop mic hangover so we don't barge into Learny's reply.
       audioStreamer?.resetVoiceGate?.();
       audioPlayer.play(message.data);
+      // While Turn A is playing, keep resetting the quiet seal timer.
+      if (
+        getCurrentSegment()?.id === "ending1" &&
+        !ending1Beat.finaleRequested &&
+        !ending1Beat.freeTalk &&
+        (ending1Beat.introDisplayLocked || ending1Beat.introAudioSent)
+      ) {
+        armEnding1IntroQuietSeal();
+      }
       break;
     case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
       addMessage(message.data.text, "user-transcript", "append");
