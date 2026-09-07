@@ -923,6 +923,10 @@ let ending1Beat = {
   introHeardFishQAt: 0,
   /** After first Turn A speak finishes — drop any further Perfect audio. */
   introSpeechComplete: false,
+  introFirstAudioAt: 0,
+  introLastAudioPacketAt: 0,
+  introPacketCount: 0,
+  introTurnCompleteCount: 0,
   finaleSpoken: 0,
   finaleCoachSent: 0,
   finaleForceScheduled: false,
@@ -946,17 +950,30 @@ function cancelEnding1OpeningTimer() {
 }
 
 let ending1IntroQuietTimerId = null;
+let ending1IntroSealIdleTimerId = null;
 
 function clearEnding1IntroQuietTimer() {
   if (ending1IntroQuietTimerId) {
     clearTimeout(ending1IntroQuietTimerId);
     ending1IntroQuietTimerId = null;
   }
+  if (ending1IntroSealIdleTimerId) {
+    clearTimeout(ending1IntroSealIdleTimerId);
+    ending1IntroSealIdleTimerId = null;
+  }
 }
 
-/** Seal Turn A so a second Perfect generation cannot play. */
+/** Seal Turn A so a second Perfect generation cannot play (incl. audio-only ghost). */
 function sealEnding1IntroSpeech(reason = "seal") {
-  if (ending1Beat.introSpeechComplete) return;
+  if (ending1Beat.introSpeechComplete) {
+    // Already sealed — still kill any late audio.
+    try {
+      audioPlayer?.interrupt?.();
+    } catch {
+      // ignore
+    }
+    return;
+  }
   ending1Beat.introSpeechComplete = true;
   ending1Beat.introAudioSent = true;
   ending1Beat.introNoteSent = true;
@@ -965,9 +982,15 @@ function sealEnding1IntroSpeech(reason = "seal") {
   cancelEnding1OpeningTimer();
   clearEnding1IntroQuietTimer();
   dbg("ending1 intro speech sealed", reason);
+  try {
+    audioPlayer?.interrupt?.();
+    closeOpenAudioTurn();
+  } catch {
+    // ignore
+  }
 }
 
-/** Drop duplicate Turn A audio (Gemini often speaks Perfect twice from one kick). */
+/** Drop duplicate Turn A audio (Gemini ghost Perfect often has NO STT / no bubble). */
 function shouldDropEnding1IntroAudio() {
   if (getCurrentSegment()?.id !== "ending1") return false;
   if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return false;
@@ -975,25 +998,121 @@ function shouldDropEnding1IntroAudio() {
   return false;
 }
 
-/** After fish/hold STT, a short quiet means the first speak ended — seal before a restart. */
+/**
+ * Handle one AUDIO packet during ending Turn A.
+ * Returns true if the packet must be dropped (ghost second Perfect with no transcription).
+ */
+function gateEnding1IntroAudioPacket() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return false;
+  if (!(ending1Beat.introAudioSent || ending1Beat.introDisplayLocked || ending1Beat.introKickInFlight)) {
+    return false;
+  }
+  if (ending1Beat.introSpeechComplete) return true;
+
+  const now = Date.now();
+  const kickAt = ending1Beat.introSeededAt || ending1Beat.introFirstAudioAt || now;
+  const age = now - kickAt;
+  const gap = ending1Beat.introLastAudioPacketAt ? now - ending1Beat.introLastAudioPacketAt : 0;
+
+  if (!ending1Beat.introFirstAudioAt) {
+    ending1Beat.introFirstAudioAt = now;
+  }
+  ending1Beat.introPacketCount = (ending1Beat.introPacketCount || 0) + 1;
+
+  // Hard cap: one full Turn A is ~18–24s. Anything past this is a ghost restart.
+  if (now - ending1Beat.introFirstAudioAt > 28000) {
+    sealEnding1IntroSpeech("max-audio-duration");
+    return true;
+  }
+
+  // Packet-stream gap after a real first burst = new model generation (often NO STT).
+  // 900ms is above Live jitter but below a deliberate second speak.
+  if (
+    ending1Beat.introPacketCount > 25 &&
+    gap > 900 &&
+    (ending1Beat.introHeardPerfect ||
+      ending1Beat.introHeardHoldOn ||
+      ending1Beat.introHeardFishQ ||
+      ending1Beat.introDisplayLocked ||
+      age > 10000)
+  ) {
+    sealEnding1IntroSpeech("audio-gap-restart");
+    return true;
+  }
+
+  ending1Beat.introLastAudioPacketAt = now;
+  // Keep quiet-seal armed from packet activity (works even with zero STT).
+  armEnding1IntroQuietSeal();
+  return false;
+}
+
+/**
+ * After fish/hold OR a long first burst with no STT: quiet means first speak ended —
+ * seal before a ghost Perfect restart (audio-only, no bubble).
+ */
 function armEnding1IntroQuietSeal() {
   if (ending1Beat.introSpeechComplete) return;
-  if (!ending1Beat.introHeardFishQ && !ending1Beat.introHeardHoldOn) return;
+  const age = Date.now() - (ending1Beat.introSeededAt || ending1Beat.introFirstAudioAt || Date.now());
+  const canSealOnQuiet =
+    ending1Beat.introHeardFishQ ||
+    ending1Beat.introHeardHoldOn ||
+    (ending1Beat.introDisplayLocked && age > 16000) ||
+    (ending1Beat.introPacketCount || 0) > 100;
+  if (!canSealOnQuiet) return;
   clearEnding1IntroQuietTimer();
   ending1IntroQuietTimerId = setTimeout(() => {
     ending1IntroQuietTimerId = null;
     if (getCurrentSegment()?.id !== "ending1") return;
     if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return;
-    if (ending1Beat.introHeardFishQ || ending1Beat.introHeardHoldOn) {
-      sealEnding1IntroSpeech("quiet-after-intro");
-      try {
-        audioPlayer?.interrupt?.();
-        closeOpenAudioTurn();
-      } catch {
-        // ignore
-      }
+    // Playback still draining — wait a bit more.
+    if (assistantIsSpeaking()) {
+      armEnding1IntroQuietSeal();
+      return;
     }
-  }, 2200);
+    sealEnding1IntroSpeech("quiet-after-intro");
+  }, 1100);
+}
+
+/** After TURN_COMPLETE, wait for buffered PCM to finish, then seal (blocks ghost 2nd Perfect). */
+function armEnding1IntroSealAfterTurnComplete() {
+  if (getCurrentSegment()?.id !== "ending1") return;
+  if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return;
+  if (ending1Beat.introSpeechComplete) return;
+  if (!(ending1Beat.introAudioSent || ending1Beat.introDisplayLocked)) return;
+
+  ending1Beat.introTurnCompleteCount = (ending1Beat.introTurnCompleteCount || 0) + 1;
+
+  const trySeal = () => {
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (ending1Beat.introSpeechComplete) return;
+    if (ending1Beat.finaleRequested || ending1Beat.freeTalk) return;
+    const age = Date.now() - (ending1Beat.introSeededAt || ending1Beat.introFirstAudioAt || 0);
+    // Prefer sealing once Turn A is "long enough" or fish/hold heard.
+    // Avoid sealing a premature TURN_COMPLETE 2s into Perfect (would cut Hold-on).
+    const fullEnough =
+      ending1Beat.introHeardFishQ ||
+      (ending1Beat.introHeardHoldOn && ending1Beat.introHeardPerfect) ||
+      age >= 16000 ||
+      (ending1Beat.introPacketCount || 0) > 120 ||
+      ending1Beat.introTurnCompleteCount >= 2;
+    if (!fullEnough) {
+      // Schedule a hard seal after a full Turn A window so a no-STT double still gets cut.
+      const wait = Math.max(500, 22000 - age);
+      if (ending1IntroSealIdleTimerId) clearTimeout(ending1IntroSealIdleTimerId);
+      ending1IntroSealIdleTimerId = setTimeout(() => {
+        ending1IntroSealIdleTimerId = null;
+        whenAssistantIdle(() => sealEnding1IntroSpeech("delayed-hard-seal"), "ending1-intro-hard-seal");
+      }, wait);
+      return;
+    }
+    sealEnding1IntroSpeech("turn-complete-idle");
+  };
+
+  whenAssistantIdle(() => {
+    // Small delay so late audio packets of the SAME turn can still land.
+    setTimeout(trySeal, 400);
+  }, "ending1-intro-turn-seal");
 }
 
 /**
@@ -1035,6 +1154,10 @@ function resetEnding1Beat() {
     introHeardFishQ: false,
     introHeardFishQAt: 0,
     introSpeechComplete: false,
+    introFirstAudioAt: 0,
+    introLastAudioPacketAt: 0,
+    introPacketCount: 0,
+    introTurnCompleteCount: 0,
     finaleSpoken: 0,
     finaleCoachSent: 0,
     finaleForceScheduled: false,
@@ -1465,10 +1588,11 @@ function maybeChainEnding1AutoBeat() {
   if (getCurrentSegment()?.id !== "ending1") return;
   syncEnding1AutoProgress();
   updateLessonBanner();
-  // Full Turn A finished (fish Q heard) — seal so a second Perfect cannot play.
-  // Do NOT seal on Perfect-only TURN_COMPLETE — Gemini sometimes splits Hold-on into turn 2.
+  // Seal after this model turn's audio drains — kills audio-only ghost Perfect.
+  armEnding1IntroSealAfterTurnComplete();
+  // Full Turn A finished (fish Q heard) — seal immediately once idle.
   if (ending1Beat.introAudioSent && ending1Beat.introHeardFishQ) {
-    sealEnding1IntroSpeech("turn-complete-fish");
+    whenAssistantIdle(() => sealEnding1IntroSpeech("turn-complete-fish"), "ending1-seal-fish");
   }
   if (ending1AutoIntroComplete()) {
     enterEnding1FreeTalkIfReady();
@@ -10286,8 +10410,8 @@ function handleMessage(message) {
       break;
     case MultimodalLiveResponseType.AUDIO:
       if (!audioPlayer || audioPlayer.destroyed) break;
-      // Hard drop: second Perfect generation after Turn A already finished.
-      if (shouldDropEnding1IntroAudio()) {
+      // Ghost second Perfect often has ZERO STT — gate on audio packets alone.
+      if (gateEnding1IntroAudioPacket() || shouldDropEnding1IntroAudio()) {
         dbg("drop ending1 duplicate Perfect audio packet");
         try {
           audioPlayer.interrupt?.();
@@ -10302,15 +10426,6 @@ function handleMessage(message) {
       // Stop mic hangover so we don't barge into Learny's reply.
       audioStreamer?.resetVoiceGate?.();
       audioPlayer.play(message.data);
-      // While Turn A is playing, keep resetting the quiet seal timer.
-      if (
-        getCurrentSegment()?.id === "ending1" &&
-        !ending1Beat.finaleRequested &&
-        !ending1Beat.freeTalk &&
-        (ending1Beat.introDisplayLocked || ending1Beat.introAudioSent)
-      ) {
-        armEnding1IntroQuietSeal();
-      }
       break;
     case MultimodalLiveResponseType.INPUT_TRANSCRIPTION:
       addMessage(message.data.text, "user-transcript", "append");
