@@ -5,6 +5,13 @@ import { AQUARIUM_PART1 } from "./lessons/aquarium-part1.js";
 import { AQUARIUM_PART2 } from "./lessons/aquarium-part2.js";
 import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js";
 import { totalPokeCount } from "./activity-log.js";
+import {
+  computeAccuracyTier,
+  highestTierByFamily,
+  FAMILY_LABELS_JA,
+  BADGE_FAMILIES,
+  familySlotImage,
+} from "./badge-engine.js";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
@@ -188,7 +195,6 @@ export function normalizeLevelProgress(raw) {
     return {
       hasData: false,
       part1Complete: false,
-      starsEarned: 0,
       phraseCount: 0,
       phrases: [],
       lessonBadges: [],
@@ -204,7 +210,6 @@ export function normalizeLevelProgress(raw) {
     hasData: true,
     part1Complete: Boolean(raw.part1Complete || p1.complete),
     part2Complete: Boolean(p2.complete),
-    starsEarned: (Number(p1.stars) || 0) + (Number(p2.stars) || 0),
     phraseCount: phrases.length,
     phrases,
     lessonBadges: Array.isArray(raw.lessonBadges) ? raw.lessonBadges : [],
@@ -223,8 +228,44 @@ export function normalizeStudentProgress(user) {
   };
 }
 
-export function collectUserBadges() {
-  return [];
+export function collectUserBadges(user) {
+  const fromTop = Array.isArray(user?.lessonBadges) ? user.lessonBadges : [];
+  const fromBeginner = Array.isArray(user?.beginnerProgress?.lessonBadges)
+    ? user.beginnerProgress.lessonBadges
+    : [];
+  const ids = [...new Set([...fromTop, ...fromBeginner].map(String))];
+  return ids.filter((id) => id.startsWith("p1_"));
+}
+
+function renderBeginnerPart1BadgeRow(user) {
+  const ids = collectUserBadges(user);
+  const tiers = highestTierByFamily(ids);
+  const part1 = user?.beginnerProgress?.part1 || {};
+  const accuracy = computeAccuracyTier(part1, AQUARIUM_PART1);
+  const ratePct =
+    accuracy.total > 0 ? Math.round(accuracy.rate * 1000) / 10 : null;
+  const chips = BADGE_FAMILIES.map((family) => {
+    const tier = tiers[family];
+    const meta = FAMILY_LABELS_JA[family];
+    const src = familySlotImage(tier);
+    const label = tier ? `${meta.label} ${tier}` : `${meta.label}（未）`;
+    return `<span class="progress-badge-chip${tier ? " is-earned" : ""}" title="${escapeHtml(
+      meta.desc
+    )}">
+      <img src="${src}" alt="" width="28" height="28" />
+      ${escapeHtml(label)}
+    </span>`;
+  }).join("");
+  const rateLine =
+    ratePct != null
+      ? `バッジ用せいとうりつ（最新プレイの1回目）: <strong>${ratePct}%</strong>（${accuracy.correct}/${accuracy.total}）· 章リトライで上がることがあります`
+      : "バッジ用せいとうりつ: まだ4択データなし";
+  const freetalkN = Number(part1.endingFreetalkEnglishCount) || 0;
+  return `<div class="progress-badge-row" aria-label="ビギナー Part1 バッジ">
+    <div class="progress-badge-chip-grid">${chips}</div>
+    <p class="progress-badge-rate">${rateLine}</p>
+    <p class="progress-badge-rate">おしまいフリートーク英語: ${freetalkN} 文</p>
+  </div>`;
 }
 
 export function buildProgressSummary(users) {
@@ -237,15 +278,6 @@ export function buildProgressSummary(users) {
     if (!bp) return false;
     return Boolean(bp.part1Complete || (bp.part1?.complete && bp.part2?.complete));
   }).length;
-  const totalStars = accounts.reduce((sum, u) => {
-    return (
-      sum +
-      LEVEL_META.reduce((s, m) => {
-        const p = u[m.field];
-        return s + (Number(p?.part1?.stars) || 0) + (Number(p?.part2?.stars) || 0);
-      }, 0)
-    );
-  }, 0);
   const phraseEarnedSum = accounts.reduce((sum, u) => {
     return sum + phraseChecklist(u).filter((p) => p.earned).length;
   }, 0);
@@ -267,7 +299,6 @@ export function buildProgressSummary(users) {
     accountCount: (users || []).length,
     syncedCount: withProgress.length,
     lessonCompleteCount: lessonComplete,
-    totalStars,
     totalPhrases: avgPhrases,
     phraseCatalogSize: PHRASE_CATALOG.length,
     totalPokes,
@@ -309,7 +340,7 @@ function renderHomeworkParts(meta, raw) {
       .map(([k, v]) => `${k}:${v}`)
       .join("、 ");
     return `<div class="progress-part-block">
-      <p class="progress-level-now">${escapeHtml(label)} — ${escapeHtml(done)} · ★${Number(part.stars) || 0}${
+      <p class="progress-level-now">${escapeHtml(label)} — ${escapeHtml(done)}${
         mem ? ` · ${escapeHtml(mem)}` : ""
       }</p>
       ${renderChapterPlayCounts(part, lesson)}
@@ -400,12 +431,15 @@ function beatStatsFromPart(part, segmentId, beatId) {
   }));
   const logCorrect = clickOrder.filter((c) => c.correct).length;
   const logIncorrect = clickOrder.filter((c) => !c.correct).length;
+  const firstCorrect = clickOrder.find((c) => c.correct);
+  const triesUntilCorrect = firstCorrect ? firstCorrect.n : null;
   return {
     attempts: summary?.attempts != null ? Number(summary.attempts) : log.length,
     correct: summary?.correct != null ? Number(summary.correct) : logCorrect,
     incorrect: summary?.incorrect != null ? Number(summary.incorrect) : logIncorrect,
     choiceCounts,
     clickOrder,
+    triesUntilCorrect,
   };
 }
 
@@ -465,11 +499,20 @@ function renderMcqChapterBlock(seg, part) {
             .join("")}</ol>`
         : '<p class="progress-empty-inline">まだクリック履歴がありません</p>';
 
+      const triesLabel =
+        stats.triesUntilCorrect != null
+          ? `初回正解まで ${stats.triesUntilCorrect} 回`
+          : stats.attempts
+            ? "まだ正解なし"
+            : "未回答";
+
       const prompt = [beat.learnyEn, beat.learnyJa].filter(Boolean).join(" / ");
       return `<div class="progress-mcq-beat">
         <div class="progress-mcq-beat-head">
           <strong>Beat ${idx + 1}</strong>
-          <span class="progress-mcq-beat-meta">○${stats.correct} ×${stats.incorrect} · ${stats.attempts}回</span>
+          <span class="progress-mcq-beat-meta">○${stats.correct} ×${stats.incorrect} · ${stats.attempts}回 · ${escapeHtml(
+            triesLabel
+          )}</span>
         </div>
         <p class="progress-mcq-prompt">${escapeHtml(prompt || beat.id)}</p>
         <ul class="progress-mcq-options">${optionsHtml}</ul>
@@ -625,7 +668,6 @@ const LEVEL_LABEL = {
 
 const ACTIVITY_TYPE_META = {
   poke: { label: "つつく", short: "つつく" },
-  star: { label: "スター", short: "★" },
   badge: { label: "バッジ", short: "バッジ" },
   badge_revoke: { label: "バッジ取消", short: "取消" },
   reset: { label: "最初から", short: "リセット" },
@@ -657,7 +699,7 @@ function renderActivityDetail(ev) {
       ${ev.attempt ? `<span class="tl-attempt">${escapeHtml(String(ev.attempt))}回目</span>` : ""}
     </div>`;
   }
-  if (ev.type === "star" || ev.type === "reset") {
+  if (ev.type === "reset") {
     return `<span class="tl-tag">${escapeHtml(ev.questTitle || ev.segmentId || "—")}</span>`;
   }
   if (ev.badgeId) {
@@ -679,7 +721,6 @@ export function renderActivityTimeline(events) {
     mcq_correct: 0,
     mcq_incorrect: 0,
     poke: 0,
-    star: 0,
     reset: 0,
     other: 0,
   };
@@ -693,7 +734,6 @@ export function renderActivityTimeline(events) {
     ["mcq_correct", `正解 ${counts.mcq_correct}`],
     ["mcq_incorrect", `不正解 ${counts.mcq_incorrect}`],
     ["poke", `つつく ${counts.poke}`],
-    ["star", `スター ${counts.star}`],
     ["reset", `リセット ${counts.reset}`],
   ]
     .filter(([key]) => key === "all" || counts[key] > 0)
@@ -820,6 +860,8 @@ export function renderProgressDashboard(users, searchQuery = "") {
               </div>
             </div>
 
+            ${u.beginnerProgress ? renderBeginnerPart1BadgeRow(u) : ""}
+
             ${levelsHtml || '<p class="progress-empty-inline">まだ宿題データがありません</p>'}
 
             <details class="progress-detail-block">
@@ -869,7 +911,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
         <span class="progress-summary-label">つつく合計</span>
       </div>
     </div>
-    <p class="progress-legend">章プレイ回数 = その章を開始した回数 · 緑 = 正解の選択肢 · 4択の数字 = クリック回数</p>
+    <p class="progress-legend">章プレイ回数 = その章を開始した回数 · 緑 = 正解の選択肢 · 4択の数字 = クリック回数 · バッジせいとうりつ = 最新プレイの1回目（リトライで上がる）</p>
     <div class="progress-student-grid">${cardsHtml}</div>`;
 }
 

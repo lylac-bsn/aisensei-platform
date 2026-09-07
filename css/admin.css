@@ -852,9 +852,6 @@
 .progress-timeline-item.type-poke .tl-dot {
   background: #7b1fa2;
 }
-.progress-timeline-item.type-star .tl-dot {
-  background: #f9a825;
-}
 .progress-timeline-item.type-reset .tl-dot {
   background: #ef6c00;
 }
@@ -903,10 +900,6 @@
 .tl-badge.type-poke {
   background: #f3e5f5;
   color: #6a1b9a;
-}
-.tl-badge.type-star {
-  background: #fff8e1;
-  color: #f57f17;
 }
 .tl-badge.type-reset {
   background: #fff3e0;
@@ -1014,11 +1007,54 @@
   padding: 2rem 1rem;
 }
 
-/* Hide obsolete mission / badge skins if still present */
+/* Hide obsolete mission / skip skins if still present */
 .progress-mission-grid,
-.progress-badge-chip-grid,
 .progress-skip-pill {
   display: none !important;
+}
+
+.progress-badge-row {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  background: #fffaf3;
+  border: 1px solid var(--border-color, #e8ddd0);
+  border-radius: 12px;
+}
+
+.progress-badge-chip-grid {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.progress-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #f5ede3;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #5d4037;
+}
+
+.progress-badge-chip.is-earned {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+}
+
+.progress-badge-chip img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.progress-badge-rate {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #6d4c41;
 }
 
 @media (max-width: 768px) {

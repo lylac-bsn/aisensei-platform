@@ -38,6 +38,7 @@ import {
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js";
 import { QuestSfx } from "./quest-sfx.js";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -1887,6 +1888,22 @@ function maybeAdvanceEnding1Beat(userText, { skipNotify = false } = {}) {
   }
   ending1Beat.advancedForUserKey = userKey;
   ending1Beat.userTurns += 1;
+  if (ending1Beat.freeTalk) {
+    const { newlyEarned } = recordEndingFreetalkEnglish(userText);
+    if (newlyEarned?.length) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
+        );
+        window.parent?.postMessage?.(
+          { type: "gc_badges_earned", newlyEarned },
+          "*"
+        );
+      } catch {
+        // ignore
+      }
+    }
+  }
   updateLessonBanner();
   paintEndingEndButton();
   return true;

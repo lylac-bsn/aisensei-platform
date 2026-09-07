@@ -1,5 +1,5 @@
 /**
- * Student activity events for the admin dashboard (poke, MCQ, stars, resets).
+ * Student activity events for the admin dashboard (poke, MCQ, resets).
  * Stored at users/{uid}/activity/{id}. Poke counts roll up into users.pokeStats.
  */
 import {
@@ -11,13 +11,15 @@ import {
   limit,
   doc,
   updateDoc,
+  writeBatch,
   increment,
   serverTimestamp,
+  getDoc,
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { AQUARIUM_PART1 } from "./lessons/aquarium-part1.js";
 
 export const ACTIVITY_TYPES = Object.freeze({
   SKIP: "skip", // legacy — skip button removed
-  STAR: "star",
   BADGE: "badge",
   BADGE_REVOKE: "badge_revoke",
   RESET: "reset",
@@ -26,6 +28,68 @@ export const ACTIVITY_TYPES = Object.freeze({
   POKE: "poke",
 });
 
+const PART1_SEGMENT_IDS = new Set(
+  (AQUARIUM_PART1.segments || []).map((s) => s.id).concat(["part1"])
+);
+
+function isBeginnerPart1Activity(ev) {
+  if (!ev) return false;
+  if (ev.level && ev.level !== "beginner") return false;
+  if (ev.badgeId && String(ev.badgeId).startsWith("p1_")) return true;
+  if (ev.segmentId && PART1_SEGMENT_IDS.has(String(ev.segmentId))) return true;
+  if (ev.questTitle === "part1") return true;
+  // MCQ questTitle like "ch1/need_glass"
+  const qt = String(ev.questTitle || "");
+  const segFromQuest = qt.split("/")[0];
+  if (segFromQuest && PART1_SEGMENT_IDS.has(segFromQuest)) return true;
+  return false;
+}
+
+/**
+ * Wipe Beginner Part 1 activity docs + part1 keys from mcqStats.beginner.
+ * Then caller should log a fresh reset event.
+ */
+export async function wipeBeginnerPart1History(db, userId) {
+  if (!db || !userId) return;
+  const userRef = doc(db, "users", userId);
+
+  // Clear part1 keys from mcqStats.beginner (keep other segment keys if any).
+  try {
+    const snap = await getDoc(userRef);
+    const mcqStats = snap.exists() ? snap.data()?.mcqStats || {} : {};
+    const beginnerMap =
+      mcqStats.beginner && typeof mcqStats.beginner === "object"
+        ? { ...mcqStats.beginner }
+        : {};
+    for (const key of Object.keys(beginnerMap)) {
+      const seg = String(key).split(".")[0];
+      if (PART1_SEGMENT_IDS.has(seg)) delete beginnerMap[key];
+    }
+    await updateDoc(userRef, {
+      "mcqStats.beginner": beginnerMap,
+    });
+  } catch {
+    // ignore
+  }
+
+  // Delete activity docs for beginner part1 (paginate in batches of 400).
+  try {
+    const col = collection(db, "users", userId, "activity");
+    // Fetch recent large window — enough for homework sessions.
+    const q = query(col, orderBy("at", "desc"), limit(500));
+    const snap = await getDocs(q);
+    const toDelete = snap.docs.filter((d) => isBeginnerPart1Activity(d.data()));
+    for (let i = 0; i < toDelete.length; i += 400) {
+      const batch = writeBatch(db);
+      for (const d of toDelete.slice(i, i + 400)) {
+        batch.delete(d.ref);
+      }
+      await batch.commit();
+    }
+  } catch {
+    // ignore — reset event still logs
+  }
+}
 /**
  * @param {import('firebase/firestore').Firestore} db
  * @param {string} userId
@@ -123,10 +187,14 @@ export async function logUserActivity(db, userId, event) {
 
   if (payload.type === ACTIVITY_TYPES.RESET && payload.level) {
     try {
-      // Drop rollup MCQ totals for this level so admin does not resurrect pre-reset clicks.
-      await updateDoc(doc(db, "users", userId), {
-        [`mcqStats.${payload.level}`]: {},
-      });
+      if (event.wipePart1History && payload.level === "beginner") {
+        await wipeBeginnerPart1History(db, userId);
+      } else {
+        // Drop rollup MCQ totals for this level so admin does not resurrect pre-reset clicks.
+        await updateDoc(doc(db, "users", userId), {
+          [`mcqStats.${payload.level}`]: {},
+        });
+      }
     } catch {
       // ignore
     }

@@ -4,6 +4,11 @@
  */
 
 import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js";
+import {
+  isBeginnerPart1BadgeScope,
+  maybeRecordBadgeFirstTry,
+  evaluateAndAwardBadges,
+} from "./badge-engine.js";
 
 /** @typedef {{
  *   id: string,
@@ -192,7 +197,41 @@ export function recordMcqAttempt({
     }
   }
 
-  saveLessonState(state);
+  let newlyEarned = [];
+  if (isBeginnerPart1BadgeScope()) {
+    const play =
+      Number(state.mcqBadgePlay?.[entry.segmentId]) ||
+      Number(state.chapterPlayCounts?.[entry.segmentId]) ||
+      0;
+    if (!(play > 0)) {
+      state.mcqBadgePlay = {
+        ...(state.mcqBadgePlay || {}),
+        [entry.segmentId]: Number(state.chapterPlayCounts?.[entry.segmentId]) || 1,
+      };
+    }
+    maybeRecordBadgeFirstTry(state, {
+      segmentId: entry.segmentId,
+      beatId: entry.beatId,
+      correct,
+    });
+    saveLessonState(state);
+    newlyEarned = evaluateAndAwardBadges().newlyEarned || [];
+    if (newlyEarned.length) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
+        );
+        window.parent?.postMessage?.(
+          { type: "gc_badges_earned", newlyEarned },
+          "*"
+        );
+      } catch {
+        // ignore
+      }
+    }
+  } else {
+    saveLessonState(state);
+  }
 
   return {
     type: correct ? "mcq_correct" : "mcq_incorrect",
@@ -206,6 +245,7 @@ export function recordMcqAttempt({
     learnyPrompt: entry.learnyPrompt,
     attempt: row.attempts,
     source: "client",
+    newlyEarned,
   };
 }
 

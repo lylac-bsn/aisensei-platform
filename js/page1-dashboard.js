@@ -8,22 +8,41 @@ import {
   isPart1Complete,
   loadEarnedLessonBadges,
   getBadgeCatalogForLesson,
-  getStarCount,
-  getTotalStarSlots,
   getSegmentChapterMeta,
   formatSegmentChapter,
 } from "./lesson-engine.js";
+import {
+  BADGE_FAMILIES,
+  FAMILY_LABELS_JA,
+  highestTierByFamily,
+  familySlotImage,
+  parseBadgeId,
+  TIER_RANK,
+  BADGE_IMAGES,
+} from "./badge-engine.js";
+import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
   instructions: "使い方",
   missions: "レッスン",
   words: "覚えたフレーズ",
-  stars: "スター",
   badges: "バッジ",
 };
 
-let activeLessonId = "part1";
+const TIER_LABEL_JA = {
+  bronze: "ブロンズ",
+  silver: "シルバー",
+  gold: "ゴールド",
+};
 
+let activeLessonId = "part1";
+const badgeSfx = new QuestSfx(0.36);
+let badgeCeremonyQueue = [];
+let badgeCeremonyRunning = false;
+
+function usePart1BadgeShelf() {
+  return getActiveLevelId() === "beginner" && activeLessonId === "part1";
+}
 /** In-app confirm (replaces window.confirm) — matches .learny-confirm-* styles. */
 function showLearnyConfirm({
   title = "確認",
@@ -122,25 +141,37 @@ function state() {
 }
 
 function refreshDashboardChrome() {
-  const st = state();
-  const total = getTotalStarSlots(activeLessonId);
-  const stars = st.stars || 0;
-  const countEl = document.getElementById("trophy-star-count");
-  if (countEl) countEl.textContent = String(stars);
-  const row = document.getElementById("trophy-star-row");
-  if (row) {
-    row.innerHTML = Array.from({ length: Math.max(total, 1) }, (_, i) => {
-      const filled = i < stars ? " filled" : "";
-      return `<span class="dashboard-star-icon${filled}">★</span>`;
-    }).join("");
-  }
   const allBadges = loadEarnedLessonBadges();
+  const badgeCount = document.getElementById("trophy-badge-count");
+  const slots = document.getElementById("trophy-badge-slots");
+
+  if (usePart1BadgeShelf()) {
+    const tiers = highestTierByFamily(allBadges);
+    const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
+    if (badgeCount) badgeCount.textContent = `${earnedFamilies}/3`;
+    if (slots) {
+      slots.innerHTML = `<div class="trophy-shelf__group trophy-shelf__group--main">${BADGE_FAMILIES.map(
+        (family) => {
+          const tier = tiers[family];
+          const meta = FAMILY_LABELS_JA[family];
+          const src = familySlotImage(tier);
+          const on = Boolean(tier);
+          const title = on
+            ? `${meta.label}（${tier}）— ${meta.desc}`
+            : `${meta.label} — まだゲットしていないよ`;
+          return `<span class="trophy-slot${on ? " earned" : " upcoming"}" data-badge-family="${family}" title="${title}">
+            <img src="${src}" alt="${meta.label}" width="64" height="64" decoding="async" />
+          </span>`;
+        }
+      ).join("")}</div>`;
+    }
+    return;
+  }
+
   const catalog = getBadgeCatalogForLesson(activeLessonId);
   const catalogIds = new Set(catalog.map((b) => b.id));
   const earned = allBadges.filter((id) => catalogIds.has(id));
-  const badgeCount = document.getElementById("trophy-badge-count");
-  if (badgeCount) badgeCount.textContent = `${earned.length}/${catalog.length}`;
-  const slots = document.getElementById("trophy-badge-slots");
+  if (badgeCount) badgeCount.textContent = `${earned.length}/${catalog.length || 0}`;
   if (slots) {
     const earnedSet = new Set(earned);
     slots.innerHTML = `<div class="trophy-shelf__group trophy-shelf__group--hidden">${catalog
@@ -229,17 +260,30 @@ function renderWords(container) {
     .join("")}</ul>`;
 }
 
-function renderStars(container) {
-  const earned = getStarCount(activeLessonId);
-  const total = getTotalStarSlots(activeLessonId);
-  container.innerHTML = `
-    <div class="dashboard-stars-summary">
-      <div class="dashboard-stars-big">${earned} / ${total}</div>
-      <p class="dashboard-stars-desc">章をクリアするとスターがたまるよ。</p>
-    </div>`;
-}
-
 function renderBadges(container) {
+  if (usePart1BadgeShelf()) {
+    const tiers = highestTierByFamily(loadEarnedLessonBadges());
+    const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
+    container.innerHTML = `
+    <div class="dashboard-badge-board">
+      <p class="dashboard-badge-board-desc">ビギナー Part 1 のバッジ（${earnedFamilies} / 3）</p>
+      <div class="dashboard-badge-grid dashboard-badge-grid--main" role="list">
+        ${BADGE_FAMILIES.map((family) => {
+          const tier = tiers[family];
+          const meta = FAMILY_LABELS_JA[family];
+          const src = familySlotImage(tier);
+          const on = Boolean(tier);
+          const label = on ? `${meta.label}（${tier}）` : "？？？";
+          return `<div class="dashboard-badge-slot${on ? " earned" : ""}" title="${meta.desc}">
+            <img class="dashboard-badge-slot-img" src="${src}" alt="" width="72" height="72" decoding="async" />
+            <span class="dashboard-badge-slot-label">${label}</span>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+    return;
+  }
+
   const catalog = getBadgeCatalogForLesson(activeLessonId);
   const earned = new Set(
     loadEarnedLessonBadges().filter((id) => catalog.some((b) => b.id === id))
@@ -292,11 +336,10 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     panel.hidden = false;
     panel.classList.toggle("dashboard-panel--instructions", name === "instructions");
     panel.classList.toggle("dashboard-panel--missions", name === "missions");
-    panel.classList.toggle("dashboard-panel--badges", name === "badges" || name === "stars");
+    panel.classList.toggle("dashboard-panel--badges", name === "badges");
     if (panelTitle) panelTitle.textContent = PANEL_LABELS[name] || name;
     if (name === "missions") renderChapters(panelBody);
     else if (name === "words") renderWords(panelBody);
-    else if (name === "stars") renderStars(panelBody);
     else if (name === "badges") renderBadges(panelBody);
     else if (name === "instructions") renderInstructions(panelBody);
     buttons.forEach((b) =>
@@ -344,10 +387,13 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   });
 
   startOverBtn?.addEventListener("click", async () => {
+    const part1Wipe = usePart1BadgeShelf();
     const ok = await showLearnyConfirm({
       title: "最初からやり直す？",
       message: "この Part の宿題を最初からやり直しますか？",
-      note: "いままでの進度はリセットされます",
+      note: part1Wipe
+        ? "進度・4択のきろく・プレイ回数・バッジも消えて、はじめからとりなおします"
+        : "いままでの進度はリセットされます",
       confirmLabel: "最初からやり直す",
       cancelLabel: "やめる",
     });
@@ -361,6 +407,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
       questTitle: activeLessonId,
       segmentId: activeLessonId,
       source: "client",
+      wipePart1History: part1Wipe,
     };
     try {
       // Same window as page1.js — use CustomEvent only (postMessage would double-log).
@@ -384,9 +431,154 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
       refreshDashboardChrome();
       if (activePanel) openPanel(activePanel);
     }
+    if (e.data?.type === "gc_badges_earned") {
+      refreshDashboardChrome();
+      const ids = e.data.newlyEarned || [];
+      if (ids.length && usePart1BadgeShelf()) {
+        celebrateBadgeAwards(ids);
+      }
+    }
+  });
+
+  window.addEventListener("learny-badges-earned", (e) => {
+    refreshDashboardChrome();
+    if (usePart1BadgeShelf()) celebrateBadgeAwards(e.detail?.newlyEarned || []);
   });
 
   refreshDashboardChrome();
+}
+
+/** Pick highest newly earned tier per family (bronze+silver in one burst → show silver). */
+function awardsFromNewlyEarned(newlyEarned) {
+  const best = { chapter: null, freetalk: null, accuracy: null };
+  for (const id of newlyEarned || []) {
+    const parsed = parseBadgeId(id);
+    if (!parsed) continue;
+    const rank = TIER_RANK[parsed.tier] || 0;
+    const cur = best[parsed.family];
+    if (!cur || rank > (TIER_RANK[cur] || 0)) best[parsed.family] = parsed.tier;
+  }
+  return BADGE_FAMILIES.filter((f) => best[f]).map((family) => ({
+    family,
+    tier: best[family],
+  }));
+}
+
+function ensureBadgeAwardOverlay() {
+  let overlay = document.getElementById("badge-award-overlay");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "badge-award-overlay";
+  overlay.className = "badge-award-overlay";
+  overlay.hidden = true;
+  overlay.setAttribute("aria-live", "polite");
+  overlay.innerHTML = `
+    <div class="badge-award-backdrop" aria-hidden="true"></div>
+    <div class="badge-award-stage">
+      <div class="badge-award-rays" aria-hidden="true"></div>
+      <img class="badge-award-img" alt="" width="220" height="220" decoding="async" />
+    </div>
+    <p class="badge-award-label"></p>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function celebrateBadgeAwards(newlyEarned) {
+  const awards = awardsFromNewlyEarned(newlyEarned);
+  if (!awards.length) return;
+  badgeCeremonyQueue.push(...awards);
+  if (!badgeCeremonyRunning) runNextBadgeCeremony();
+}
+
+async function runNextBadgeCeremony() {
+  if (badgeCeremonyRunning) return;
+  const next = badgeCeremonyQueue.shift();
+  if (!next) return;
+  badgeCeremonyRunning = true;
+  try {
+    await playOneBadgeCeremony(next.family, next.tier);
+  } catch {
+    // ignore animation errors
+  }
+  badgeCeremonyRunning = false;
+  if (badgeCeremonyQueue.length) runNextBadgeCeremony();
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function playOneBadgeCeremony(family, tier) {
+  const overlay = ensureBadgeAwardOverlay();
+  const img = overlay.querySelector(".badge-award-img");
+  const label = overlay.querySelector(".badge-award-label");
+  const meta = FAMILY_LABELS_JA[family] || { label: family };
+  const tierJa = TIER_LABEL_JA[tier] || tier;
+  const src = BADGE_IMAGES[tier] || familySlotImage(tier);
+
+  img.src = src;
+  img.alt = `${meta.label} ${tierJa}`;
+  label.textContent = `${meta.label} ${tierJa} ゲット！`;
+  overlay.classList.remove("flying", "show");
+  img.style.transition = "";
+  img.style.transform = "";
+  overlay.hidden = false;
+  // Force reflow so .show animations restart
+  void overlay.offsetWidth;
+  overlay.classList.add("show");
+
+  if (tier === "gold") badgeSfx.playLessonComplete();
+  else badgeSfx.playQuestComplete();
+
+  await waitMs(1650);
+
+  const slot = document.querySelector(`.trophy-slot[data-badge-family="${family}"]`);
+  if (slot && img.isConnected) {
+    const from = img.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    const scale = Math.max(0.22, Math.min(to.width / from.width, 0.38));
+    overlay.classList.add("flying");
+    img.style.transition = "transform 0.75s cubic-bezier(0.45, 0.05, 0.55, 0.95)";
+    img.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    await waitMs(780);
+  } else {
+    await waitMs(400);
+  }
+
+  overlay.classList.remove("show", "flying");
+  overlay.hidden = true;
+  img.style.transition = "";
+  img.style.transform = "";
+
+  flashBadgeSlot(family);
+  // Briefly open badges panel highlight via shelf pulse
+  const shelf = document.getElementById("trophy-shelf-badges");
+  if (shelf) {
+    shelf.classList.add("badge-shelf-pulse");
+    setTimeout(() => shelf.classList.remove("badge-shelf-pulse"), 1200);
+  }
+}
+
+function flashBadgeSlot(family) {
+  const el = document.querySelector(`.trophy-slot[data-badge-family="${family}"]`);
+  if (!el) return;
+  el.classList.remove("just-earned");
+  void el.offsetWidth;
+  el.classList.add("just-earned");
+  setTimeout(() => el.classList.remove("just-earned"), 1600);
+}
+
+function flashBadgeSlots(newlyEarned) {
+  // Kept for callers that only want a shelf pulse without the full ceremony.
+  const families = new Set();
+  for (const id of newlyEarned || []) {
+    const parsed = parseBadgeId(id);
+    if (parsed) families.add(parsed.family);
+  }
+  for (const family of families) flashBadgeSlot(family);
 }
 
 let dashboardChatResizeBound = false;

@@ -119,7 +119,6 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     memories: {},
     phrasesSpoken: [],
     badges: [],
-    stars: 0,
     complete: false,
     mcqCursor: {},
     mcqLog: [],
@@ -128,15 +127,26 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     segmentUi: {},
     /** How many times the learner started each chapter (jump + natural entry). */
     chapterPlayCounts: {},
+    /** Beginner Part1: play id used for badge first-try overwrite on chapter retry. */
+    mcqBadgePlay: {},
+    /** Beginner Part1: latest-play first click result per seg.beat for 正解率 badges. */
+    mcqBadgeFirstTry: {},
+    /** Beginner Part1: English sentences spoken during ending1 free-talk only. */
+    endingFreetalkEnglishCount: 0,
   };
+}
+
+/** Drop legacy star-system fields from persisted lesson state. */
+function sanitizeLessonState(raw, lessonId) {
+  const { stars: _stars, ...rest } = raw && typeof raw === "object" ? raw : {};
+  return { ...emptyState(lessonId), ...rest, lessonId };
 }
 
 export function loadLessonState(lessonId = ACTIVE_LESSON_ID) {
   try {
     const raw = localStorage.getItem(storageKey(lessonId));
     if (!raw) return emptyState(lessonId);
-    const parsed = JSON.parse(raw);
-    return { ...emptyState(lessonId), ...parsed, lessonId };
+    return sanitizeLessonState(JSON.parse(raw), lessonId);
   } catch {
     return emptyState(lessonId);
   }
@@ -144,7 +154,10 @@ export function loadLessonState(lessonId = ACTIVE_LESSON_ID) {
 
 export function saveLessonStateFor(state, lessonId, levelId = ACTIVE_LEVEL_ID) {
   try {
-    localStorage.setItem(storageKey(lessonId, levelId), JSON.stringify(state));
+    localStorage.setItem(
+      storageKey(lessonId, levelId),
+      JSON.stringify(sanitizeLessonState(state, lessonId))
+    );
   } catch {
     // ignore
   }
@@ -206,8 +219,13 @@ export function revokeBadgesForLesson(lessonId = ACTIVE_LESSON_ID) {
 export function resetLesson(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   const prev = loadLessonStateFor(lessonId, levelId);
   const state = emptyState(lessonId);
-  // Keep lifetime play counts across full resets so admin totals stay meaningful.
-  if (prev?.chapterPlayCounts && typeof prev.chapterPlayCounts === "object") {
+  // Beginner Part 1 「最初から」: full wipe (no play-count keep). Other parts keep counts.
+  const fullWipe = levelId === "beginner" && lessonId === "part1";
+  if (
+    !fullWipe &&
+    prev?.chapterPlayCounts &&
+    typeof prev.chapterPlayCounts === "object"
+  ) {
     state.chapterPlayCounts = { ...prev.chapterPlayCounts };
   }
   saveLessonStateFor(state, lessonId, levelId);
@@ -230,6 +248,9 @@ export function recordChapterPlay(segmentId, lessonId = ACTIVE_LESSON_ID, levelI
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
+  if (levelId === "beginner" && lessonId === "part1") {
+    state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
+  }
   saveLessonStateFor(state, lessonId, levelId);
   return counts[id];
 }
@@ -240,15 +261,28 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
   if (!id) return 0;
   const state = loadLessonStateFor(lessonId, levelId);
   const counts = { ...(state.chapterPlayCounts || {}) };
-  if ((Number(counts[id]) || 0) > 0) return counts[id];
+  if ((Number(counts[id]) || 0) > 0) {
+    if (
+      levelId === "beginner" &&
+      lessonId === "part1" &&
+      !(Number(state.mcqBadgePlay?.[id]) > 0)
+    ) {
+      state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
+      saveLessonStateFor(state, lessonId, levelId);
+    }
+    return counts[id];
+  }
   counts[id] = 1;
   state.chapterPlayCounts = counts;
+  if (levelId === "beginner" && lessonId === "part1") {
+    state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: 1 };
+  }
   saveLessonStateFor(state, lessonId, levelId);
   return 1;
 }
 
 /**
- * Free chapter select / replay — keeps stars & できた history, restarts chapter-local UI.
+ * Free chapter select / replay — keeps できた history, restarts chapter-local UI.
  */
 export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   const lesson = getLesson(lessonId);
@@ -269,6 +303,9 @@ export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = 
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
+  if (levelId === "beginner" && lessonId === "part1") {
+    state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
+  }
   saveLessonStateFor(state, lessonId, levelId);
   return { ok: true, state, segmentIndex: idx, segmentId: id, playCount: counts[id] };
 }
@@ -376,12 +413,6 @@ export function recordMemory(key, value) {
   return { ok: true, memories: state.memories };
 }
 
-function countsAsStar(segment) {
-  return ["story", "scaffold", "quiz", "final_challenge", "mix_review", "recap"].includes(
-    segment?.type
-  );
-}
-
 export function completeSegment(segmentId, { userQuote = "", saidTogether = false } = {}) {
   const state = loadLessonState();
   const lesson = getLesson(state.lessonId);
@@ -439,7 +470,6 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
 
   if (!state.completedSegmentIds.includes(segment.id)) {
     state.completedSegmentIds = [...state.completedSegmentIds, segment.id];
-    if (countsAsStar(segment)) state.stars = (state.stars || 0) + 1;
   }
   if (quote && /[a-zA-Z]/.test(quote)) {
     if (!state.phrasesSpoken.includes(quote.trim())) {
@@ -461,13 +491,38 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
       const counts = { ...(state.chapterPlayCounts || {}) };
       counts[next.id] = (Number(counts[next.id]) || 0) + 1;
       state.chapterPlayCounts = counts;
+      if (ACTIVE_LEVEL_ID === "beginner" && state.lessonId === "part1") {
+        state.mcqBadgePlay = {
+          ...(state.mcqBadgePlay || {}),
+          [next.id]: counts[next.id],
+        };
+      }
     }
   }
 
-  // Badges paused — scoring / end-of-lesson awards come later.
-  // for (const badge of lesson.badges || []) { ... }
-
   saveLessonState(state);
+
+  if (ACTIVE_LEVEL_ID === "beginner" && state.lessonId === "part1") {
+    import("./badge-engine.js")
+      .then((m) => {
+        const { newlyEarned } = m.evaluateAndAwardBadges();
+        if (newlyEarned?.length) {
+          try {
+            window.dispatchEvent(
+              new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
+            );
+            window.parent?.postMessage?.(
+              { type: "gc_badges_earned", newlyEarned },
+              "*"
+            );
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
   return { ok: true, state, next: getCurrentSegment(state), lessonComplete: state.complete };
 }
 
@@ -492,6 +547,9 @@ function mapBadgeCatalog(badges) {
     desc: b.desc,
     hint: b.desc,
     emoji: BADGE_EMOJI[b.id] || "⭐",
+    family: b.family || null,
+    tier: b.tier || null,
+    image: b.image || null,
   }));
 }
 
@@ -503,14 +561,6 @@ export function getBadgeCatalog() {
   return mapBadgeCatalog([...AQUARIUM_PART1.badges, ...AQUARIUM_PART2.badges]);
 }
 
-export function getStarCount(lessonId = ACTIVE_LESSON_ID) {
-  return loadLessonState(lessonId).stars || 0;
-}
-
-export function getTotalStarSlots(lessonId = ACTIVE_LESSON_ID) {
-  return getSegments(lessonId).filter(countsAsStar).length;
-}
-
 export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID) {
   const part1 = loadLessonStateFor("part1", levelId);
   const part2 = loadLessonStateFor("part2", levelId);
@@ -519,7 +569,6 @@ export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID) {
     part2,
     part1Complete: Boolean(part1.complete),
     lessonBadges: loadEarnedLessonBadges(),
-    stars: (part1.stars || 0) + (part2.stars || 0),
   };
 }
 
@@ -527,7 +576,7 @@ export function loadLessonStateFor(lessonId, levelId) {
   try {
     const raw = localStorage.getItem(storageKey(lessonId, levelId));
     if (!raw) return emptyState(lessonId);
-    return { ...emptyState(lessonId), ...JSON.parse(raw), lessonId };
+    return sanitizeLessonState(JSON.parse(raw), lessonId);
   } catch {
     return emptyState(lessonId);
   }

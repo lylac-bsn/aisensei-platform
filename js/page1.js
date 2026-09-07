@@ -125,6 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.data?.type === 'gc_quest_progress_update' && currentUser) {
             scheduleProgressSync(db, currentUser.uid);
         }
+        if (e.data?.type === 'gc_badges_earned' && currentUser) {
+            scheduleProgressSync(db, currentUser.uid);
+        }
         if (e.data?.type === 'gc_activity_event' && currentUser) {
             logUserActivity(db, currentUser.uid, e.data.event || {});
         }
