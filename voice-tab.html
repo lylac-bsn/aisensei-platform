@@ -823,6 +823,41 @@
             70% { transform: translate(1px, -1px) scale(1.05); }
         }
 
+        .ending-end-btn {
+            display: none;
+            width: 100%;
+            height: 46px;
+            border: none;
+            border-radius: var(--radius-full);
+            background: linear-gradient(135deg, #43A047 0%, #2E7D32 100%);
+            color: #fff;
+            font-family: inherit;
+            font-size: var(--text-md);
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            flex-shrink: 0;
+            box-shadow: 0 4px 14px rgba(46, 125, 50, 0.28);
+            transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+        }
+        .ending-end-btn:not([hidden]) {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ending-end-btn:hover:not(:disabled) {
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+        }
+        .ending-end-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .ending-end-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
         /* ===== Quest mission card ===== */
         .quest-card-wrap {
             padding: 14px 16px;
@@ -1617,12 +1652,15 @@
             </div>
         </div>
 
-        <!-- Input Area: MCQ is primary; mic muted by default -->
+        <!-- Input Area: MCQ is primary; mic on by default -->
         <div class="input-area" id="input-area">
             <div class="lesson-choice-bar" id="lesson-choice-bar" hidden></div>
+            <button class="ending-end-btn" id="btn-ending-end" type="button" hidden title="フリートークを終わっておわかれへ" aria-label="終わりにする">
+                終わりにする
+            </button>
             <div class="input-area-row">
-                <button class="mute-btn muted" id="btn-mute" type="button" title="マイクオフ（4択ボタンで答えよう）" aria-label="マイクオフ">
-                    <svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><path d="M12 19v4"/><path d="M8 23h8"/></svg>
+                <button class="mute-btn" id="btn-mute" type="button" title="マイクオン（タップでミュート）" aria-label="マイクオン">
+                    <svg class="btn-icon mute-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
                 <button class="poke-btn" id="btn-retry" type="button" title="ラーニー先生が止まったとき、つついてね" aria-label="つつく" hidden>
                     <svg class="poke-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

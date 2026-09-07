@@ -584,24 +584,62 @@ function scaffoldingLine(levelId) {
       "Hints: 2-choice is OK after they are stuck.",
     ].join(" ");
   }
+  if (levelId === "intermediate") {
+    return [
+      japaneseOutputRule(levelId),
+      "INTERMEDIATE INPUT (CRITICAL): There are NO on-screen choice / 4-button options. The child answers ONLY by speaking English. " +
+        "Never tell them to tap, choose a button, or pick from a list. Wait for their spoken answer. " +
+        "When eliciting a phrase, say を えいごで いってみて！ (NOT の えいごを 選んでね！).",
+      "Intermediate: elicit English first. If stuck, give a spoken hint or model — still no buttons. A short ひらがな gloss after English is OK, not required on every line.",
+    ].join(" ");
+  }
   return [
     japaneseOutputRule(levelId),
     "Intermediate/advanced: elicit English first. If stuck, then 2-choice. A short ひらがな gloss after English is OK, not required on every line.",
   ].join(" ");
 }
 
-function japaneseElicitBracketRule() {
+function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID) {
+  const elicitCue =
+    levelId === "intermediate"
+      ? "を えいごで いってみて！"
+      : "の えいごを 選んでね！";
+  const exampleCue =
+    levelId === "intermediate"
+      ? "「がらすが ひつよう」を えいごで いってみて！"
+      : "「がらすが ひつよう」の えいごを 選んでね！";
   return [
-    "JAPANESE PHRASE ELICITS (「…」の えいごを 選んでね！):",
-    "Always wrap the Japanese phrase in 「」 then say の えいごを 選んでね！ — e.g. 「がらすが ひつよう」の えいごを 選んでね！",
-    "FORBIDDEN old form: 〜って えいごで いってみて！ / って英語で言ってみて — always use の えいごを 選んでね！ instead.",
+    `JAPANESE PHRASE ELICITS (「…」${elicitCue}):`,
+    `Always wrap the Japanese phrase in 「」 then say ${elicitCue} — e.g. ${exampleCue}`,
+    "FORBIDDEN old form: 〜って えいごで いってみて！ / って英語で言ってみて — use the form above instead.",
+    levelId === "intermediate"
+      ? "INTERMEDIATE: Never say 選んでね / tap / button / 4-choice. Child speaks the English."
+      : "",
     `Ch1 glass: ${PART1_ELICIT_JA.needGlass} Ch1 sand: ${PART1_ELICIT_JA.needSand}`,
     `Ch2 found sand: ${PART1_ELICIT_JA.foundSand}`,
     `Ch3: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
     `Ch5: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
     `Ch6: ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
     "FORBIDDEN: ガラスが必要って… / がらすがひつようって… without 「」 around the phrase.",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Rewrite button-centric coach text for intermediate voice-only sessions. */
+function adaptCoachTextForLevel(text, levelId = ACTIVE_LEVEL_ID) {
+  if (levelId !== "intermediate" || !text) return text || "";
+  return String(text)
+    .replace(/の\s*えいごを\s*選んでね！/g, "を えいごで いってみて！")
+    .replace(/4-choice MCQ buttons?/gi, "spoken English answers (no buttons)")
+    .replace(/4-button MCQ/gi, "spoken English answers")
+    .replace(/4-button tap/gi, "spoken English answer")
+    .replace(/4-button choice/gi, "spoken English answer")
+    .replace(/on-screen 4-choice buttons/gi, "voice answers only")
+    .replace(/use on-screen 4-choice buttons\.?/gi, "child answers by speaking English only.")
+    .replace(/WAIT for the button\/tap\.?/gi, "WAIT for the child to speak the English.")
+    .replace(/child taps a 4-button choice/gi, "child speaks the English answer")
+    .replace(/Then WAIT for a 4-button tap\.?/gi, "Then WAIT for the child to speak the English.");
 }
 
 function praiseVariationRule() {
@@ -837,12 +875,12 @@ function final1Rule() {
 
 function ending1Rule() {
   return [
-    "ENDING ONLY — exactly 3 spoken turns (client-forced). No free chat. Do NOT invent extra lines.",
-    "Turn A (ONE message, old lines 1+2+3 combined): Perfect! We made a fish tank together! Thank you for helping! Hold on... we don't have any fish in the fish tank! That's for next time! What kind of fish should we catch? + matching ひらがな → STOP and WAIT.",
-    "Turn B (after child names a fish): short reaction naming THAT fish (never invent a number like Five!), then How many do we want? なんびき ほしい？ → WAIT. Speak this turn ONCE only.",
-    "Turn C (ONE message, old lines 5+6 combined): Hmm... I can't stop thinking about it! + Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! + matching ひらがな → call complete_segment(ending1).",
-    "FORBIDDEN: You're welcome / どういたしまして / What did you enjoy / free conversation / inventing questions / repeating the same ending message twice / splitting Turn A or Turn C into multiple messages.",
-    "Every turn: English first, then ひらがな with the SAME full meaning.",
+    "ENDING — three phases. Do NOT invent How many / なんびき.",
+    "Phase 1 Turn A: Stay SILENT until the client sends the exact Turn A script. Then speak that script ONCE (full English + ひらがな) and WAIT. Never start Turn A on your own. Never repeat it.",
+    "Phase 2 FREE TALK (after Turn A): NO restrictions. React warmly to the child and expand the topic. Do NOT say goodbye / Next Minecraft / See you / complete_segment until 終わりにする.",
+    "Phase 3 Turn C (ONLY when the client says free talk is over / 終わりにする): ONE goodbye message — Hmm... I can't stop thinking about it! + Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! + matching ひらがな → call complete_segment(ending1).",
+    "FORBIDDEN during free talk: How many / なんびき / premature goodbye. FORBIDDEN ever: inventing how many / splitting Turn A or Turn C / saying Perfect twice.",
+    "Every turn: English first, then ひらがな with the SAME full meaning (free talk may be looser).",
   ].join(" ");
 }
 
@@ -859,11 +897,7 @@ function final1StartNudge() {
 
 function ending1StartNudge() {
   return (
-    "[Teacher note — do not read aloud] ENDING starts NOW. Speak EXACTLY ONE intro message (old lines 1+2+3 combined), then WAIT: " +
-    "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
-    "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
-    "What kind of fish should we catch? どんな おさかなを つかまえよう？ " +
-    "FORBIDDEN: You're welcome / free chat / What did you enjoy / splitting into multiple messages / repeating this intro."
+    "[Teacher note — do not read aloud] Stay SILENT. Client will send Ending Turn A. Do not speak Perfect / Hold on / what kind of fish until then."
   );
 }
 
@@ -973,11 +1007,11 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     .join("; ");
   const onQuiz = segment?.type === "quiz";
 
-  return [
+  const raw = [
     "You are ラーニー先生 (Learny), a warm Japanese-English homework tutor for children — like a real human teacher on a video call, not a chatbot script.",
     "This is HOMEWORK between real Minecraft classes — not live co-play. Do not ask them to share a screen or play Minecraft now.",
     conversationQualityRule(),
-    state.lessonId === "part1" ? japaneseElicitBracketRule() : "",
+    state.lessonId === "part1" ? japaneseElicitBracketRule(levelId) : "",
     noSystemBackendRule(),
     lesson.weekNote,
     lesson.stopRule,
@@ -995,7 +1029,10 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     segment.id === "ch6" && state.lessonId === "part1" ? ch6StoryRule() : "",
     segment.id === "final1" && state.lessonId === "part1" ? final1Rule() : "",
     segment.id === "ending1" && state.lessonId === "part1" ? ending1Rule() : "",
-    "If they forget: hint → word choices → 2–3 options → say the English together. Never treat forgetting as failure.",
+    "If they forget: " +
+      (levelId === "intermediate"
+        ? "give a spoken hint or model the English, then wait for them to speak. Never treat forgetting as failure."
+        : "hint → word choices → 2–3 options → say the English together. Never treat forgetting as failure."),
     "If they go off-topic: answer 1–3 turns, then return. Conversation over forcing a phrase.",
     "After success, echo the correct English once. Do not stall on pronunciation or grammar.",
     "Never invent facts about THEIR tank. Only use Known memories or what they just said.",
@@ -1008,13 +1045,19 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     segment.coach || "",
     "Tools: record_memory when the child states a fact (color, place, count). complete_segment when this segment's goal is met (warmup/recall/daily/ending can complete without English). Do not mention badges or awards.",
     onQuiz
-      ? "REMINDER (quiz): Speak Japanese ひらがな for questions. Child answers in English. Do not use beginner English-then-Japanese on quiz turns."
+      ? levelId === "intermediate"
+        ? "REMINDER (quiz): Speak Japanese ひらがな for questions. Child answers in spoken English only — no buttons. Do not use beginner English-then-Japanese on quiz turns."
+        : "REMINDER (quiz): Speak Japanese ひらがな for questions. Child answers in English. Do not use beginner English-then-Japanese on quiz turns."
       : levelId === "beginner"
         ? "REMINDER: Every spoken turn = FULL English sentence then FULL matching ひらがな. Never English-only. Never Japanese-only after a short English tag. Never say How are you twice."
-        : "Sound like a human teacher, not a system.",
+        : levelId === "intermediate"
+          ? "REMINDER: Intermediate is voice-only — never mention buttons/taps/4-choice. Wait for spoken English."
+          : "Sound like a human teacher, not a system.",
   ]
     .filter(Boolean)
     .join("\n");
+
+  return adaptCoachTextForLevel(raw, levelId);
 }
 
 export function buildOpeningNudge(state = loadLessonState()) {
@@ -1141,10 +1184,7 @@ export function buildHandoffOpeningNudge(
     daily1: daily1OpenSpeak(),
     ch6: CH6_BEAT1_SPEAK,
     final1: final1OpenSpeak(),
-    ending1:
-      "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！いっしょに すいそうを つくれたね！てつだって くれて ありがとう！ " +
-      "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
-      "What kind of fish should we catch? どんな おさかなを つかまえよう？",
+    ending1: "",
   };
 
   const line = speakExact[segment.id];
@@ -1164,11 +1204,7 @@ export function buildHandoffOpeningNudge(
   }
   if (state.lessonId === "part1" && segment.id === "ending1") {
     return (
-      `[Coach]${retryBit} ending1 ONLY. Speak EXACTLY ONE intro (old 1+2+3 combined) then WAIT: ` +
-      "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
-      "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
-      "What kind of fish should we catch? どんな おさかなを つかまえよう？ " +
-      "FORBIDDEN: You're welcome / What did you enjoy / free chat / splitting intro / repeating / previous chapter."
+      `[Coach]${retryBit} ending1 ONLY. Stay SILENT — client owns Turn A audio. Do not say Perfect / Hold on / what kind of fish.`
     );
   }
   if (state.lessonId === "part1" && line) {

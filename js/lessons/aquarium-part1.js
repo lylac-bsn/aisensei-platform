@@ -532,6 +532,8 @@ export const AQUARIUM_PART1 = {
           id: "im-done",
           promptJa: "できた！は英語で？",
           promptHira: "できた！は えいごで？",
+          // Distinguish from tank-ready (…じゅんびが できた！).
+          promptMatch: /「できた！」|(?<!じゅんびが\s*)できた！\s*は\s*(?:英語|えいご)で/,
           answer: "I'm done!",
           patterns: ["im done", "i am done", "i'm done"],
           choices: ["I'm done!", "I'm building a tank.", "It looks good!", "I need water."],
@@ -564,14 +566,13 @@ export const AQUARIUM_PART1 = {
       type: "ending",
       title: "水槽の準備できた！",
       titleEn: "Tank ready — no fish yet",
-      goal: "3ターン：褒め+魚ゼロ+どんな魚？→何匹？→ワクワク+次回予告。",
+      goal: "ターンA → フリートーク →「終わりにする」でターンCおわかれ。",
       completeWithoutEnglish: true,
       coach:
-        "AUTO: client forces 3 spoken turns only. " +
-        "Turn A (old 1+2+3 in ONE message): Perfect! … Thank you! + Hold on... no fish… + What kind of fish should we catch? → WAIT. " +
-        "Turn B: react to THAT fish (never invent a number like Five!), then How many do we want? → WAIT. Speak ONCE. " +
-        "Turn C (old 5+6 in ONE message): Hmm... I can't stop thinking about it! + Next Minecraft lesson… See you next time! → complete_segment(ending1) → disconnect. " +
-        "FORBIDDEN: You're welcome / What did you enjoy / free chat / inventing how many / repeating the same turn / splitting A or C. English then ひらがな.",
+        "AUTO: client owns all spoken ending beats. Stay SILENT until the client sends Turn A / free-talk / Turn C notes. " +
+        "After Turn A: FREE TALK with no restrictions — react warmly and expand topics until 終わりにする. " +
+        "After 終わりにする: speak Turn C goodbye once → complete_segment(ending1) → disconnect. " +
+        "FORBIDDEN: starting Turn A yourself / saying Perfect twice / How many / なんびき / premature goodbye.",
     },
   ],
 };

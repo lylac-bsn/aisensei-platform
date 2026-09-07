@@ -94,6 +94,40 @@ const LEVEL_INFO = getActiveLevelInfo();
 const LESSON = getActiveLesson();
 let activeProxyUrl = resolveProxyUrl();
 
+/** Intermediate: same lesson flow, voice answers only (no on-screen choice buttons). */
+function isIntermediateVoiceOnly() {
+  return getActiveLevelId() === "intermediate";
+}
+
+/** Spoken elicit cue for intermediate (no 「選んで」/button language). */
+function elicitJaForActiveLevel(text) {
+  const s = String(text || "");
+  if (!isIntermediateVoiceOnly()) return s;
+  return s.replace(/の\s*えいごを\s*選んでね！/g, "を えいごで いってみて！");
+}
+
+function intermediateAnswerWaitHint() {
+  return "WAIT for the child to SPEAK the English answer (no on-screen buttons). Do NOT tell them to tap or choose a button.";
+}
+
+/** Rewrite button-centric teacher/coach notes for intermediate voice-only. */
+function adaptTeacherNoteForLevel(text) {
+  if (!isIntermediateVoiceOnly() || !text) return text || "";
+  return elicitJaForActiveLevel(String(text))
+    .replace(/4-choice MCQ buttons?/gi, "spoken English answers (no buttons)")
+    .replace(/4-button MCQ/gi, "spoken English answers")
+    .replace(/4-button tap/gi, "spoken English answer")
+    .replace(/4-button choice/gi, "spoken English answer")
+    .replace(/\(4-button\)/gi, "(spoken answer)")
+    .replace(/WAIT for a 4-button tap\.?/gi, "WAIT for the child to speak the English.")
+    .replace(/WAIT for the 4-button tap\.?/gi, "WAIT for the child to speak the English.")
+    .replace(/WAIT for the button\/tap\.?/gi, "WAIT for the child to speak the English.")
+    .replace(/Then WAIT for a 4-button tap\.?/gi, "Then WAIT for the child to speak the English.")
+    .replace(/show 4-button MCQ/gi, "wait for spoken English")
+    .replace(/on-screen 4-choice buttons/gi, "voice answers only")
+    .replace(/child taps a 4-button choice/gi, "child speaks the English answer");
+}
+
 const voice = "Kore";
 const temperature = 0.9;
 const volumeLevel = 80;
@@ -109,6 +143,7 @@ const HANDOFF_DELAY_MS = 0;
 const btnAction = document.getElementById("btn-action");
 const btnMute = document.getElementById("btn-mute");
 const btnRetry = document.getElementById("btn-retry");
+const btnEndingEnd = document.getElementById("btn-ending-end");
 const btnSend = document.getElementById("btn-send");
 const chatInput = document.getElementById("chat-input");
 const chatArea = document.getElementById("chat-area");
@@ -150,7 +185,7 @@ let audioPlayer = null;
 let connected = false;
 let audioStreaming = false;
 let actionState = "idle";
-let isMuted = true;
+let isMuted = false;
 let intentionalDisconnect = false;
 let isAutoReconnecting = false;
 /** Fresh Live reconnect at a Part 1 chapter hinge (not drop-resume). */
@@ -831,10 +866,9 @@ let final1Quiz = {
 let final1OpenForceAt = 0;
 let bannerSegmentId = "";
 
-/** Ending = 3 spoken turns (1–3 combined, how-many, 5–6 combined). */
+/** Ending = 2 spoken turns (intro combined, then finale after fish answer). */
 const ENDING1_INTRO_COUNT = 1;
-const ENDING1_HOW_MANY_INDEX = 1;
-const ENDING1_FINALE_START_INDEX = 2;
+const ENDING1_FINALE_START_INDEX = 1;
 const ENDING1_FINALE_COUNT = 1;
 
 const ENDING1_INTRO_SPEAK =
@@ -847,7 +881,9 @@ const ENDING1_INTRO_REMAINDER_SPEAK =
   "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！ " +
   "What kind of fish should we catch? どんな おさかなを つかまえよう？";
 
-const ENDING1_HOW_MANY_SPEAK = "How many do we want? なんびき ほしい？";
+/** Hold-on patch when Gemini jumped to the fish question and skipped the middle. */
+const ENDING1_HOLD_ON_SPEAK =
+  "Hold on... we don't have any fish in the fish tank! That's for next time! あれれ… おさかなが 1ぴきも いない！ それは つぎの レッスンだね！";
 
 const ENDING1_FINALE_SPEAK =
   "Hmm... I can't stop thinking about it! うーん… わくわく しちゃう！ " +
@@ -858,28 +894,41 @@ const ENDING1_BEATS = [
   {
     en: ENDING1_INTRO_SPEAK,
     jp: "",
-    coach: "ENDING intro (old lines 1–3 in ONE message): " + ENDING1_INTRO_SPEAK,
-  },
-  {
-    en: "How many do we want?",
-    jp: "なんびき ほしい？",
-    coach: "ENDING how-many ONLY: " + ENDING1_HOW_MANY_SPEAK + " Then WAIT.",
+    coach: "ENDING Turn A: client-owned exact script — stay silent until forced.",
   },
   {
     en: ENDING1_FINALE_SPEAK,
     jp: "",
-    coach: "ENDING finale (old lines 5–6 in ONE message): " + ENDING1_FINALE_SPEAK,
+    coach: "ENDING finale: client-owned goodbye after 終わりにする.",
     final: true,
   },
 ];
+
+/** Pending delayed kick after final1 → ending1 (cancel on reset / second schedule). */
+let ending1OpeningTimerId = null;
 
 let ending1Beat = {
   userTurns: 0,
   autoSpoken: 0,
   autoCoachSent: 0,
+  introNoteSent: false,
+  introRepairSent: false,
+  introDisplayLocked: false,
+  introSeededAt: 0,
+  introAudioSent: false,
+  introKickInFlight: false,
+  introHeardPerfect: false,
+  introHeardHoldOn: false,
+  introHeardFishQ: false,
+  introHeardFishQAt: 0,
   finaleSpoken: 0,
   finaleCoachSent: 0,
-  howManyForced: false,
+  finaleForceScheduled: false,
+  finaleScheduledAt: 0,
+  finaleNoteSent: false,
+  freeTalk: false,
+  freeTalkAnnounced: false,
+  finaleRequested: false,
   hangUpScheduled: false,
   advancedForUserKey: "",
   lastForceAt: 0,
@@ -887,13 +936,32 @@ let ending1Beat = {
 };
 
 function resetEnding1Beat() {
+  if (ending1OpeningTimerId) {
+    clearTimeout(ending1OpeningTimerId);
+    ending1OpeningTimerId = null;
+  }
   ending1Beat = {
     userTurns: 0,
     autoSpoken: 0,
     autoCoachSent: 0,
+    introNoteSent: false,
+    introRepairSent: false,
+    introDisplayLocked: false,
+    introSeededAt: 0,
+    introAudioSent: false,
+    introKickInFlight: false,
+    introHeardPerfect: false,
+    introHeardHoldOn: false,
+    introHeardFishQ: false,
+    introHeardFishQAt: 0,
     finaleSpoken: 0,
     finaleCoachSent: 0,
-    howManyForced: false,
+    finaleForceScheduled: false,
+    finaleScheduledAt: 0,
+    finaleNoteSent: false,
+    freeTalk: false,
+    freeTalkAnnounced: false,
+    finaleRequested: false,
     hangUpScheduled: false,
     advancedForUserKey: "",
     lastForceAt: 0,
@@ -915,10 +983,25 @@ function ending1BeatSpeak(beat) {
   return (String(beat.en || "").trim() + " " + String(beat.jp || "").trim()).trim();
 }
 
-/** Full Turn A reached the fish question. */
+/** Full Turn A reached the fish question AND the Hold-on beat (exact script). */
+function assistantSaidEnding1HoldOn(text = lastAssistantText()) {
+  return /hold on|don'?t have any fish|no fish in the (?:fish )?tank/i.test(String(text || ""));
+}
+
+function assistantSaidEnding1FishQuestion(text = lastAssistantText()) {
+  return /what kind of fish|どんな\s*おさかな/i.test(String(text || ""));
+}
+
+function ending1RecentAssistantBlob(limit = 8) {
+  return recentAssistantMessages(limit).join("\n");
+}
+
 function assistantSaidEnding1Intro(text = lastAssistantText()) {
-  const t = String(text || "");
-  return /what kind of fish|どんな\s*おさかな/.test(t);
+  // While the exact Turn A bubble is locked, do not treat STT/partials as "intro complete"
+  // (that opened free talk and 終わりにする too early).
+  if (ending1Beat.introDisplayLocked) return false;
+  const t = `${ending1RecentAssistantBlob(8)}\n${String(text || "")}`;
+  return assistantSaidEnding1FishQuestion(t);
 }
 
 /** Perfect lead only (partial Turn A — do not re-force Perfect). */
@@ -965,11 +1048,14 @@ function ending1InventedFishCount(text = lastAssistantText(), userText = lastPen
 }
 
 function ending1ForceAllowed(kind, { bypassCooldown = false } = {}) {
+  const introFamily = /^(intro|intro-remainder|hold-on-patch)$/.test(String(kind || ""));
+  const sameFamily =
+    introFamily && /^(intro|intro-remainder|hold-on-patch)$/.test(String(ending1Beat.lastForceKind || ""));
   if (
     !bypassCooldown &&
-    ending1Beat.lastForceKind === kind &&
     ending1Beat.lastForceAt &&
-    Date.now() - ending1Beat.lastForceAt < 5500
+    Date.now() - ending1Beat.lastForceAt < 5500 &&
+    (ending1Beat.lastForceKind === kind || sameFamily)
   ) {
     return false;
   }
@@ -982,6 +1068,7 @@ function syncEnding1AutoProgress() {
   if (assistantSaidEnding1Intro() || recentAssistantMessages(8).some((t) => assistantSaidEnding1Intro(t))) {
     ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, 1);
     ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+    enterEnding1FreeTalkIfReady();
   }
 }
 
@@ -992,15 +1079,110 @@ function syncEnding1FinaleProgress() {
   }
 }
 
+function isEnding1FreeTalkActive() {
+  return (
+    getCurrentSegment()?.id === "ending1" &&
+    ending1AutoIntroComplete() &&
+    !ending1Beat.finaleRequested &&
+    !ending1FinaleComplete()
+  );
+}
+
+function paintEndingEndButton() {
+  if (!btnEndingEnd) return;
+  const show = isEnding1FreeTalkActive() && actionState === "active";
+  btnEndingEnd.hidden = !show;
+  btnEndingEnd.disabled =
+    !show || isHandoffRunning || isChapterHandoff || chapterTransitionActive || isAutoReconnecting;
+}
+
+/** After Turn A fish question — unrestricted free talk until 終わりにする. */
+function enterEnding1FreeTalkIfReady() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  // Exact Turn A audio still playing — do not open free talk / 終わりにする yet.
+  if (ending1Beat.introDisplayLocked) return false;
+  if (!ending1AutoIntroComplete() || ending1Beat.finaleRequested || ending1FinaleComplete()) {
+    return false;
+  }
+  const firstEnter = !ending1Beat.freeTalk;
+  ending1Beat.freeTalk = true;
+  paintEndingEndButton();
+  if (firstEnter && !ending1Beat.freeTalkAnnounced) {
+    ending1Beat.freeTalkAnnounced = true;
+    whenAssistantIdle(() => {
+      if (!isEnding1FreeTalkActive()) return;
+      // Coach-only (may be disabled by whitelist) — free talk has no script restrictions.
+      sendTeacherNote(
+        "ending1-freetalk",
+        "[Teacher note — do not read aloud] FREE TALK now — NO script, NO restrictions. " +
+          "React warmly to whatever the child says and expand the topic. English then ひらがな is fine. " +
+          "FORBIDDEN until 終わりにする: goodbye finale / Next Minecraft / See you next time / complete_segment / How many."
+      );
+    }, "ending1-freetalk");
+  }
+  return true;
+}
+
+/** 終わりにする — end free talk and speak Turn C. */
+function endEnding1FreeTalkFromButton() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (actionState !== "active" || !client?.connected) return false;
+  if (ending1FinaleComplete()) return false;
+  syncEnding1AutoProgress();
+  if (!ending1AutoIntroComplete()) {
+    forceEnding1Intro("end-before-intro");
+    return false;
+  }
+  // Already requested but Turn C never landed — allow button / retry to recover.
+  if (ending1Beat.finaleRequested) {
+    if (!ending1Beat.finaleNoteSent) {
+      ending1Beat.finaleForceScheduled = false;
+      ending1Beat.finaleNoteSent = false;
+      ending1Beat.lastForceAt = 0;
+      ending1Beat.lastForceKind = "";
+      dbg("ending1 finale re-kick from end button");
+      return kickEnding1FinaleChain("end-button-retry", { bypassCooldown: true });
+    }
+    return kickEnding1FinaleChain("end-button-retry", { bypassCooldown: true });
+  }
+  ending1Beat.finaleRequested = true;
+  ending1Beat.freeTalk = false;
+  // Cancel free-talk reply-watch / idle waits that were racing the goodbye kick.
+  clearPendingReplyWatch();
+  clearAwaitingAssistantReply();
+  bumpIdleGeneration();
+  paintEndingEndButton();
+  updateLessonBanner();
+  updateActionUI();
+  addMessage("フリートークおわり！おわかれの じかんだよ", "system");
+  dbg("ending1 free-talk ended by button");
+  return kickEnding1FinaleChain("end-button", { bypassCooldown: true });
+}
+
 function ending1LooksOffScript(text = lastAssistantText()) {
   const t = String(text || "");
   if (!t.trim()) return false;
+  // During free talk, only treat premature finale / how-many / repeated fish Q as off-script.
+  if (isEnding1FreeTalkActive()) {
+    if (
+      assistantSaidEnding1Beat4(t) ||
+      assistantSaidEnding1Finale(t) ||
+      /see you next time|また\s*ね|next minecraft lesson/i.test(t)
+    ) {
+      return true;
+    }
+    // Re-asking the opening fish question after the child already answered.
+    if (
+      ending1Beat.userTurns >= 1 &&
+      /どんな\s*お?さかな|どんな\s*お魚|what kind of fish/i.test(t)
+    ) {
+      return true;
+    }
+    return false;
+  }
   if (ending1InventedFishCount(t)) return true;
-  if (
-    assistantSaidEnding1Intro(t) ||
-    assistantSaidEnding1Beat4(t) ||
-    assistantSaidEnding1Finale(t)
-  ) {
+  if (assistantSaidEnding1Beat4(t)) return true;
+  if (assistantSaidEnding1Intro(t) || assistantSaidEnding1Finale(t)) {
     return false;
   }
   return /you'?re welcome|どういたしまして|what did you enjoy|いちばん\s*たのしかった|enjoy the most|blue sand|あおい\s*すな|making blue glass/i.test(
@@ -1010,128 +1192,164 @@ function ending1LooksOffScript(text = lastAssistantText()) {
 
 function forceEnding1Intro(reason = "kick-intro") {
   if (getCurrentSegment()?.id !== "ending1") return false;
-  if (!client?.connected || actionState !== "active") return false;
+  if (!client?.connected || (actionState !== "active" && actionState !== "connecting")) {
+    return false;
+  }
+  // Hard one-shot audio gate — never send Perfect twice.
+  if (
+    ending1Beat.introKickInFlight ||
+    ending1Beat.introAudioSent ||
+    ending1Beat.introNoteSent ||
+    ending1Beat.autoCoachSent > 0 ||
+    ending1Beat.introDisplayLocked
+  ) {
+    dbg("force ending1 intro blocked; audio already sent", reason);
+    return false;
+  }
   syncEnding1AutoProgress();
-  if (ending1AutoIntroComplete()) return false;
-  // Perfect already played but fish question missing — continue, never re-say Perfect.
-  if (ending1HasPerfectLeadInChat()) {
-    return forceEnding1IntroRemainder(reason);
+  if (ending1AutoIntroComplete() && !ending1Beat.introDisplayLocked) return false;
+  // Already hearing/speaking Turn A — never re-kick.
+  if (ending1Beat.introHeardPerfect || ending1HasPerfectLeadInChat()) {
+    markEnding1IntroKickSent();
+    dbg("force ending1 intro skipped; Perfect already heard", reason);
+    return false;
   }
   if (!ending1ForceAllowed("intro")) return false;
+  // Lock BEFORE send so a parallel kickOpening / delayed timer cannot race a second Perfect.
+  // sendClientText allows this one send while introKickInFlight is true.
+  ending1Beat.introKickInFlight = true;
+  ending1Beat.introAudioSent = true;
+  ending1Beat.introNoteSent = true;
   ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". ENDING intro — Speak EXACTLY this ONE message (old lines 1+2+3 combined), then WAIT: " +
-    ENDING1_INTRO_SPEAK +
-    " FORBIDDEN: splitting into multiple messages / repeating Perfect alone / You're welcome / free chat.";
+    ". Speak the following words EXACTLY once, then STOP and WAIT. Do not say them twice. " +
+    "FORBIDDEN: saying Perfect / Hold on / what kind of fish a second time.\n" +
+    ENDING1_INTRO_SPEAK;
   try {
     closeOpenAudioTurn();
-    audioPlayer?.interrupt?.();
   } catch {
     // ignore
   }
   dbg("force ending1 intro", reason);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
-}
-
-/** Continue Turn A after Perfect without repeating Perfect. */
-function forceEnding1IntroRemainder(reason = "intro-remainder") {
-  if (getCurrentSegment()?.id !== "ending1") return false;
-  if (!client?.connected || actionState !== "active") return false;
-  syncEnding1AutoProgress();
-  if (ending1AutoIntroComplete()) return false;
-  if (!ending1ForceAllowed("intro-remainder")) return false;
-  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
-  const note =
-    "[Teacher note — do not read aloud] " +
-    reason +
-    ". ENDING intro CONTINUATION — Perfect was already said. Speak EXACTLY this ONLY (do NOT say Perfect / Thank you again): " +
-    ENDING1_INTRO_REMAINDER_SPEAK +
-    " Then WAIT for the child's fish answer. FORBIDDEN: repeating Perfect! / We made a fish tank together.";
-  try {
-    closeOpenAudioTurn();
-    audioPlayer?.interrupt?.();
-  } catch {
-    // ignore
+  const ok = sendClientText(withEndingExactSpeakRule(formatTeacherNote(note)), { force: true });
+  ending1Beat.introKickInFlight = false;
+  if (ok) {
+    seedEnding1IntroBubble();
+  } else {
+    ending1Beat.introAudioSent = false;
+    ending1Beat.introNoteSent = false;
+    ending1Beat.autoCoachSent = 0;
+    ending1Beat.introDisplayLocked = false;
   }
-  dbg("force ending1 intro remainder", reason);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+  return ok;
 }
 
-function forceEnding1Beat4(userText = "", reason = "after-fish") {
-  if (getCurrentSegment()?.id !== "ending1") return false;
-  if (!client?.connected || actionState !== "active") return false;
-  if (assistantSaidEnding1Beat4() && !ending1InventedFishCount()) return false;
-  if (ending1Beat.howManyForced) return false;
-  if (!ending1ForceAllowed("howMany")) return false;
-  ending1Beat.howManyForced = true;
-  const fish = String(userText || lastPendingUserText || "").trim().slice(0, 40);
-  const reactBit = fish
-    ? 'Short reaction naming "' + fish + '" (e.g. A rainbow fish! / にじいろのおさかなだね！). NOT a number.'
-    : "Short warm ack — NOT a number.";
-  const note =
-    "[Teacher note — do not read aloud] " +
-    reason +
-    ". Child answered WHAT KIND of fish" +
-    (fish ? ' ("' + fish + '")' : "") +
-    ". Cancel any other pending reply. Speak ONCE only — " +
-    reactBit +
-    " Then Speak EXACTLY: " +
-    ENDING1_HOW_MANY_SPEAK +
-    " Then WAIT. FORBIDDEN: Five! / inventing how many / repeating this same message / finale yet.";
-  try {
-    closeOpenAudioTurn();
-    audioPlayer?.interrupt?.();
-  } catch {
-    // ignore
-  }
-  dbg("force ending1 how-many", reason, fish.slice(0, 24));
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+/** Disabled — remainder forces cut Turn A and made Learny speak twice. */
+function forceEnding1IntroRemainder(_reason = "intro-remainder") {
+  return false;
 }
 
-function forceEnding1Finale(reason = "after-how-many", { bypassCooldown = false } = {}) {
+/** Disabled — hold-on patches stacked on the live Turn A audio. */
+function forceEnding1HoldOnPatch(_reason = "hold-on-patch") {
+  return false;
+}
+
+function forceEnding1Beat4(_userText = "", _reason = "after-fish") {
+  // How-many turn removed; free talk follows intro until 終わりにする.
+  return false;
+}
+
+function forceEnding1Finale(reason = "end-button", { bypassCooldown = false } = {}) {
   if (getCurrentSegment()?.id !== "ending1") return false;
   if (!client?.connected || actionState !== "active") return false;
+  // Finale only after free-talk end request.
+  ending1Beat.finaleRequested = true;
+  ending1Beat.freeTalk = false;
   syncEnding1FinaleProgress();
   if (ending1FinaleComplete()) {
     maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
     return false;
   }
+  // One goodbye coach only — once speech is confirmed, never re-send.
+  if (ending1Beat.finaleNoteSent && assistantSaidEnding1Finale()) return false;
+  // Stuck schedule: note never landed — allow poke / end-button / safety retry to clear.
+  if (ending1Beat.finaleForceScheduled && !ending1Beat.finaleNoteSent) {
+    const age = Date.now() - (ending1Beat.finaleScheduledAt || 0);
+    if (bypassCooldown || age > 2000) {
+      ending1Beat.finaleForceScheduled = false;
+      ending1Beat.lastForceAt = 0;
+      ending1Beat.lastForceKind = "";
+      dbg("ending1 finale schedule cleared for retry", { reason, age });
+    } else {
+      return false;
+    }
+  }
+  if (ending1Beat.finaleNoteSent && !assistantSaidEnding1Finale()) {
+    // Coach was sent but Learny never spoke Turn C — allow a forced retry.
+    if (!bypassCooldown && !/poke|retry|safety|flush/i.test(String(reason || ""))) {
+      return false;
+    }
+    ending1Beat.finaleNoteSent = false;
+    ending1Beat.finaleForceScheduled = false;
+    ending1Beat.lastForceAt = 0;
+    ending1Beat.lastForceKind = "";
+  }
   if (!ending1ForceAllowed("finale", { bypassCooldown })) return false;
-  const count = String(lastPendingUserText || "").trim().slice(0, 40);
+  ending1Beat.finaleForceScheduled = true;
+  ending1Beat.finaleScheduledAt = Date.now();
+  ending1Beat.finaleCoachSent = Math.max(ending1Beat.finaleCoachSent, 1);
+  paintEndingEndButton();
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". Child answered HOW MANY" +
-    (count ? ' ("' + count + '"). Brief warm ack of that number is OK.' : ".") +
-    " Then Speak EXACTLY this ONE message (old lines 5+6 combined) — do not split, do not wait for the child: " +
+    ". FREE TALK is over (child tapped 終わりにする). " +
+    "Speak EXACTLY this ONE goodbye message ONCE — do not repeat any part of it, do not split, do not wait: " +
     ENDING1_FINALE_SPEAK +
-    " Then call complete_segment(ending1). FORBIDDEN: repeating / free chat / asking another question.";
+    " Then call complete_segment(ending1). FORBIDDEN: saying the goodbye twice / continuing free talk / How many / なんびき / asking another question.";
   try {
     closeOpenAudioTurn();
     audioPlayer?.interrupt?.();
   } catch {
     // ignore
   }
-  // Immediate send after interrupt often drops on Live — defer until playback is idle.
   const send = () => {
-    if (actionState !== "active" || !client?.connected) return;
-    if (getCurrentSegment()?.id !== "ending1") return;
+    if (actionState !== "active" || !client?.connected) return false;
+    if (getCurrentSegment()?.id !== "ending1") return false;
     syncEnding1FinaleProgress();
     if (ending1FinaleComplete()) {
       maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
-      return;
+      return false;
     }
-    dbg("force ending1 finale", reason, count.slice(0, 24));
-    const ok = sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
-    if (ok) ending1Beat.finaleCoachSent = Math.max(ending1Beat.finaleCoachSent, 1);
+    if (ending1Beat.finaleNoteSent && assistantSaidEnding1Finale()) return false;
+    dbg("force ending1 finale", reason);
+    const ok = sendClientText(withEndingExactSpeakRule(formatTeacherNote(note)), { force: true });
+    if (ok) {
+      ending1Beat.finaleNoteSent = true;
+      ending1Beat.finaleCoachSent = Math.max(ending1Beat.finaleCoachSent, 1);
+      // Do not seed the goodbye bubble — that made assistantSaidEnding1Finale() true
+      // and hung up before Gemini spoke Turn C.
+      armEnding1FinaleSpeechWatch();
+    } else {
+      ending1Beat.finaleForceScheduled = false;
+    }
+    return ok;
   };
+  // Prefer idle send (avoids cutting leftover audio), but never hang forever.
   whenAssistantIdle(() => {
-    setTimeout(send, 150);
+    setTimeout(send, 100);
   }, "ending1-force-finale");
-  // Mark intent so reply-watch / chaining know a finale kick is in flight.
-  ending1Beat.finaleCoachSent = Math.max(ending1Beat.finaleCoachSent, 1);
+  setTimeout(() => {
+    if (actionState !== "active" || !client?.connected) return;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (!ending1Beat.finaleRequested) return;
+    if (ending1FinaleComplete() || assistantSaidEnding1Finale()) return;
+    if (ending1Beat.finaleNoteSent) return;
+    dbg("ending1 finale safety flush", reason);
+    ending1Beat.finaleForceScheduled = false;
+    send();
+  }, 1800);
   return true;
 }
 
@@ -1152,22 +1370,41 @@ function kickEnding1AutoIntro() {
   return true;
 }
 
+function markEnding1IntroKickSent() {
+  if (getCurrentSegment()?.id !== "ending1") return;
+  ending1Beat.introNoteSent = true;
+  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+  ending1Beat.introAudioSent = true;
+}
+
 function maybeChainEnding1AutoBeat() {
   if (getCurrentSegment()?.id !== "ending1") return;
   syncEnding1AutoProgress();
   updateLessonBanner();
-  if (ending1AutoIntroComplete()) return;
+  if (ending1AutoIntroComplete()) {
+    enterEnding1FreeTalkIfReady();
+    return;
+  }
+  // Turn A already kicked — never re-force from turn-end (STT lag caused a second Perfect!).
+  // Repairs only run from maybeEnding1OffScriptNudge after the transcript has settled.
+  if (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0) {
+    return;
+  }
   whenAssistantIdle(() => {
     if (getCurrentSegment()?.id !== "ending1") return;
     syncEnding1AutoProgress();
-    if (ending1AutoIntroComplete()) return;
+    if (ending1AutoIntroComplete()) {
+      enterEnding1FreeTalkIfReady();
+      return;
+    }
+    if (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0) return;
     forceEnding1Intro("auto-intro");
   }, "ending1-auto-intro");
 }
 
 function kickEnding1FinaleChain(reason = "kick-finale", { bypassCooldown = false } = {}) {
   if (getCurrentSegment()?.id !== "ending1") return false;
-  if (ending1Beat.userTurns < 2) return false;
+  if (!ending1Beat.finaleRequested) return false;
   syncEnding1FinaleProgress();
   if (ending1FinaleComplete()) {
     maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
@@ -1175,20 +1412,27 @@ function kickEnding1FinaleChain(reason = "kick-finale", { bypassCooldown = false
   }
   const ok = forceEnding1Finale(reason, { bypassCooldown });
   updateLessonBanner();
+  paintEndingEndButton();
   return ok;
 }
 
 function maybeChainEnding1FinaleBeat() {
   if (getCurrentSegment()?.id !== "ending1") return;
-  if (ending1Beat.userTurns < 2) return;
+  if (!ending1Beat.finaleRequested) return;
   syncEnding1FinaleProgress();
   updateLessonBanner();
   if (ending1FinaleComplete()) {
     maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
     return;
   }
+  // Coach already sent / scheduled — wait for speech; do not re-force (causes double goodbye).
+  if (ending1Beat.finaleNoteSent || ending1Beat.finaleForceScheduled) {
+    return;
+  }
   whenAssistantIdle(() => {
     if (getCurrentSegment()?.id !== "ending1") return;
+    if (!ending1Beat.finaleRequested) return;
+    if (ending1Beat.finaleNoteSent || ending1Beat.finaleForceScheduled) return;
     syncEnding1FinaleProgress();
     if (ending1FinaleComplete()) {
       maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
@@ -1207,7 +1451,29 @@ function maybeEnding1OffScriptNudge() {
   syncEnding1AutoProgress();
   syncEnding1FinaleProgress();
 
-  if (ending1Beat.userTurns >= 2 && !ending1FinaleComplete()) {
+  // Free talk: only repair if Learny jumps to goodbye / how-many early.
+  if (isEnding1FreeTalkActive()) {
+    const assistant = lastAssistantText();
+    if (!ending1LooksOffScript(assistant)) return;
+    whenAssistantIdle(() => {
+      if (!isEnding1FreeTalkActive()) return;
+      if (!ending1LooksOffScript(lastAssistantText())) return;
+      sendTeacherNote(
+        "ending1-freetalk-repair",
+        "[Teacher note — do not read aloud] Still FREE TALK. " +
+          "Do NOT say goodbye / Next Minecraft / How many. " +
+          "Do NOT ask どんなおさかな / what kind of fish again if they already answered — react to their last words and ask something NEW. " +
+          "Keep chatting naturally until the child taps 終わりにする."
+      );
+    }, "ending1-freetalk-repair");
+    return;
+  }
+
+  // Finale in flight: never re-send the goodbye coach (bypassCooldown was double-speaking).
+  if (ending1Beat.finaleRequested && !ending1FinaleComplete()) {
+    if (ending1Beat.finaleNoteSent || ending1Beat.finaleForceScheduled) {
+      return;
+    }
     whenAssistantIdle(
       () => forceEnding1Finale("stuck-finale", { bypassCooldown: true }),
       "ending1-stuck-finale"
@@ -1215,85 +1481,68 @@ function maybeEnding1OffScriptNudge() {
     return;
   }
 
-  const assistant = lastAssistantText();
-  if (ending1Beat.userTurns >= 1 && ending1InventedFishCount(assistant)) {
-    whenAssistantIdle(() => {
-      if (!ending1InventedFishCount(lastAssistantText())) return;
-      forceEnding1Beat4(lastPendingUserText || "", "repair-invented-count");
-    }, "ending1-invented-count");
-    return;
-  }
-
-  if (!ending1LooksOffScript(assistant)) return;
-  whenAssistantIdle(() => {
-    if (getCurrentSegment()?.id !== "ending1") return;
-    if (!ending1LooksOffScript(lastAssistantText())) return;
-    if (!ending1AutoIntroComplete()) {
-      forceEnding1Intro("off-script-intro");
-      return;
-    }
-    if (ending1Beat.userTurns === 1) {
-      forceEnding1Beat4(lastPendingUserText || "", "off-script-how-many");
-      return;
-    }
-    if (ending1Beat.userTurns >= 2) {
-      forceEnding1Finale("off-script-finale", { bypassCooldown: true });
-    }
-  }, "ending1-off-script");
+  // Turn A: never off-script-repair. One exact kick only — repairs caused cutoffs + doubles.
 }
 
 function getEnding1DisplayStep() {
   if (!ending1AutoIntroComplete()) return 1;
-  if (ending1Beat.userTurns >= 2 || ending1FinaleComplete()) return 3;
-  if (ending1Beat.userTurns >= 1) return 2;
-  return 1;
+  if (ending1Beat.finaleRequested || ending1FinaleComplete()) return 3;
+  return 2;
 }
 
 function getEnding1NextBeatIndex() {
   if (!ending1AutoIntroComplete()) return 0;
-  if (ending1Beat.userTurns >= 2) return ENDING1_FINALE_START_INDEX;
-  return ENDING1_HOW_MANY_INDEX;
+  return ENDING1_FINALE_START_INDEX;
 }
 
 function getEnding1BeatIndex() {
   if (!ending1AutoIntroComplete()) return 0;
-  if (ending1Beat.userTurns >= 2) return ENDING1_FINALE_START_INDEX;
-  if (ending1Beat.userTurns >= 1) return ENDING1_HOW_MANY_INDEX;
+  if (ending1Beat.finaleRequested || ending1FinaleComplete()) return ENDING1_FINALE_START_INDEX;
   return 0;
 }
 
 function buildEnding1OutboundCoach({ afterAdvance = false } = {}) {
   if (getCurrentSegment()?.id !== "ending1") return "";
   syncEnding1AutoProgress();
-  if (!ending1AutoIntroComplete()) {
+  // NEVER put ENDING1_INTRO_SPEAK in outbound — that caused a second Perfect audio with no bubble.
+  if (!ending1AutoIntroComplete() || ending1Beat.introDisplayLocked) {
+    return "[Teacher note — do not read aloud] Stay SILENT. Client owns Ending Turn A.";
+  }
+  if (ending1Beat.finaleRequested) {
     return (
-      "[Teacher note — do not read aloud] Speak EXACTLY ONE ending intro message then WAIT: " +
-      ENDING1_INTRO_SPEAK +
-      " FORBIDDEN: free chat / splitting / repeating."
+      "[Teacher note — do not read aloud] Stay SILENT — client owns the goodbye finale."
     );
   }
-  if (ending1Beat.userTurns <= 0) {
-    return (
-      "[Teacher note — do not read aloud] Child answered fish kind. Stay SILENT — client forces how-many next (once)."
-    );
-  }
-  if (ending1Beat.userTurns === 1) {
-    // Waiting for how-many answer, or about to speak finale after that answer.
-    if (!assistantSaidEnding1Beat4() && !ending1Beat.howManyForced) {
-      return (
-        "[Teacher note — do not read aloud] Stay SILENT — client will ask How many do we want? once."
-      );
-    }
-    return (
-      "[Teacher note — do not read aloud] Waiting for how-many answer, OR child just answered — stay SILENT; client speaks combined finale."
-    );
-  }
-  if (afterAdvance) {
-    return (
-      "[Teacher note — do not read aloud] Stay SILENT — client owns ending turns."
-    );
-  }
+  if (afterAdvance) return "";
   return "";
+}
+
+/** Free-talk nudge when Learny goes silent — keep chat moving without re-asking fish. */
+function buildEnding1FreeTalkOutboundCoach(userText = "") {
+  if (!isEnding1FreeTalkActive()) return "";
+  const t = String(userText || "").trim().slice(0, 40);
+  return (
+    "[Teacher note — do not read aloud] FREE TALK — reply out loud NOW. " +
+    (t ? `Child just said "${t}". React specifically to THAT and expand the topic. ` : "") +
+    "ONE short warm turn. No script restrictions. English then ひらがな is fine. " +
+    "FORBIDDEN: goodbye / Next Minecraft / See you next time / How many / complete_segment."
+  );
+}
+
+/**
+ * Recovery-only free-talk coach (no second "Child said:" package — that double-spoke).
+ * Safe when the child turn was already delivered but Gemini stayed silent.
+ */
+function nudgeEnding1FreeTalkReply(userText = "") {
+  if (!isEnding1FreeTalkActive()) return false;
+  if (assistantIsSpeaking()) return false;
+  if (hasAssistantReplySinceUser(userText)) return false;
+  const quote = String(userText || "").trim().slice(0, 40);
+  const note =
+    "[Teacher note — do not read aloud] FREE TALK — reply out loud NOW to the child's last message" +
+    (quote ? ` ("${quote}")` : "") +
+    ". ONE short warm turn only. Do NOT re-ask what kind of fish / How many / goodbye.";
+  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function flushEnding1NextBeatCoach(source = "voice") {
@@ -1303,18 +1552,12 @@ function flushEnding1NextBeatCoach(source = "voice") {
     forceEnding1Intro("flush-" + source);
     return;
   }
-  if (ending1Beat.userTurns >= 2) {
-    const retry = /reply-watch|poke|retry/.test(String(source || ""));
+  enterEnding1FreeTalkIfReady();
+  if (ending1Beat.finaleRequested) {
+    const retry = /reply-watch|poke|retry|end-button/.test(String(source || ""));
     kickEnding1FinaleChain("flush-" + source, {
       bypassCooldown: retry && !ending1FinaleComplete(),
     });
-    return;
-  }
-  if (ending1Beat.userTurns === 1) {
-    // Only force how-many if it hasn't been sent/spoken yet.
-    if (ending1Beat.howManyForced) return;
-    if (assistantSaidEnding1Beat4() && !ending1InventedFishCount()) return;
-    forceEnding1Beat4(lastPendingUserText || "", "flush-" + source);
   }
 }
 
@@ -1323,13 +1566,10 @@ function ending1CoachHint() {
   if (!ending1AutoIntroComplete()) {
     return " Ending intro: ONE combined message (thank you + no fish + what kind of fish?), then WAIT.";
   }
-  if (ending1Beat.userTurns >= 2 && !ending1FinaleComplete()) {
-    return " Ending finale: ONE combined message (わくわく + next Minecraft goodbye), then disconnect.";
+  if (ending1Beat.finaleRequested && !ending1FinaleComplete()) {
+    return " Ending finale: ONE combined goodbye (わくわく + next Minecraft), then disconnect.";
   }
-  if (ending1Beat.userTurns >= 1) {
-    return " Ending: react to their fish (not a number), ask How many do we want?, then WAIT.";
-  }
-  return " Ending: wait for fish answer, then how-many, then finale.";
+  return " Ending FREE TALK: no script — chat freely until child taps 終わりにする.";
 }
 
 function assistantEnding1Monologue(text) {
@@ -1338,7 +1578,6 @@ function assistantEnding1Monologue(text) {
   if (/perfect|fish tank together|made a fish tank/i.test(t)) hits += 1;
   if (/hold on|don't have any fish|no fish in the fish tank/i.test(t)) hits += 1;
   if (/what kind of fish/i.test(t)) hits += 1;
-  if (/how many do we want/i.test(t)) hits += 1;
   if (/can't stop thinking/i.test(t)) hits += 1;
   if (/next minecraft lesson|decorate this tank/i.test(t)) hits += 1;
   return hits >= 3;
@@ -1368,24 +1607,18 @@ function maybeAdvanceEnding1Beat(userText, { skipNotify = false } = {}) {
     }
     return false;
   }
-  if (ending1FinaleComplete()) return false;
-  if (ending1Beat.userTurns >= 2) return false;
+  enterEnding1FreeTalkIfReady();
+  if (ending1FinaleComplete() || ending1Beat.finaleRequested) return false;
+  // Free talk: count child turns for banner only — never auto-force finale.
   const userKey = normalizeUserText(userText);
   if (userKey && ending1Beat.advancedForUserKey === userKey) {
-    dbg("ending1 advance skipped; already advanced for this reply");
-    if (!skipNotify) flushEnding1NextBeatCoach("retry");
+    dbg("ending1 advance skipped; already counted this reply");
     return false;
   }
   ending1Beat.advancedForUserKey = userKey;
   ending1Beat.userTurns += 1;
   updateLessonBanner();
-  if (!skipNotify) {
-    if (ending1Beat.userTurns >= 2) {
-      kickEnding1FinaleChain("after-how-many-answer");
-    } else if (ending1Beat.userTurns === 1) {
-      forceEnding1Beat4(userText, "after-fish-answer");
-    }
-  }
+  paintEndingEndButton();
   return true;
 }
 
@@ -1454,6 +1687,10 @@ function clearEnding1HangUpWatch() {
     clearTimeout(ending1HangUpWatchId);
     ending1HangUpWatchId = null;
   }
+  if (ending1FinaleSpeechWatchId) {
+    clearTimeout(ending1FinaleSpeechWatchId);
+    ending1FinaleSpeechWatchId = null;
+  }
 }
 
 /** Poll until the full goodbye is in the transcript, then auto hang-up. */
@@ -1492,16 +1729,53 @@ function needsEnding1Opening() {
 
 function forceEnding1OpeningAfterFinal1(reason = "final1-complete") {
   if (getCurrentSegment()?.id !== "ending1") return false;
+  // Recover stuck kick ONLY when nothing was ever seeded/heard (never mid-Turn A).
+  if (
+    (ending1Beat.introNoteSent || ending1Beat.autoCoachSent > 0 || ending1Beat.introAudioSent) &&
+    !ending1AutoIntroComplete() &&
+    !ending1Beat.introDisplayLocked &&
+    !ending1Beat.introHeardPerfect &&
+    !ending1HasPerfectLeadInChat() &&
+    /poke|recover|retry|already/i.test(String(reason || ""))
+  ) {
+    const seedAge = Date.now() - (ending1Beat.introSeededAt || 0);
+    if (!ending1Beat.introSeededAt || seedAge > 10000) {
+      ending1Beat.introNoteSent = false;
+      ending1Beat.introAudioSent = false;
+      ending1Beat.autoCoachSent = 0;
+      ending1Beat.lastForceAt = 0;
+      ending1Beat.lastForceKind = "";
+    }
+  }
+  if (
+    ending1Beat.introNoteSent ||
+    ending1Beat.autoCoachSent > 0 ||
+    ending1Beat.introAudioSent ||
+    ending1Beat.introDisplayLocked
+  ) {
+    dbg("force ending1 opening skipped; already kicked", reason);
+    return false;
+  }
   dbg("force ending1 opening", reason);
-  setTimeout(() => {
-    syncEnding1AutoProgress();
-    kickEnding1AutoIntro();
-  }, 500);
-  setTimeout(() => {
+  if (ending1OpeningTimerId) {
+    clearTimeout(ending1OpeningTimerId);
+    ending1OpeningTimerId = null;
+  }
+  ending1OpeningTimerId = setTimeout(() => {
+    ending1OpeningTimerId = null;
     if (getCurrentSegment()?.id !== "ending1") return;
     syncEnding1AutoProgress();
-    if (!ending1AutoIntroComplete()) forceEnding1Intro("after-final1-retry");
-  }, 2800);
+    if (
+      ending1Beat.introNoteSent ||
+      ending1Beat.introAudioSent ||
+      ending1Beat.introDisplayLocked ||
+      ending1AutoIntroComplete()
+    ) {
+      return;
+    }
+    kickEnding1AutoIntro();
+  }, 500);
+  // No delayed repair — a second kick cut Turn A mid どんなおさかな and re-spoke Perfect.
   return true;
 }
 
@@ -1543,9 +1817,33 @@ function getCurrentFinal1Item() {
   initFinal1QuizIfNeeded();
   const seg = getCurrentSegment();
   if (seg?.id !== "final1") return null;
+  if (final1Quiz.cursor >= final1Quiz.indices.length) return null;
   const idx = final1Quiz.indices[final1Quiz.cursor];
   if (idx === undefined) return null;
   return seg.items?.[idx] || null;
+}
+
+/** Quiz finished — snap cursor past the end so complete_segment / ending can run. */
+function isFinal1QuizFinished() {
+  initFinal1QuizIfNeeded();
+  if (getCurrentSegment()?.id !== "final1") return false;
+  const total = final1Quiz.indices.length;
+  if (total < 1 || final1Quiz.answered < 1) return false;
+  if (final1Quiz.answered >= total || final1Quiz.cursor >= total) {
+    final1Quiz.cursor = Math.max(final1Quiz.cursor, total);
+    return true;
+  }
+  const seg = getCurrentSegment();
+  const allQueuedAnswered = final1Quiz.indices.every((idx) => {
+    const item = seg.items?.[idx];
+    return Boolean(item && final1ItemAlreadyAnswered(item));
+  });
+  if (allQueuedAnswered) {
+    final1Quiz.cursor = total;
+    final1Quiz.answered = Math.max(final1Quiz.answered, total);
+    return true;
+  }
+  return false;
 }
 
 function normalizeFinal1MatchText(text) {
@@ -1560,15 +1858,62 @@ function normalizeFinal1MatchText(text) {
     .toLowerCase();
 }
 
-function final1ItemMentionedIn(text, item) {
-  if (!item) return false;
-  if (item.promptMatch && item.promptMatch.test(String(text || ""))) return true;
+/** Cue phrase inside 「…」はえいごで？ / bare …はえいごで？ */
+function extractFinal1SpokenCue(text) {
+  const t = String(text || "");
+  const quoted = t.match(/[「『]([^」』]{1,40})[」』]\s*は\s*(?:英語|えいご)で/);
+  if (quoted?.[1]) return quoted[1].trim();
+  const bare = t.match(
+    /([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF][^は\n「『」』]{0,36}?)\s*は\s*(?:英語|えいご)で/
+  );
+  if (bare?.[1]) return bare[1].trim();
+  return "";
+}
+
+function final1ItemCores(item) {
+  if (!item) return [];
+  return [
+    ...new Set(
+      [item.promptHira, item.promptJa, item.promptEn]
+        .filter(Boolean)
+        .map((p) => normalizeFinal1MatchText(final1PromptCore(p)))
+        // Allow short cues like できた (len 3). Old >=4 filter dropped im-done entirely.
+        .filter((core) => core.length >= 2)
+    ),
+  ];
+}
+
+/**
+ * Score how well assistant text matches a Final1 item.
+ * Prefer exact spoken-cue match + longer cores so 「できた！」≠ tank-ready.
+ */
+function final1ItemMatchScore(text, item) {
+  if (!item) return 0;
+  const raw = String(text || "");
+  let best = 0;
+  if (item.promptMatch && item.promptMatch.test(raw)) {
+    best = Math.max(best, 50);
+  }
   const a = normalizeFinal1MatchText(text);
-  const cores = [item.promptHira, item.promptJa, item.promptEn]
-    .filter(Boolean)
-    .map((p) => normalizeFinal1MatchText(final1PromptCore(p)))
-    .filter((core) => core.length >= 4);
-  return cores.some((core) => a.includes(core));
+  const spokenCue = normalizeFinal1MatchText(extractFinal1SpokenCue(text));
+  for (const core of final1ItemCores(item)) {
+    if (spokenCue) {
+      if (spokenCue === core) {
+        best = Math.max(best, 1000 + core.length);
+      } else if (spokenCue.includes(core)) {
+        // Longer spoken cue containing this core (e.g. tank-ready contains できた).
+        best = Math.max(best, 800 + core.length);
+      }
+    }
+    if (a.includes(core)) {
+      best = Math.max(best, core.length);
+    }
+  }
+  return best;
+}
+
+function final1ItemMentionedIn(text, item) {
+  return final1ItemMatchScore(text, item) > 0;
 }
 
 function final1ItemKey(item) {
@@ -1580,32 +1925,48 @@ function final1ItemAlreadyAnswered(item) {
   return Boolean(key && final1Quiz.answeredPrompts.includes(key));
 }
 
-/** Match the quiz item Learny actually asked — may differ from cursor if Learny skipped or went off-queue. */
-function resolveFinal1ItemFromAssistant(assistant = lastAssistantText()) {
+/**
+ * Match the quiz item Learny actually asked — may differ from cursor if Learny skipped or went off-queue.
+ * @param {string} [assistant]
+ * @param {{ allowAnswered?: boolean }} [opts] allowAnswered: keep matching re-asked cues for MCQ/coach
+ */
+function resolveFinal1ItemFromAssistant(
+  assistant = lastAssistantText(),
+  { allowAnswered = false } = {}
+) {
   initFinal1QuizIfNeeded();
   const seg = getCurrentSegment();
   if (seg?.id !== "final1" || !assistantAskedFinal1QuizQuestion(assistant)) return null;
 
-  const pick = (item, queuePos, inQueue) => {
-    if (!item || !final1ItemMentionedIn(assistant, item) || final1ItemAlreadyAnswered(item)) return null;
-    return { item, queuePos, inQueue: Boolean(inQueue) };
+  let best = null;
+  let bestScore = 0;
+  const consider = (item, queuePos, inQueue) => {
+    if (!item) return;
+    if (!allowAnswered && final1ItemAlreadyAnswered(item)) return;
+    const score = final1ItemMatchScore(assistant, item);
+    if (score <= 0) return;
+    const betterScore = score > bestScore;
+    const tiePreferInQueue = score === bestScore && best && inQueue && !best.inQueue;
+    const tiePreferForward =
+      score === bestScore &&
+      best &&
+      Boolean(inQueue) === Boolean(best.inQueue) &&
+      queuePos >= final1Quiz.cursor &&
+      best.queuePos < final1Quiz.cursor;
+    if (betterScore || tiePreferInQueue || tiePreferForward) {
+      bestScore = score;
+      best = { item, queuePos, inQueue: Boolean(inQueue), score };
+    }
   };
 
-  for (let qi = final1Quiz.cursor; qi < final1Quiz.indices.length; qi += 1) {
-    const hit = pick(seg.items?.[final1Quiz.indices[qi]], qi, true);
-    if (hit) return hit;
-  }
-  for (let qi = 0; qi < final1Quiz.cursor; qi += 1) {
-    const hit = pick(seg.items?.[final1Quiz.indices[qi]], qi, true);
-    if (hit) return hit;
+  for (let qi = 0; qi < final1Quiz.indices.length; qi += 1) {
+    consider(seg.items?.[final1Quiz.indices[qi]], qi, true);
   }
   for (let ii = 0; ii < (seg.items || []).length; ii += 1) {
-    const item = seg.items[ii];
-    if (!item || !final1ItemMentionedIn(assistant, item) || final1ItemAlreadyAnswered(item)) continue;
-    const qi = final1Quiz.indices.indexOf(ii);
-    return { item, queuePos: qi >= 0 ? qi : final1Quiz.cursor, inQueue: qi >= 0 };
+    if (final1Quiz.indices.includes(ii)) continue;
+    consider(seg.items[ii], final1Quiz.cursor, false);
   }
-  return null;
+  return best;
 }
 
 function findFinal1QueuePosFromAssistant(assistant) {
@@ -1615,16 +1976,23 @@ function findFinal1QueuePosFromAssistant(assistant) {
 }
 
 function getDisplayedFinal1Item() {
-  const resolved = resolveFinal1ItemFromAssistant(lastAssistantText());
-  if (resolved) return resolved;
+  // Prefer what Learny spoke (even if already answered) so MCQ never shows the *next*
+  // item's choices under a repeated 「できた！」 prompt.
+  const spoken = resolveFinal1ItemFromAssistant(lastAssistantText(), {
+    allowAnswered: true,
+  });
+  if (spoken) return spoken;
   const item = getCurrentFinal1Item();
   return item ? { item, queuePos: final1Quiz.cursor, inQueue: true } : null;
 }
 
 function syncFinal1CursorFromAssistant(assistant = lastAssistantText()) {
   if (getCurrentSegment()?.id !== "final1") return false;
+  // Never rewind — re-asking an earlier cue used to pull the cursor back and
+  // block canCompleteFinal1Part1 / ending advance after the quiz was finished.
+  if (isFinal1QuizFinished()) return false;
   const resolved = resolveFinal1ItemFromAssistant(assistant);
-  if (!resolved?.inQueue || resolved.queuePos < 0 || resolved.queuePos === final1Quiz.cursor) {
+  if (!resolved?.inQueue || resolved.queuePos < 0 || resolved.queuePos <= final1Quiz.cursor) {
     return false;
   }
   final1Quiz.cursor = resolved.queuePos;
@@ -1811,6 +2179,14 @@ function maybeFinal1CoachNudge() {
   if (getCurrentSegment()?.id !== "final1") return;
   const user = lastPendingUserText || recentUserMessages(1)[0] || "";
   const assistant = lastAssistantText();
+  initFinal1QuizIfNeeded();
+
+  // Finished quiz must advance even if Learny invented another はえいごで？ cue.
+  if (isFinal1QuizFinished()) {
+    const doneQuote = String(user || lastPendingUserText || "final challenge done").trim();
+    if (maybeCompleteFinal1FromClient(doneQuote)) return;
+  }
+
   let next = currentFinal1Prompt();
 
   // Next quiz cue already on screen — wait for child; extra coaches caused doubled speech.
@@ -1825,7 +2201,12 @@ function maybeFinal1CoachNudge() {
   if (final1AssistantPraiseOnly(assistant)) return;
 
   if (!next && final1Quiz.answered > 0) {
+    // Client owns the advance — Gemini often stalls on complete_segment(final1).
+    const doneQuote = String(user || lastPendingUserText || "final challenge done").trim();
+    if (maybeCompleteFinal1FromClient(doneQuote)) return;
     whenAssistantIdle(() => {
+      if (getCurrentSegment()?.id !== "final1") return;
+      if (maybeCompleteFinal1FromClient(doneQuote)) return;
       sendTeacherNote(
         "final1-done",
         "[Teacher note — do not read aloud] Final challenge quiz is FINISHED. " +
@@ -1837,7 +2218,9 @@ function maybeFinal1CoachNudge() {
   }
   if (!next) return;
 
-  const resolved = resolveFinal1ItemFromAssistant(assistant);
+  const resolved =
+    resolveFinal1ItemFromAssistant(assistant, { allowAnswered: true }) ||
+    resolveFinal1ItemFromAssistant(assistant);
   const item = resolved?.item || getCurrentFinal1Item();
   const currentCue = item?.promptHira || item?.promptJa || "";
   const doubled = assistantDoubledFinal1Prompt(assistant);
@@ -1850,6 +2233,8 @@ function maybeFinal1CoachNudge() {
   const bare = assistantBareFinal1Question(assistant);
   const kanji = assistantHasKanji(assistant);
   const story = looksLikeFinal1StoryQuestion(assistant) && !/(?:英語|えいご)で/.test(assistant);
+  const reaskedAnswered =
+    Boolean(item) && final1ItemAlreadyAnswered(item) && assistantAskedFinal1QuizQuestion(assistant);
 
   if (userAnsweredCurrent && repeatsCurrent && item && !final1ItemAlreadyAnswered(item)) {
     maybeAdvanceFinal1Quiz(user);
@@ -1861,6 +2246,7 @@ function maybeFinal1CoachNudge() {
     doubled ||
     (userAnsweredCurrent && repeatsCurrent) ||
     (repeatsAnswered && user.trim()) ||
+    reaskedAnswered ||
     wrongPrompt ||
     bare ||
     kanji ||
@@ -1876,7 +2262,7 @@ function maybeFinal1CoachNudge() {
         (kanji ? "Use ひらがな ONLY. " : "") +
         (bare ? "Include the full cue, not bare は えいごで？. " : "") +
         (wrongPrompt || story ? "Use ONLY the listed cue. " : "") +
-        (userAnsweredCurrent && repeatsCurrent
+        (reaskedAnswered || (userAnsweredCurrent && repeatsCurrent)
           ? "Child already answered — praise, then NEXT cue (not the same one). "
           : "") +
         (next
@@ -1891,7 +2277,9 @@ function maybeFinal1CoachNudge() {
 function maybeAdvanceFinal1Quiz(userText) {
   if (getCurrentSegment()?.id !== "final1") return false;
   syncFinal1CursorFromAssistant(lastAssistantText());
-  const displayed = resolveFinal1ItemFromAssistant(lastAssistantText()) || getDisplayedFinal1Item();
+  const displayed =
+    resolveFinal1ItemFromAssistant(lastAssistantText(), { allowAnswered: true }) ||
+    getDisplayedFinal1Item();
   const item = displayed?.item || getCurrentFinal1Item();
   if (!item) return false;
   if (!matchesFinal1Answer(userText, item)) return false;
@@ -1922,7 +2310,9 @@ function peekFinal1PromptAtCursor(cursor) {
 
 function buildFinal1OutboundCoach(userText) {
   if (getActiveLessonId() !== "part1" || getCurrentSegment()?.id !== "final1") return "";
-  const resolved = resolveFinal1ItemFromAssistant(lastAssistantText());
+  const resolved = resolveFinal1ItemFromAssistant(lastAssistantText(), {
+    allowAnswered: true,
+  });
   const item = resolved?.item;
   if (!item) return "";
   const t = String(userText || "").trim();
@@ -1981,7 +2371,7 @@ function handleFinal1ChoiceClick(label) {
     return;
   }
 
-  addMessage(label, "user");
+  addUserAnswerBubble(label);
   assistantTranscriptOpen = false;
   turnEndProcessed = false;
   cancelAssistantTurnEnd();
@@ -2007,18 +2397,20 @@ function handleFinal1ChoiceClick(label) {
   notifyMcqActivity(event);
   notifyParentProgress();
 
-  const coach = buildFinal1OutboundCoach(label);
-
   if (correct) {
     maybeAdvanceFinal1Quiz(label);
   }
 
-  const quizDone = correct && !getCurrentFinal1Item();
-  dispatchChildTurn(label, coach || (correct ? "Brief praise, next Final1 cue." : buildMcqWrongRetryCoach()));
-
-  if (quizDone) {
+  // Last item done → client completes + kicks ending. Do NOT send a final1
+  // complete_segment coach (that raced the ending Perfect script / left Learny stuck).
+  if (correct && isFinal1QuizFinished()) {
     maybeCompleteFinal1FromClient(label);
+    renderChoiceBar(getCurrentSegment());
+    return;
   }
+
+  const coach = buildFinal1OutboundCoach(label);
+  dispatchChildTurn(label, coach || (correct ? "Brief praise, next Final1 cue." : buildMcqWrongRetryCoach()));
 
   renderChoiceBar(getCurrentSegment());
   if (!correct) {
@@ -2029,7 +2421,9 @@ function handleFinal1ChoiceClick(label) {
 function tryRouteFinal1Answer(text) {
   if (getCurrentSegment()?.id !== "final1") return false;
   if (!assistantAskedFinal1QuizQuestion(lastAssistantText())) return false;
-  const resolved = resolveFinal1ItemFromAssistant(lastAssistantText());
+  const resolved = resolveFinal1ItemFromAssistant(lastAssistantText(), {
+    allowAnswered: true,
+  });
   if (!resolved?.item) return false;
   const needle = normalizeMcqChoice(text);
   if (!needle) return false;
@@ -2037,6 +2431,10 @@ function tryRouteFinal1Answer(text) {
   let label = choices.find((c) => normalizeMcqChoice(c) === needle) || "";
   if (!label && matchesFinal1Answer(text, resolved.item)) {
     label = formatChoiceLabel(resolved.item.answer) || String(text).trim();
+  }
+  // Intermediate voice-only: any spoken attempt on an active Final1 cue is logged.
+  if (!label && isIntermediateVoiceOnly()) {
+    label = String(text).trim();
   }
   if (!label) return false;
   handleFinal1ChoiceClick(label);
@@ -2051,8 +2449,7 @@ function countFinal1ItemsAnswered() {
 function canCompleteFinal1Part1() {
   if (getActiveLessonId() !== "part1") return true;
   if (getCurrentSegment().id !== "final1") return true;
-  initFinal1QuizIfNeeded();
-  return !getCurrentFinal1Item() && final1Quiz.answered > 0;
+  return isFinal1QuizFinished();
 }
 
 function final1CoachHint() {
@@ -2112,20 +2509,23 @@ function maybeCompleteFinal1FromClient(userText) {
   const state = loadLessonState();
   const seg = getCurrentSegment(state);
   if (state.lessonId !== "part1" || seg?.id !== "final1") return false;
-  initFinal1QuizIfNeeded();
-  if (getCurrentFinal1Item()) return false;
-  if (final1Quiz.answered < 1) return false;
-  const result = completeSegment("final1", { userQuote: userText });
-  if (!result.ok) return false;
-  dbg("final1 auto-complete", userText);
+  if (!isFinal1QuizFinished()) return false;
+  const quote = String(userText || lastPendingUserText || "final challenge done").trim();
+  const result = completeSegment("final1", { userQuote: quote });
+  if (!result.ok) {
+    dbg("final1 auto-complete failed", result.reason || result);
+    return false;
+  }
+  dbg("final1 auto-complete", quote);
   try {
     questSfx.playQuestComplete();
   } catch {
     // ignore
   }
   updateLessonBanner();
-  configureGeminiClient(client);
-  forceEnding1OpeningAfterFinal1("auto-complete");
+  renderChoiceBar(getCurrentSegment());
+  if (client) configureGeminiClient(client);
+  forceEnding1OpeningAfterFinal1(result.alreadyDone ? "auto-complete-already" : "auto-complete");
   return true;
 }
 
@@ -3877,11 +4277,7 @@ function runPostTurnCoachNudges() {
     maybeDaily1CorrectiveNudge();
   }
 
-  if (getCurrentSegment()?.id === "ending1") {
-    maybeChainEnding1AutoBeat();
-    maybeChainEnding1FinaleBeat();
-    maybeEnding1OffScriptNudge();
-  }
+  // ending1 chain/off-script already handled in endingScripted / else above — do not call twice.
 
   if (getCurrentSegment()?.id === "final1") {
     syncFinal1CursorFromAssistant(text);
@@ -4127,6 +4523,16 @@ function quiz1ItemSpeak(item) {
 
 function buildQuiz1SpeakCoach(item = getCurrentQuiz1Item()) {
   if (!item) return "";
+  if (isIntermediateVoiceOnly()) {
+    return (
+      "Speak EXACTLY (every mora, including the cue inside 「」): " +
+      quiz1ItemSpeak(item) +
+      " FORBIDDEN shortcuts: がらすが英語で without ひつよう. " +
+      "Then " +
+      intermediateAnswerWaitHint() +
+      " Do not speak English choices aloud."
+    );
+  }
   return (
     "Speak EXACTLY (every mora, including the cue inside 「」): " +
     quiz1ItemSpeak(item) +
@@ -4170,8 +4576,11 @@ function quiz1CoachHint() {
   const total = getQuiz1Items().length || 3;
   const done = quiz1State.answered;
   const cur = getCurrentQuiz1Item();
+  const mode = isIntermediateVoiceOnly()
+    ? "Voice-only English answers (no buttons)."
+    : "4-button MCQ.";
   return (
-    ` Quiz1: ${done}/${total} done. Speak Japanese ひらがな only. 4-button MCQ. ` +
+    ` Quiz1: ${done}/${total} done. Speak Japanese ひらがな only. ${mode} ` +
     (cur ? `${buildQuiz1SpeakCoach(cur)} ` : "All 3 done — call complete_segment(quiz1) → Chapter 4. ") +
     "FORBIDDEN: すなが ひつよう quiz, oral どっち, English Which one means…, walls, color."
   );
@@ -4883,10 +5292,25 @@ function withBeginnerSpeakRule(outbound) {
   if (!rule) return outbound;
   const body = String(outbound || "").trim();
   if (!body) return rule;
-  if (/^\[(BEGINNER|QUIZ)\]/i.test(body) || /BEGINNER — mandatory|QUIZ — mandatory/i.test(body)) {
+  if (/^\[(BEGINNER|QUIZ|ENDING)\]/i.test(body) || /BEGINNER — mandatory|QUIZ — mandatory/i.test(body)) {
     return body;
   }
   return `${rule}\n\n${body}`;
+}
+
+/**
+ * Ending Turn A/C are long fixed scripts. The normal beginner "One short turn" rule
+ * made Gemini cut off mid-sentence (e.g. at どんなおさかなを) and then restart.
+ */
+function withEndingExactSpeakRule(outbound) {
+  const body = String(outbound || "").trim();
+  if (!body) return body;
+  if (/^\[ENDING\]/i.test(body)) return body;
+  return (
+    "[ENDING] Speak the EXACT script below ONCE in full — every English line and every ひらがな line. " +
+    "Do NOT shorten, summarize, skip, or repeat. Then WAIT for the child.\n\n" +
+    body
+  );
 }
 
 /**
@@ -4895,7 +5319,7 @@ function withBeginnerSpeakRule(outbound) {
  */
 function buildChildOutbound(childText, coachNote = "", { maxCoach = 420 } = {}) {
   const child = String(childText || "").trim();
-  const coach = String(coachNote || "")
+  const coach = adaptTeacherNoteForLevel(String(coachNote || ""))
     .replace(/^\[Teacher note[^\]]*\]\s*/i, "")
     .replace(/^\[HIDDEN coach[^\]]*\]\s*/i, "")
     .trim();
@@ -5074,6 +5498,8 @@ function maybeBeginnerJapaneseNudge() {
   if (LEVEL_INFO.id !== "beginner") return;
   // Quiz is Japanese-only by design — do not force English-then-Japanese repair.
   if (isQuizSpeakSegment()) return;
+  // Ending Turn A is a long bilingual script — repair nudges caused a second Perfect!
+  if (getCurrentSegment()?.id === "ending1") return;
   if (!assistantTranscriptSettled()) return;
   const text = lastAssistantText().trim();
   if (!text || assistantHasValidPhraseElicit(text)) return;
@@ -5180,6 +5606,8 @@ function isCh4FreeTalkUi() {
 
 /** True while tap-choice MCQ / quiz buttons are on screen (mic must stay off). */
 function isMcqChoiceUiActive(segment = getCurrentSegment()) {
+  // Intermediate is voice-only — never lock the mic for choice buttons.
+  if (isIntermediateVoiceOnly()) return false;
   if (
     actionState !== "active" ||
     chapterTransitionActive ||
@@ -5251,7 +5679,9 @@ function paintMuteButton() {
   btnMute.classList.toggle("muted", (isMuted || mcqLocksMic) && callLive);
   btnMute.innerHTML = (isMuted || mcqLocksMic) && callLive ? ICON_MIC_OFF : ICON_MIC;
   btnMute.title = !callLive
-    ? "はじめるとマイクはオフのまま（ボタンで答えよう）"
+    ? isIntermediateVoiceOnly()
+      ? "はじめるとマイクはオフのまま（こえで こたえるよ）"
+      : "はじめるとマイクはオフのまま（ボタンで答えよう）"
     : mcqLocksMic
       ? "4択のときはマイクオフ（ボタンで答えよう）"
       : isMuted
@@ -5304,7 +5734,20 @@ function buildMcqSpeakCoach(beat) {
   if (!beat) return "";
   const color = loadLessonState().memories?.favoriteColor || "orange";
   const en = expandMcqColorPlaceholders(String(beat.learnyEn || ""), color);
-  const ja = expandMcqColorPlaceholders(String(beat.learnyJa || ""), color);
+  const ja = elicitJaForActiveLevel(
+    expandMcqColorPlaceholders(String(beat.learnyJa || ""), color)
+  );
+  if (isIntermediateVoiceOnly()) {
+    return (
+      "Speak EXACTLY: " +
+      en +
+      " " +
+      ja +
+      " Then " +
+      intermediateAnswerWaitHint() +
+      " Do not reveal the answer. Do not list multiple-choice options aloud."
+    );
+  }
   const choices = resolveMcqChoices(beat).join(" / ");
   return (
     "Speak EXACTLY: " +
@@ -5391,7 +5834,7 @@ function handleMcqChoiceClick(label) {
       /i found some sand/i.test(label) &&
       /you found some sand|すなをみつけ|「(?:すなを|砂を)見つけた」|found some sand/i.test(lastAssistantText())
     ) {
-      addMessage(label, "user");
+      addUserAnswerBubble(label);
       dispatchChildTurn(
         label,
         "[Teacher note — do not read aloud] Chapter 2 is DONE. Speak EXACTLY Chapter 3 Beat 1 NOW: " +
@@ -5401,7 +5844,7 @@ function handleMcqChoiceClick(label) {
       renderChoiceBar(segment);
       return;
     }
-    addMessage(label, "user");
+    addUserAnswerBubble(label);
     const retry = buildMcqWrongRetryCoach(buildMcqSpeakCoach(beat));
     dispatchChildTurn(label, retry);
     renderChoiceBar(segment);
@@ -5430,7 +5873,7 @@ function handleMcqChoiceClick(label) {
       } catch {
         // ignore
       }
-      addMessage(label, "user");
+      addUserAnswerBubble(label);
       if (afterSegmentAdvanced(segment.id, result, { lastQuote: label })) {
         renderChoiceBar(getCurrentSegment());
         return;
@@ -5466,7 +5909,7 @@ function handleMcqChoiceClick(label) {
     (segment.id === "ch1"
       ? " FORBIDDEN: Did you find the glass? / Have you found glass? / searching for glass."
       : "");
-  addMessage(label, "user");
+  addUserAnswerBubble(label);
   dispatchChildTurn(label, praise);
   renderChoiceBar(getCurrentSegment());
 }
@@ -5475,6 +5918,7 @@ function handleMcqChoiceClick(label) {
  * Typed answers that match the on-screen MCQ should use the same path as button taps
  * (progress + reply-watch). Also recovers cursor desync (e.g. buttons on beat 2 while
  * Learny still asked beat 1).
+ * Intermediate voice-only: any spoken attempt on the active beat is logged (correct or not).
  */
 function tryRouteTextToMcq(text) {
   const segment = getCurrentSegment();
@@ -5508,8 +5952,28 @@ function tryRouteTextToMcq(text) {
       }
     }
   }
+  if (!label && isIntermediateVoiceOnly()) {
+    label = String(text).trim();
+  }
   if (!label) return false;
   handleMcqChoiceClick(label);
+  return true;
+}
+
+/** Intermediate: route quiz1 voice/typed answers through the same logger as button taps. */
+let routingQuiz1Answer = false;
+function tryRouteQuiz1Answer(text) {
+  if (!isIntermediateVoiceOnly() || routingQuiz1Answer) return false;
+  if (getCurrentSegment()?.id !== "quiz1") return false;
+  if (!getCurrentQuiz1Item()) return false;
+  const t = String(text || "").trim();
+  if (!t) return false;
+  routingQuiz1Answer = true;
+  try {
+    handleQuiz1ChoiceClick(t);
+  } finally {
+    routingQuiz1Answer = false;
+  }
   return true;
 }
 
@@ -5541,7 +6005,7 @@ function handleQuiz1ChoiceClick(label) {
   notifyParentProgress();
 
   if (!correct) {
-    addMessage(label, "user");
+    addUserAnswerBubble(label);
     const retry = buildMcqWrongRetryCoach(buildQuiz1SpeakCoach(item));
     dispatchChildTurn(label, retry);
     renderChoiceBar(segment);
@@ -5611,16 +6075,22 @@ export function updateLessonBanner() {
       const qTotal = getQuiz1Items().length || 3;
       questBannerHint.textContent =
         qDone < qTotal
-          ? `いま：ミニクイズ ${qDone}/${qTotal}（4択でこたえよう）`
+          ? isIntermediateVoiceOnly()
+            ? `いま：ミニクイズ ${qDone}/${qTotal}（こえで こたえよう）`
+            : `いま：ミニクイズ ${qDone}/${qTotal}（4択でこたえよう）`
           : "いま：ミニクイズ おわり！ Chapter 4 へ";
     } else if (segment.id === "ending1") {
+      syncEnding1AutoProgress();
+      enterEnding1FreeTalkIfReady();
       const step = getEnding1DisplayStep();
-      const autoBit = !ending1AutoIntroComplete()
-        ? "（はじめの ひとこと）"
-        : ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()
-          ? "（おわかれ）"
-          : "（こたえたら つぎへ）";
-      questBannerHint.textContent = `いま：おわりの おはなし ${step}/${ENDING1_BEATS.length}${autoBit}`;
+      if (!ending1AutoIntroComplete()) {
+        questBannerHint.textContent = `いま：おわりの おはなし ${step}/3（はじめの ひとこと）`;
+      } else if (ending1Beat.finaleRequested || ending1FinaleComplete()) {
+        questBannerHint.textContent = `いま：おわりの おはなし ${step}/3（おわかれ）`;
+      } else {
+        questBannerHint.textContent =
+          "いま：フリートーク（「終わりにする」でおしまいにできるよ）";
+      }
     } else {
       questBannerHint.textContent = segment.goal ? `いま：${segment.goal}` : "";
     }
@@ -5656,13 +6126,24 @@ function renderChoiceBar(segment) {
   const hide = () => {
     choiceBar.hidden = true;
     inputArea?.classList.remove("has-mcq");
-    if (chatInput) chatInput.placeholder = "自由会話のときだけ入力…";
+    if (chatInput) {
+      chatInput.placeholder = isIntermediateVoiceOnly()
+        ? "こえで こたえてね（ひつようなときだけにゅうりょく）"
+        : "自由会話のときだけ入力…";
+    }
   };
   const show = () => {
     choiceBar.hidden = false;
     inputArea?.classList.add("has-mcq");
     if (chatInput) chatInput.placeholder = "ボタンで選ぶのがメインだよ";
   };
+
+  // Intermediate: never show choice buttons — voice answers only (progress still logged).
+  if (isIntermediateVoiceOnly()) {
+    hide();
+    syncMicForMcqMode();
+    return;
+  }
 
   // Hide MCQ while reconnecting / until Learny starts the new chapter.
   if (
@@ -5773,6 +6254,27 @@ function isRecentVoiceDuplicate(text) {
   const t = normalizeUserText(text);
   if (!t || !lastVadUserAt) return false;
   return normalizeUserText(lastVadUserText) === t && Date.now() - lastVadUserAt < VOICE_TYPED_DEDUP_MS;
+}
+
+/** Voice turns already render a mic-only bubble — don't add a second text transcription. */
+function shouldSuppressUserTextBubble(text = "") {
+  const last = chatMessages[chatMessages.length - 1];
+  if (last?.type === "user" && last.fromMic) return true;
+  if (isRecentVoiceDuplicate(text)) return true;
+  // Intermediate is voice-first: any very recent VAD utterance → keep mic-only UI.
+  if (
+    isIntermediateVoiceOnly() &&
+    lastVadUserAt &&
+    Date.now() - lastVadUserAt < VOICE_TYPED_DEDUP_MS
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function addUserAnswerBubble(text) {
+  if (shouldSuppressUserTextBubble(text)) return;
+  addMessage(text, "user");
 }
 
 function looksLikeNewAssistantReply(text) {
@@ -5977,6 +6479,9 @@ function displayIsPrefixOfRaw(raw, display) {
 function maybeInterruptStackedAssistantSpeech(rawText) {
   const raw = String(rawText || "").trim();
   if (!raw) return false;
+
+  // Never cut Ending Turn A/C audio — stacked-interrupt was clipping どんなおさかなを mid-line.
+  if (getCurrentSegment()?.id === "ending1") return false;
 
   let display = raw;
   if (getCurrentSegment()?.id === "ch2") {
@@ -6201,6 +6706,30 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
   if (!c && !finished) return false;
   if (c && isMetaAssistantLeak(c)) return false;
 
+  // Ending Turn A display is client-owned exact script — ignore STT for the bubble,
+  // but interrupt a second Perfect audio if Gemini restarts mid-lock.
+  if (
+    getCurrentSegment()?.id === "ending1" &&
+    ending1Beat.introDisplayLocked &&
+    !ending1Beat.finaleRequested
+  ) {
+    if (c) {
+      trackEnding1IntroSttProgress(c);
+      if (shouldInterruptEnding1IntroRestart(c)) {
+        dbg("interrupt ending1 Turn A restart audio", c.slice(0, 40));
+        try {
+          audioPlayer?.interrupt?.();
+          closeOpenAudioTurn();
+        } catch {
+          // ignore
+        }
+      }
+    }
+    scheduleRenderChat();
+    updateLearnyThinkingUI();
+    return true;
+  }
+
   const last = chatMessages[chatMessages.length - 1];
   let needNewBubble =
     !assistantTranscriptOpen || last?.type !== "assistant" || userSpokeSinceLastAssistantBubble();
@@ -6248,6 +6777,20 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
     assistantTurnTranscript = pickTranscriptChunk(String(last.text || ""), display, { finished: true });
   }
   if (needNewBubble && display) {
+    // After Turn A, bare "Perfect!" restarts must not become a new waiting turn.
+    if (isEnding1GhostPerfectRestart(display)) {
+      dbg("suppress ending1 ghost Perfect restart", display.slice(0, 32));
+      try {
+        audioPlayer?.interrupt?.();
+        closeOpenAudioTurn();
+      } catch {
+        // ignore
+      }
+      assistantTranscriptOpen = false;
+      scheduleRenderChat();
+      updateLearnyThinkingUI();
+      return true;
+    }
     // Re-asking the same lead question after a short child reply = classic double.
     if (
       sharesSameLeadQuestion(lastAssistantText(), display) &&
@@ -6549,8 +7092,20 @@ function stripForeignScriptsFromAssistantText(text) {
 function trimCorruptEnglishRestartAfterJapanese(text) {
   let t = String(text || "");
   // Glued Latin right after kana/JP punct (common after foreign-script strip).
-  // Remove the whole glued English token, not just the first letter (そうだ！Today → そうだ！).
-  t = t.replace(/([\u3040-\u309F\u30A0-\u30FF！？。])([A-Za-z][A-Za-z'’]*)/g, "$1");
+  // Keep legitimate next-beat openers (What / Hold / Hmm…) — only drop garble like Today.
+  t = t.replace(
+    /([\u3040-\u309F\u30A0-\u30FF！？。])([A-Za-z][A-Za-z'’]*)/g,
+    (match, jp, word) => {
+      if (
+        /^(hold|what|how|hmm|next|that|tell|are|let|do|is|when|shall|can|perfect|thank|nice|great|okay|ok|yes|oh|we|i|you|now|so|well|good|cool|awesome)/i.test(
+          word
+        )
+      ) {
+        return `${jp} ${word}`;
+      }
+      return jp;
+    }
+  );
 
   const jpStart = t.search(/[\u3040-\u309F]{2,}/);
   if (jpStart < 0) return t;
@@ -6591,12 +7146,169 @@ function sanitizeAssistantBubbleText(text) {
   if (getCurrentSegment()?.id === "ch2") {
     t = trimCh2AssistantBubble(t);
   }
+  if (getCurrentSegment()?.id === "ending1") {
+    t = trimEnding1IntroRestart(t);
+  }
   // Display-only: spacing + clear duplicate greetings/questions + strip system leaks.
   return fixEnglishSpacing(
     trimDuplicateJapanesePhrases(
       stripSystemBackendSpeech(trimDuplicateHowAreYou(trimDuplicateStackedQuestions(t)))
     )
   );
+}
+
+/**
+ * After Turn A is fully done, Gemini sometimes restarts with bare "Perfect!".
+ * ONLY then — never during the first Turn A kick (that cut "Perfect! We…" off the start
+ * and caused a second untranscribed speak).
+ */
+function isEnding1GhostPerfectRestart(text) {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  // Must already have finished Turn A (fish question in chat) before treating Perfect as a ghost.
+  if (!ending1AutoIntroComplete()) return false;
+  const t = String(text || "").trim();
+  if (!t || t.length > 40) return false;
+  if (/hold on|what kind of fish|どんな|fish tank together|てつだって/i.test(t)) return false;
+  return /^(perfect!?|ぱーふぇくと[！!]?)\s*$/i.test(t);
+}
+
+/** Track Turn A STT progress while the seeded bubble is locked. */
+function trackEnding1IntroSttProgress(chunk) {
+  const t = String(chunk || "");
+  if (/perfect!?\s*we made|ぱーふぇくと/i.test(t)) {
+    ending1Beat.introHeardPerfect = true;
+  }
+  if (/hold on|don'?t have any fish|おさかなが\s*1ぴき|おさかなが\s*いっぴき/i.test(t)) {
+    ending1Beat.introHeardHoldOn = true;
+  }
+  if (assistantSaidEnding1FishQuestion(t)) {
+    if (!ending1Beat.introHeardFishQ) {
+      ending1Beat.introHeardFishQAt = Date.now();
+    }
+    ending1Beat.introHeardFishQ = true;
+    ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, 1);
+  }
+}
+
+/** True when STT shows Turn A restarting (second Perfect), not the first play-through. */
+function shouldInterruptEnding1IntroRestart(chunk) {
+  const t = String(chunk || "");
+  if (!t) return false;
+  const perfectEn = t.match(/perfect!?\s*we made a fish tank/gi) || [];
+  const perfectJp = t.match(/ぱーふぇくと/g) || [];
+  // Two Perfect leads in one transcript = restart.
+  if (perfectEn.length >= 2 || perfectJp.length >= 2) return true;
+  // First play-through cumulative STT still contains Perfect + fish once — never cut it.
+  if (assistantSaidEnding1FishQuestion(t) && perfectEn.length < 2) return false;
+  const trimmed = t.trim();
+  // New speak starts with Perfect after fish was already heard (second Turn A beginning).
+  if (
+    ending1Beat.introHeardFishQ &&
+    /^(perfect!?|ぱーふぇくと)/i.test(trimmed) &&
+    !assistantSaidEnding1FishQuestion(trimmed) &&
+    Date.now() - (ending1Beat.introHeardFishQAt || 0) > 1500
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Seed the chat with the exact Turn A script so STT cannot show a mid-sentence fragment.
+ * Audio still comes from Gemini; display is client-owned for this beat.
+ */
+function seedEnding1IntroBubble() {
+  const text = ENDING1_INTRO_SPEAK.trim();
+  ending1Beat.introDisplayLocked = true;
+  ending1Beat.introSeededAt = Date.now();
+  // Do NOT mark autoSpoken yet — that unlocked free talk before audio finished.
+  ending1Beat.autoCoachSent = Math.max(ending1Beat.autoCoachSent, 1);
+  assistantTurnTranscript = text;
+  assistantTranscriptOpen = true;
+  const last = chatMessages[chatMessages.length - 1];
+  if (last?.type === "assistant" && !userSpokeSinceLastAssistantBubble()) {
+    last.text = text;
+    last.ending1Exact = true;
+  } else {
+    chatMessages.push({ type: "assistant", text, ending1Exact: true, sttEnterPending: true });
+    lastAssistantBubbleAt = Date.now();
+  }
+  scheduleRenderChat();
+  updateLearnyThinkingUI();
+  updateLessonBanner();
+  paintEndingEndButton();
+  scheduleEnding1IntroUnlock();
+}
+
+let ending1FinaleSpeechWatchId = null;
+
+function armEnding1FinaleSpeechWatch() {
+  if (ending1FinaleSpeechWatchId) {
+    clearTimeout(ending1FinaleSpeechWatchId);
+    ending1FinaleSpeechWatchId = null;
+  }
+  ending1FinaleSpeechWatchId = setTimeout(() => {
+    ending1FinaleSpeechWatchId = null;
+    if (actionState !== "active" || !client?.connected) return;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (!ending1Beat.finaleRequested) return;
+    syncEnding1FinaleProgress();
+    if (ending1FinaleComplete() || assistantSaidEnding1Finale()) {
+      maybeCompleteEnding1AndHangUp(lastPendingUserText || "");
+      return;
+    }
+    // Coach went out but no goodbye speech — one recovery kick.
+    dbg("ending1 finale speech watch retry");
+    ending1Beat.finaleForceScheduled = false;
+    ending1Beat.finaleNoteSent = false;
+    kickEnding1FinaleChain("finale-speech-watch", { bypassCooldown: true });
+  }, 6000);
+}
+
+/** Unlock free talk only after Turn A has actually been spoken (not on empty idle). */
+function scheduleEnding1IntroUnlock() {
+  const seedAt = ending1Beat.introSeededAt || Date.now();
+  const minLockMs = 14000; // full EN+JP Turn A is long; early idle was opening free talk mid-script
+  const tick = () => {
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (!ending1Beat.introDisplayLocked) return;
+    const elapsed = Date.now() - seedAt;
+    if (assistantIsSpeaking() || elapsed < minLockMs) {
+      setTimeout(tick, 400);
+      return;
+    }
+    // Playback drained and minimum lock elapsed.
+    ending1Beat.introDisplayLocked = false;
+    ending1Beat.autoSpoken = Math.max(ending1Beat.autoSpoken, 1);
+    syncEnding1AutoProgress();
+    enterEnding1FreeTalkIfReady();
+    paintEndingEndButton();
+    updateLessonBanner();
+  };
+  setTimeout(tick, 500);
+}
+function trimEnding1IntroRestart(text) {
+  let t = String(text || "").trim();
+  if (!t) return t;
+  const enFish = /what kind of fish should we catch\?/i.exec(t);
+  if (!enFish) return t;
+  let end = enFish.index + enFish[0].length;
+  const afterEn = t.slice(end);
+  const jpFish = /^\s*どんな\s*おさかな[^？?]{0,40}[？?]/.exec(afterEn);
+  if (jpFish) end += jpFish[0].length;
+  const head = t.slice(0, end).trim();
+  const tail = t.slice(end).trim();
+  if (!tail) return t;
+  // Restart signals: Perfect lead again, thank-you JP, or Hold on after fish Q already done.
+  if (
+    /^(?:a fish tank together|perfect!?|thank you for helping|ぱーふぇくと|いっしょに\s*すいそう|てつだって|hold on)/i.test(
+      tail
+    ) ||
+    /perfect!?\s*we made|hold on\.\.\.|we don'?t have any fish|ぱーふぇくと|てつだって\s*くれて/i.test(tail)
+  ) {
+    return head;
+  }
+  return t;
 }
 
 function mergeTranscriptChunk(prev, chunk) {
@@ -6902,6 +7614,7 @@ function updateActionUI() {
   // Choice bar may force-mute for MCQ — sync before painting the mic button.
   updateLessonBanner();
   paintMuteButton();
+  paintEndingEndButton();
   const callLive = actionState === "active";
   const handoffBusy = isHandoffRunning || isChapterHandoff || chapterTransitionActive;
   if (btnRetry) {
@@ -6917,6 +7630,16 @@ function sendClientText(text, { force = false } = {}) {
   if (!client?.connected) return false;
   const t = String(text || "").trim();
   if (!t) return false;
+  // Hard block: never send a second Ending Turn A Perfect-script to Live (ghost second audio).
+  // Allow the in-flight first kick (introKickInFlight) — blocking that left empty chat on はじめる.
+  if (
+    ending1Beat.introAudioSent &&
+    !ending1Beat.introKickInFlight &&
+    /what kind of fish should we catch|perfect!?\s*we made a fish tank/i.test(t)
+  ) {
+    dbg("sendClientText blocked; ending1 intro audio already sent", t.slice(0, 48));
+    return false;
+  }
   const now = Date.now();
   if (!force && t === lastOutboundText && now - lastOutboundAt < 2000) {
     dbg("sendClientText deduped", t.slice(0, 48));
@@ -6947,6 +7670,8 @@ function isThrottledCoachNote(key) {
   if (key.startsWith("ending1-next-")) return false;
   if (key.startsWith("ending1-auto-")) return false;
   if (key.startsWith("ending1-finale-")) return false;
+  if (key === "ending1-freetalk") return false;
+  if (key === "ending1-freetalk-repair") return false;
   if (key === "final1-done") return false;
   if (key.startsWith("advance-final1")) return false;
   if (key.startsWith("reply-")) return false;
@@ -7018,7 +7743,9 @@ function maybeSystemBackendLeakNudge() {
 function formatTeacherNote(text) {
   return (
     "[Coach — do not read aloud. Speak your reply out loud.]\n" +
-    String(text || "").replace(/^\[Teacher note[^\]]*\]\s*/i, "").replace(/^\[HIDDEN coach[^\]]*\]\s*/i, "")
+    adaptTeacherNoteForLevel(String(text || ""))
+      .replace(/^\[Teacher note[^\]]*\]\s*/i, "")
+      .replace(/^\[HIDDEN coach[^\]]*\]\s*/i, "")
   );
 }
 
@@ -7064,10 +7791,23 @@ function kickOpeningTurn(opts = {}) {
     return false;
   }
   if (actionState !== "active" && actionState !== "connecting") return false;
+  const state = loadLessonState();
+  // Ending Turn A: only forceEnding1Intro may speak — never also send ending1StartNudge.
+  if (getCurrentSegment(state)?.id === "ending1") {
+    const ok = forceEnding1Intro(kickOpts.reason || kickOpts.handoff ? "opening-handoff" : "opening");
+    // Only lock openingSent after a successful kick so SETUP_COMPLETE→active retry works.
+    if (ok) {
+      openingSent = true;
+      pendingOpeningKickOpts = null;
+      blockCoachUntilUserSpeaks = false;
+    } else {
+      dbg("ending1 opening kick failed; will retry", kickOpts.reason || "opening");
+    }
+    return ok;
+  }
   openingSent = true;
   pendingOpeningKickOpts = null;
   blockCoachUntilUserSpeaks = false;
-  const state = loadLessonState();
   let nudge;
   if (kickOpts.handoff || kickOpts.reason === "stuck_retry") {
     nudge = buildPart1HandoffOpeningNudge(state, {
@@ -7317,10 +8057,8 @@ function looksLikePraiseOnlyAssistant(text) {
 function needsContinuationNudge(text) {
   const t = String(text || "").trim();
   if (!t || endsWithLeadPrompt(t)) return false;
-  if (getCurrentSegment()?.id === "ending1" && !ending1AutoIntroComplete()) return false;
-  if (getCurrentSegment()?.id === "ending1" && ending1Beat.finaleCoachSent > 0 && !ending1FinaleComplete()) {
-    return false;
-  }
+  // Ending Turn A / free talk are client-owned — continuation nudges re-opened with Perfect!
+  if (getCurrentSegment()?.id === "ending1") return false;
   // Final1 user-turn coach already says praise + next cue — global continuation nudge caused double speech.
   if (getCurrentSegment()?.type === "final1") return false;
   // Warmup: never invent a next beat while waiting after How are you / What did you do…
@@ -8368,6 +9106,12 @@ function maybeCompleteCh2FromClient(userText) {
   return buildAdvanceNudge(result.state);
 }
 
+function clearAwaitingAssistantReply() {
+  awaitingAssistantReply = false;
+  pendingReplyText = "";
+  updateLearnyThinkingUI();
+}
+
 function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {}) {
   if (pendingReplyWatchId) {
     clearTimeout(pendingReplyWatchId);
@@ -8379,30 +9123,86 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
   pendingReplyWatchId = setTimeout(() => {
     pendingReplyWatchId = null;
     if (actionState !== "active" || !client?.connected) return;
-    if (hasAssistantReplySinceUser(userText) || hasAnyAssistantActivitySinceUserTurn(userText)) {
-      awaitingAssistantReply = false;
-      pendingReplyText = "";
+    // Free talk: only a chat bubble counts as a reply. Leftover playback audio from the
+    // previous turn used to clear the watch and leave the child with no answer.
+    const freeTalkWaiting =
+      getCurrentSegment()?.id === "ending1" && isEnding1FreeTalkActive();
+    if (freeTalkWaiting) {
+      if (hasAssistantReplySinceUser(userText)) {
+        clearAwaitingAssistantReply();
+        return;
+      }
+    } else if (
+      hasAssistantReplySinceUser(userText) ||
+      hasAnyAssistantActivitySinceUserTurn(userText)
+    ) {
+      clearAwaitingAssistantReply();
       return;
     }
 
     const nudge = () => {
       if (actionState !== "active" || !client?.connected) return;
-      if (hasAssistantReplySinceUser(userText) || hasAnyAssistantActivitySinceUserTurn(userText)) {
-        awaitingAssistantReply = false;
-        pendingReplyText = "";
+      if (freeTalkWaiting) {
+        if (hasAssistantReplySinceUser(userText)) {
+          clearAwaitingAssistantReply();
+          return;
+        }
+      } else if (
+        hasAssistantReplySinceUser(userText) ||
+        hasAnyAssistantActivitySinceUserTurn(userText)
+      ) {
+        clearAwaitingAssistantReply();
         return;
       }
       if (fromVoice) {
         if (needsEnding1Opening()) {
           dbg("voice ending1 opening fallback", userText.slice(0, 32));
           kickEnding1AutoIntro();
-          armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+          if (attempt + 1 < REPLY_WATCH_MAX) {
+            armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+          } else {
+            clearAwaitingAssistantReply();
+          }
           return;
         }
-        if (getCurrentSegment()?.id === "ending1") {
-          dbg("voice ending1 reply-watch force", userText.slice(0, 32));
+        if (getCurrentSegment()?.id === "ending1" && ending1Beat.finaleRequested) {
+          dbg("voice ending1 finale reply-watch force", userText.slice(0, 32));
           flushEnding1NextBeatCoach("voice-reply-watch");
-          armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+          if (attempt + 1 < REPLY_WATCH_MAX) {
+            armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+          } else {
+            clearAwaitingAssistantReply();
+          }
+          return;
+        }
+        if (getCurrentSegment()?.id === "ending1" && isEnding1FreeTalkActive()) {
+          // Free talk must freestyle — never re-send Child said:… (that double-spoke).
+          if (attempt === 0) {
+            closeOpenAudioTurn();
+            armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+            return;
+          }
+          if (!userTurnSentViaClientText) {
+            dbg("voice ending1 free-talk reply-watch", userText.slice(0, 32));
+            sendClientText(
+              withBeginnerSpeakRule(
+                buildChildOutbound(
+                  userText,
+                  buildEnding1FreeTalkOutboundCoach(userText)
+                )
+              ),
+              { force: true }
+            );
+            userTurnSentViaClientText = true;
+          } else {
+            dbg("voice ending1 free-talk recovery", userText.slice(0, 32));
+            nudgeEnding1FreeTalkReply(userText);
+          }
+          if (attempt + 1 < REPLY_WATCH_MAX) {
+            armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
+          } else {
+            clearAwaitingAssistantReply();
+          }
           return;
         }
         if (attempt === 0) {
@@ -8462,8 +9262,7 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
             ch2FoundElicitAlreadyDelivered()
           ) {
             dbg("voice reply-watch skip duplicate ch2 elicit");
-            awaitingAssistantReply = false;
-            pendingReplyText = "";
+            clearAwaitingAssistantReply();
             return;
           }
           sendClientText(
@@ -8479,8 +9278,7 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
         if (attempt + 1 < REPLY_WATCH_MAX) {
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: true });
         } else {
-          awaitingAssistantReply = false;
-          pendingReplyText = "";
+          clearAwaitingAssistantReply();
         }
         return;
       }
@@ -8492,19 +9290,51 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
         if (attempt + 1 < REPLY_WATCH_MAX) {
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
         } else {
-          awaitingAssistantReply = false;
-          pendingReplyText = "";
+          clearAwaitingAssistantReply();
         }
         return;
       }
-      if (getCurrentSegment()?.id === "ending1") {
-        // Client owns ending turns — re-force the scripted line, never freestyle child-outbound.
+      if (getCurrentSegment()?.id === "ending1" && ending1Beat.finaleRequested) {
         flushEnding1NextBeatCoach("reply-watch");
         if (attempt + 1 < REPLY_WATCH_MAX) {
           armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
         } else {
-          awaitingAssistantReply = false;
-          pendingReplyText = "";
+          clearAwaitingAssistantReply();
+        }
+        return;
+      }
+      if (getCurrentSegment()?.id === "ending1" && isEnding1FreeTalkActive()) {
+        // Initial typed send already delivered child+coach. Re-sending Child said:…
+        // made Gemini answer twice — recover with a teacher-only nudge instead.
+        if (!userTurnSentViaClientText) {
+          dbg("typed ending1 free-talk reply-watch", userText.slice(0, 32));
+          sendClientText(
+            withBeginnerSpeakRule(
+              buildChildOutbound(userText, buildEnding1FreeTalkOutboundCoach(userText))
+            ),
+            { force: true }
+          );
+          userTurnSentViaClientText = true;
+        } else if (attempt >= 1) {
+          dbg("typed ending1 free-talk recovery", userText.slice(0, 32));
+          nudgeEnding1FreeTalkReply(userText);
+        } else {
+          dbg("typed ending1 free-talk wait", userText.slice(0, 32));
+        }
+        if (attempt + 1 < REPLY_WATCH_MAX) {
+          armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
+        } else {
+          clearAwaitingAssistantReply();
+        }
+        return;
+      }
+      if (getCurrentSegment()?.id === "ending1") {
+        // Intro not done yet — keep forcing Turn A.
+        flushEnding1NextBeatCoach("reply-watch");
+        if (attempt + 1 < REPLY_WATCH_MAX) {
+          armPendingReplyWatch(userText, attempt + 1, { fromVoice: false });
+        } else {
+          clearAwaitingAssistantReply();
         }
         return;
       }
@@ -8644,7 +9474,7 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
   stackedSpeechInterruptedFor = "";
   maybeWarmupCoachOnUserTurn(t, { fromVoice });
   maybeCh1CoachOnUserTurn(t, { fromVoice });
-  userTurnSentViaClientText = fromVoice ? false : userTurnSentViaClientText;
+  userTurnSentViaClientText = false;
   bumpIdleGeneration();
   clearLeadWatch();
   leadWatchArmedFor = "";
@@ -8695,6 +9525,7 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
       const ch1Coach = buildCh1OutboundCoach(t);
       const daily1Coach = buildDaily1OutboundCoach(t);
       const final1Coach = buildFinal1OutboundCoach(t);
+      const endingFreeTalkCoach = buildEnding1FreeTalkOutboundCoach(t);
       const coach =
         quiz1Coach ||
         quizGate ||
@@ -8703,6 +9534,7 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
         ch1Coach ||
         daily1Coach ||
         final1Coach ||
+        endingFreeTalkCoach ||
         buildCh5OutboundCoach(t) ||
         buildCh4OutboundCoach(t) ||
         buildCh2OutboundCoach(t);
@@ -8715,9 +9547,11 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
           Boolean(ch1Coach) ||
           Boolean(daily1Coach) ||
           Boolean(final1Coach) ||
+          Boolean(endingFreeTalkCoach) ||
           getCurrentSegment()?.id === "quiz1" ||
           getCurrentSegment()?.id === "daily1" ||
           getCurrentSegment()?.id === "final1" ||
+          getCurrentSegment()?.id === "ending1" ||
           getCurrentSegment()?.id === "ch1" ||
           getCurrentSegment()?.id === "ch5" ||
           getCurrentSegment()?.id === "ch4" ||
@@ -8778,10 +9612,12 @@ function sendUserText(text) {
     return;
   }
   // Prefer MCQ path when buttons are up — keeps progress + reply-watch in sync.
+  // Intermediate: same path for voice/typed answers (no buttons).
   if (tryRouteFinal1Answer(t)) return;
+  if (tryRouteQuiz1Answer(t)) return;
   if (tryRouteTextToMcq(t)) return;
 
-  addMessage(t, "user");
+  addUserAnswerBubble(t);
   assistantTranscriptOpen = false;
   turnEndProcessed = false;
   cancelAssistantTurnEnd();
@@ -8845,22 +9681,16 @@ function sendUserText(text) {
       if (isCh2FoundElicitCoachNote(ch2Coach)) ch2ElicitCoachSentAt = Date.now();
     }
   } else if (getCurrentSegment()?.id === "ending1") {
-    coachNote = buildEnding1OutboundCoach() || "";
+    coachNote =
+      buildEnding1OutboundCoach() || buildEnding1FreeTalkOutboundCoach(t) || "";
   }
 
-  // Fish-kind answer → client forces how-many. How-many answer → client forces finale.
-  // Skipping the child Live turn stops Gemini freestyle ("Five!" after 虹色).
-  const endingFishAnswerTurn =
+  // Only client-own the goodbye after 終わりにする — free talk must reach Gemini normally.
+  const endingFinaleOwnedTurn =
     getCurrentSegment()?.id === "ending1" &&
-    ending1AutoIntroComplete() &&
-    ending1Beat.userTurns === 0 &&
+    ending1Beat.finaleRequested &&
     !ending1FinaleComplete();
-  const endingFinaleAnswerTurn =
-    getCurrentSegment()?.id === "ending1" &&
-    ending1AutoIntroComplete() &&
-    ending1Beat.userTurns >= 1 &&
-    !ending1FinaleComplete();
-  const endingClientOwnedTurn = endingFishAnswerTurn || endingFinaleAnswerTurn;
+  const endingClientOwnedTurn = endingFinaleOwnedTurn;
 
   // Daily English / Ch2: keep coach payload short — long notes stall Live replies.
   const segId = getCurrentSegment()?.id;
@@ -8871,31 +9701,16 @@ function sendUserText(text) {
       : buildChildOutbound(t, coachNote, { maxCoach });
 
   // Side effects BEFORE deferred send — bumpIdleGeneration() must not cancel whenAssistantIdle(sendNow).
-  const endingTurnsBefore = ending1Beat.userTurns;
   processUserProgressSideEffects(t, { skipWarmup: true, skipCh2: true, skipDaily1: true });
 
   if (handoffNow || endingClientOwnedTurn) {
     typedSendSkippedForVoice = false;
     userTurnSentViaClientText = endingClientOwnedTurn;
-    if (endingFinaleAnswerTurn) {
-      // Advance kicks finale when userTurns goes 1→2. Retry messages (already ≥2) must bypass cooldown.
-      const isRetry = endingTurnsBefore >= 2;
-      if (ending1Beat.userTurns >= 2 && !ending1FinaleComplete()) {
-        if (isRetry || !ending1Beat.finaleCoachSent) {
-          kickEnding1FinaleChain(isRetry ? "typed-finale-retry" : "typed-finale-backup", {
-            bypassCooldown: isRetry,
-          });
-        }
+    if (endingFinaleOwnedTurn) {
+      if (!ending1Beat.finaleCoachSent || !ending1FinaleComplete()) {
+        kickEnding1FinaleChain("typed-finale-backup", { bypassCooldown: true });
       }
-      dbg("typed send skipped; ending finale client-owned", { isRetry, turns: ending1Beat.userTurns });
-    } else if (endingFishAnswerTurn) {
-      // Side effects already forced how-many; only retry if that force did not run.
-      if (!ending1Beat.howManyForced) {
-        whenAssistantIdle(() => {
-          forceEnding1Beat4(t, "typed-fish-answer");
-        }, "ending1-beat4");
-      }
-      dbg("typed send skipped; ending how-many client-owned");
+      dbg("typed send skipped; ending finale client-owned");
     } else {
       dbg("typed send skipped; chapter handoff pending");
     }
@@ -9145,17 +9960,18 @@ function handleTools(functionCalls) {
       if (
         sid === "ending1" &&
         getActiveLessonId() === "part1" &&
-        !ending1FinaleComplete() &&
-        !looksLikeEnding1FinalLineComplete(lastAssistantText())
+        (!ending1Beat.finaleRequested ||
+          (!ending1FinaleComplete() && !looksLikeEnding1FinalLineComplete(lastAssistantText())))
       ) {
         queueReply(
           id,
           name,
           {
             result: "not_yet",
-            message:
-              "Ending is NOT done yet — finish lines 5→6 (back-to-back), then complete_segment(ending1). " +
-              ending1CoachHint(),
+            message: !ending1Beat.finaleRequested
+              ? "Still FREE TALK after the fish question. Do NOT complete_segment yet. Chat freely until the child taps 終わりにする."
+              : "Ending goodbye is NOT done yet — speak the Turn C finale (わくわく + Next Minecraft… See you next time!), then complete_segment(ending1). " +
+                ending1CoachHint(),
           },
           toolReplyScheduling()
         );
@@ -9207,12 +10023,16 @@ function handleTools(functionCalls) {
       }
       configureGeminiClient(client);
       const willHandoff = !result.alreadyDone && shouldHandoffAfter(sid);
+      const nextSeg = getCurrentSegment(result.state);
+      // Ending Turn A is client-forced — never also send ending1StartNudge (second Perfect!).
       const advanceMsg = result.alreadyDone
         ? "Already on the next chapter. Continue that chapter; end with one question."
         : willHandoff
           ? "Segment complete. Next chapter starts NOW on this session — stay silent; the client will open the next chapter."
-          : buildAdvanceNudge(result.state) ||
-            "Segment advanced. Continue from system instructions. One short beat ending with a question.";
+          : nextSeg?.id === "ending1"
+            ? "Segment complete. Stay SILENT — client owns Ending Turn A. Do NOT say Perfect / Hold on / what kind of fish."
+            : buildAdvanceNudge(result.state) ||
+              "Segment advanced. Continue from system instructions. One short beat ending with a question.";
       queueReply(
         id,
         name,
@@ -9228,6 +10048,11 @@ function handleTools(functionCalls) {
             reason: `after-${sid}`,
             lastQuote: quote,
           });
+        } else if (nextSeg?.id === "ending1") {
+          // Client owns the intro kick (forceEnding1OpeningAfterFinal1 / kickEnding1AutoIntro).
+          if (!ending1Beat.introNoteSent && ending1Beat.autoCoachSent === 0) {
+            forceEnding1OpeningAfterFinal1("tool-advance");
+          }
         } else {
           const advanceKey = `advance-${sid}-${result.state.segmentIndex}`;
           setTimeout(() => {
@@ -9287,6 +10112,15 @@ function handleMessage(message) {
         // Transcription finished ⇒ user turn is done. Force activity_end and
         // close the mic gate so Gemini starts speaking immediately.
         closeOpenAudioTurn();
+        // Intermediate voice-only: route through MCQ/quiz handlers so admin progress matches taps.
+        if (
+          isIntermediateVoiceOnly() &&
+          (tryRouteFinal1Answer(spoken) ||
+            tryRouteQuiz1Answer(spoken) ||
+            tryRouteTextToMcq(spoken))
+        ) {
+          break;
+        }
         processUserProgressSideEffects(spoken, { fromVoice: true, skipCh2: true });
       }
       break;
@@ -10026,7 +10860,11 @@ async function handleActionButton() {
   userActivityOpen = false;
   sessionResumeHandle = null;
   intentionalDisconnect = false;
-  isMuted = true;
+  isMuted = false;
+  // Fresh call on ending must re-kick Turn A (stale intro flags left empty chat).
+  if (getCurrentSegment()?.id === "ending1") {
+    resetEnding1Beat();
+  }
   restoreChapterUiFromLessonState();
   const resumingMidChapter = isMidChapterResume();
   clearPendingReplyWatch();
@@ -10197,28 +11035,83 @@ function pokeLearny() {
   });
 
   // Scripted stuck paths: prefer exact beat forces over a generic continue.
+  if (seg?.id === "final1") {
+    initFinal1QuizIfNeeded();
+    const quote = String(lastPendingUserText || recentUserMessages(1)[0] || "final challenge done").trim();
+    if (isFinal1QuizFinished()) {
+      if (maybeCompleteFinal1FromClient(quote)) return true;
+      if (getCurrentSegment()?.id === "ending1") {
+        forceEnding1OpeningAfterFinal1("poke-recover");
+        return true;
+      }
+    }
+    const next = currentFinal1Prompt();
+    if (next) {
+      try {
+        closeOpenAudioTurn();
+      } catch {
+        // ignore
+      }
+      awaitingAssistantReply = true;
+      updateLearnyThinkingUI();
+      return sendClientText(
+        withBeginnerSpeakRule(
+          formatTeacherNote(
+            "[Teacher note — do not read aloud] poke. Final1 — speak EXACTLY ONE turn: brief ack if needed, then ask ONCE: " +
+              next +
+              (final1RemainingCount() === 1 ? " (LAST question.)" : "") +
+              " FORBIDDEN: inventing cues / bare は えいごで？." +
+              beginnerTurnHint()
+          )
+        ),
+        { force: true }
+      );
+    }
+    if (maybeCompleteFinal1FromClient(quote)) return true;
+  }
   if (seg?.id === "ending1") {
     syncEnding1AutoProgress();
     syncEnding1FinaleProgress();
     if (!ending1AutoIntroComplete()) {
+      // Never clear the one-shot gate while Turn A is playing / seeded — that re-spoke Perfect.
+      if (
+        ending1Beat.introDisplayLocked ||
+        ending1Beat.introHeardPerfect ||
+        ending1HasPerfectLeadInChat() ||
+        (ending1Beat.introNoteSent && ending1Beat.introSeededAt && Date.now() - ending1Beat.introSeededAt < 20000)
+      ) {
+        dbg("poke skipped; ending1 Turn A already in flight");
+        return true;
+      }
+      // Dead kick only: flags set but nothing seeded/heard for a long time.
+      if (
+        (ending1Beat.introNoteSent || ending1Beat.introAudioSent || ending1Beat.autoCoachSent > 0) &&
+        !ending1Beat.introSeededAt
+      ) {
+        ending1Beat.introNoteSent = false;
+        ending1Beat.introAudioSent = false;
+        ending1Beat.autoCoachSent = 0;
+        ending1Beat.lastForceAt = 0;
+        ending1Beat.lastForceKind = "";
+      }
       forceEnding1Intro("poke");
       return true;
     }
-    if (ending1Beat.userTurns >= 2 && !ending1FinaleComplete()) {
+    enterEnding1FreeTalkIfReady();
+    if (ending1Beat.finaleRequested && !ending1FinaleComplete()) {
+      // Recover stuck Turn C: scheduled/sent flags with no goodbye speech.
+      if (!assistantSaidEnding1Finale()) {
+        ending1Beat.finaleForceScheduled = false;
+        if (ending1Beat.finaleNoteSent && Date.now() - (ending1Beat.finaleScheduledAt || 0) > 2500) {
+          ending1Beat.finaleNoteSent = false;
+        }
+        ending1Beat.lastForceAt = 0;
+        ending1Beat.lastForceKind = "";
+      }
       kickEnding1FinaleChain("poke-finale", { bypassCooldown: true });
       return true;
     }
-    if (
-      ending1Beat.userTurns >= 1 &&
-      !ending1FinaleComplete() &&
-      (!assistantSaidEnding1Beat4() || ending1InventedFishCount())
-    ) {
-      ending1Beat.howManyForced = false;
-      ending1Beat.lastForceKind = "";
-      ending1Beat.lastForceAt = 0;
-      forceEnding1Beat4(lastPendingUserText || "", "poke-how-many");
-      return true;
-    }
+    // Free talk: fall through to generic continue poke.
   }
   if (seg?.id === "daily1") {
     syncDaily1RalliesFromChat();
@@ -10248,6 +11141,10 @@ btnRetry?.addEventListener("click", () => {
   if (actionState !== "active" || isHandoffRunning || isChapterHandoff) return;
   if (tryCompleteWarmupIfUserAgreedAfterInvite()) return;
   pokeLearny();
+});
+btnEndingEnd?.addEventListener("click", () => {
+  if (actionState !== "active" || isHandoffRunning || isChapterHandoff) return;
+  endEnding1FreeTalkFromButton();
 });
 btnSend?.addEventListener("click", () => {
   const text = chatInput.value.trim();
