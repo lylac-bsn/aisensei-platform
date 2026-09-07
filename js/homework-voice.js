@@ -870,6 +870,8 @@ let bannerSegmentId = "";
 const ENDING1_INTRO_COUNT = 1;
 const ENDING1_FINALE_START_INDEX = 1;
 const ENDING1_FINALE_COUNT = 1;
+/** Hidden free-talk cap — auto-ends with Turn C so a forgotten call cannot burn Gemini Live. */
+const ENDING1_FREE_TALK_MAX_MS = 30 * 60 * 1000;
 
 const ENDING1_INTRO_SPEAK =
   "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
@@ -1139,6 +1141,7 @@ function claimEnding1IntroIfGeminiStarted() {
 function resetEnding1Beat() {
   cancelEnding1OpeningTimer();
   clearEnding1IntroQuietTimer();
+  clearEnding1FreeTalkTimer();
   ending1Beat = {
     userTurns: 0,
     autoSpoken: 0,
@@ -1292,6 +1295,43 @@ function isEnding1FreeTalkActive() {
   );
 }
 
+let ending1FreeTalkTimerId = null;
+
+function clearEnding1FreeTalkTimer() {
+  if (ending1FreeTalkTimerId) {
+    clearTimeout(ending1FreeTalkTimerId);
+    ending1FreeTalkTimerId = null;
+  }
+}
+
+/** Silent 30-minute free-talk cap (no UI). */
+function armEnding1FreeTalkTimer() {
+  clearEnding1FreeTalkTimer();
+  ending1FreeTalkTimerId = setTimeout(() => {
+    ending1FreeTalkTimerId = null;
+    dbg("ending1 free-talk 30m cap reached");
+    endEnding1FreeTalkFromTimeout();
+  }, ENDING1_FREE_TALK_MAX_MS);
+}
+
+/** Auto-end free talk after the hidden cap — same Turn C path as 終わりにする. */
+function endEnding1FreeTalkFromTimeout() {
+  if (getCurrentSegment()?.id !== "ending1") return false;
+  if (ending1FinaleComplete() || ending1Beat.finaleRequested) return false;
+  if (actionState !== "active" || !client?.connected) {
+    try {
+      disconnectAPI();
+    } catch {
+      // ignore
+    }
+    actionState = "idle";
+    updateActionUI();
+    return false;
+  }
+  dbg("ending1 free-talk auto-ended by timer");
+  return endEnding1FreeTalkFromButton();
+}
+
 function paintEndingEndButton() {
   if (!btnEndingEnd) return;
   const show = isEnding1FreeTalkActive() && actionState === "active";
@@ -1311,6 +1351,10 @@ function enterEnding1FreeTalkIfReady() {
   const firstEnter = !ending1Beat.freeTalk;
   ending1Beat.freeTalk = true;
   paintEndingEndButton();
+  if (firstEnter) {
+    // Hidden cost guard — never shown in UI.
+    armEnding1FreeTalkTimer();
+  }
   if (firstEnter && !ending1Beat.freeTalkAnnounced) {
     ending1Beat.freeTalkAnnounced = true;
     whenAssistantIdle(() => {
@@ -1332,6 +1376,7 @@ function endEnding1FreeTalkFromButton() {
   if (getCurrentSegment()?.id !== "ending1") return false;
   if (actionState !== "active" || !client?.connected) return false;
   if (ending1FinaleComplete()) return false;
+  clearEnding1FreeTalkTimer();
   syncEnding1AutoProgress();
   if (!ending1AutoIntroComplete()) {
     forceEnding1Intro("end-before-intro");
