@@ -132,7 +132,7 @@ const voice = "Kore";
 const temperature = 0.9;
 const volumeLevel = 80;
 /** Part 1: reconnect Live after these segments complete (fresh system instructions). */
-const PART1_HANDOFF_AFTER = new Set(["ch0", "ch1", "ch2", "ch3", "quiz1", "ch4", "ch5", "daily1", "ch6"]);
+const PART1_HANDOFF_AFTER = new Set(["ch0", "ch1", "ch2", "ch3", "quiz1", "ch4", "ch5", "daily1", "ch6", "final1"]);
 const HANDOFF_MARKER = "__HANDOFF__";
 /**
  * Chapter handoff uses a FAST hard reconnect (reuse mic/speaker; new Live session).
@@ -906,6 +906,8 @@ const ENDING1_BEATS = [
 
 /** Pending delayed kick after final1 → ending1 (cancel on reset / second schedule). */
 let ending1OpeningTimerId = null;
+/** Watch for Perfect bubble seeded without audio. */
+let ending1IntroAudioWatchId = null;
 
 let ending1Beat = {
   userTurns: 0,
@@ -939,6 +941,10 @@ function resetEnding1Beat() {
   if (ending1OpeningTimerId) {
     clearTimeout(ending1OpeningTimerId);
     ending1OpeningTimerId = null;
+  }
+  if (ending1IntroAudioWatchId) {
+    clearTimeout(ending1IntroAudioWatchId);
+    ending1IntroAudioWatchId = null;
   }
   ending1Beat = {
     userTurns: 0,
@@ -2320,11 +2326,12 @@ function buildFinal1OutboundCoach(userText) {
 
   const cue = item.promptHira || item.promptJa || "";
   if (!matchesFinal1Answer(t, item)) {
+    const retry = pickMcqRetryPattern();
     return (
       "[Teacher note — do not read aloud] Final1 soft retry — wrong answer for current cue. " +
       "Speak EXACTLY this soft retry (EN then JP), then ask the SAME cue ONCE more. " +
       "Do NOT reveal the answer. Say: " +
-      MCQ_RETRY_SPEAK +
+      retry.speak +
       " Then cue: " +
       cue +
       beginnerTurnHint()
@@ -2404,6 +2411,9 @@ function handleFinal1ChoiceClick(label) {
   // Last item done → client completes + kicks ending. Do NOT send a final1
   // complete_segment coach (that raced the ending Perfect script / left Learny stuck).
   if (correct && isFinal1QuizFinished()) {
+    clearPendingReplyWatch();
+    awaitingAssistantReply = false;
+    updateLearnyThinkingUI();
     maybeCompleteFinal1FromClient(label);
     renderChoiceBar(getCurrentSegment());
     return;
@@ -2524,6 +2534,12 @@ function maybeCompleteFinal1FromClient(userText) {
   }
   updateLessonBanner();
   renderChoiceBar(getCurrentSegment());
+  // Prefer a fresh Live session for Ending Turn A. Same-socket soft kicks after a
+  // voice answer (esp. intermediate) often seed the Perfect bubble with no audio
+  // and leave the banner stuck as if ending never loaded.
+  if (afterSegmentAdvanced("final1", result, { lastQuote: quote })) {
+    return true;
+  }
   if (client) configureGeminiClient(client);
   forceEnding1OpeningAfterFinal1(result.alreadyDone ? "auto-complete-already" : "auto-complete");
   return true;
@@ -5760,17 +5776,58 @@ function buildMcqSpeakCoach(beat) {
   );
 }
 
-const MCQ_RETRY_TITLE = "おしい！ちがうよ — もういちど！";
-const MCQ_RETRY_SPEAK =
-  "Nice try! Not quite — try again! おしい！ちがうよ。もういちど！";
+const MCQ_RETRY_PATTERNS = [
+  {
+    title: "おしい！ちがうよ — もういちど！",
+    speak: "Nice try! Not quite — try again! おしい！ちがうよ。もういちど！",
+  },
+  {
+    title: "ざんねん！もういっかい！",
+    speak: "Almost! Give it another go! ざんねん！もう いっかい チャレンジしてね！",
+  },
+  {
+    title: "ちがうみたい — もういちど！",
+    speak: "Hmm, not that one. Try again! ん〜、ちがうみたい。もういちど えらんでね！",
+  },
+  {
+    title: "おしい！つぎいこう！",
+    speak: "So close! One more try! おしい！もう すこし！もういちど！",
+  },
+  {
+    title: "いいちょうせん！もういちど！",
+    speak: "Good try! Let's pick again! いい ちょうせんだよ！もういちど えらぼう！",
+  },
+  {
+    title: "おっと！もういっかい！",
+    speak: "Oops! Try a different one! おっと！べつの のを ためしてみて！",
+  },
+];
+
+let mcqRetryPatternIndex = -1;
+
+function pickMcqRetryPattern() {
+  if (MCQ_RETRY_PATTERNS.length < 2) return MCQ_RETRY_PATTERNS[0];
+  let next = Math.floor(Math.random() * MCQ_RETRY_PATTERNS.length);
+  // Avoid saying the exact same retry line twice in a row.
+  if (next === mcqRetryPatternIndex) {
+    next = (next + 1) % MCQ_RETRY_PATTERNS.length;
+  }
+  mcqRetryPatternIndex = next;
+  return MCQ_RETRY_PATTERNS[next];
+}
+
+/** @deprecated Prefer pickMcqRetryPattern(); kept as first-pattern aliases. */
+const MCQ_RETRY_TITLE = MCQ_RETRY_PATTERNS[0].title;
+const MCQ_RETRY_SPEAK = MCQ_RETRY_PATTERNS[0].speak;
 
 function buildMcqWrongRetryCoach(reaskCoach = "") {
+  const pattern = pickMcqRetryPattern();
   return (
     "[Teacher note — do not read aloud] Wrong MCQ choice. " +
     "Speak EXACTLY this soft retry (EN then JP), then re-ask the SAME question. " +
     "Do NOT reveal the correct answer. Do NOT advance. " +
     "Say: " +
-    MCQ_RETRY_SPEAK +
+    pattern.speak +
     (reaskCoach ? " Then: " + reaskCoach : "")
   );
 }
@@ -5784,8 +5841,13 @@ function flashMcqIncorrectFeedback(wrongLabel) {
   }
   if (!choiceBar || choiceBar.hidden) return;
   const title = choiceBar.querySelector(".lesson-choice-title");
+  // Prefer the pattern just chosen for the coach; fall back to a fresh pick for UI-only flashes.
+  const pattern =
+    mcqRetryPatternIndex >= 0
+      ? MCQ_RETRY_PATTERNS[mcqRetryPatternIndex]
+      : pickMcqRetryPattern();
   if (title) {
-    title.textContent = MCQ_RETRY_TITLE;
+    title.textContent = pattern.title;
     title.classList.add("is-retry");
   }
   const needle = normalizeMcqChoice(wrongLabel);
@@ -7238,6 +7300,44 @@ function seedEnding1IntroBubble() {
   updateLessonBanner();
   paintEndingEndButton();
   scheduleEnding1IntroUnlock();
+  armEnding1IntroAudioWatch();
+}
+
+/** If Perfect bubble was seeded but Gemini never spoke, reconnect Ending on a fresh session. */
+function armEnding1IntroAudioWatch() {
+  if (ending1IntroAudioWatchId) {
+    clearTimeout(ending1IntroAudioWatchId);
+    ending1IntroAudioWatchId = null;
+  }
+  const seededAt = ending1Beat.introSeededAt || Date.now();
+  const audioBefore = lastAssistantAudioAt || 0;
+  ending1IntroAudioWatchId = setTimeout(() => {
+    ending1IntroAudioWatchId = null;
+    if (actionState !== "active" || !client?.connected) return;
+    if (getCurrentSegment()?.id !== "ending1") return;
+    if (!ending1Beat.introDisplayLocked || ending1Beat.finaleRequested) return;
+    const heardAudio =
+      (lastAssistantAudioAt || 0) > audioBefore || (lastAssistantAudioAt || 0) >= seededAt - 250;
+    if (heardAudio || assistantIsSpeaking()) return;
+    dbg("ending1 intro audio missing — recovering with handoff");
+    ending1Beat.introDisplayLocked = false;
+    ending1Beat.introNoteSent = false;
+    ending1Beat.introAudioSent = false;
+    ending1Beat.autoCoachSent = 0;
+    ending1Beat.introKickInFlight = false;
+    ending1Beat.introSeededAt = 0;
+    ending1Beat.lastForceAt = 0;
+    ending1Beat.lastForceKind = "";
+    // Drop the silent Perfect bubble so reconnect can seed a fresh spoken Turn A.
+    const last = chatMessages[chatMessages.length - 1];
+    if (last?.type === "assistant" && last.ending1Exact) {
+      chatMessages.pop();
+      scheduleRenderChat();
+    }
+    if (!isHandoffRunning && !isChapterHandoff) {
+      scheduleChapterHandoff({ reason: "ending1-intro-audio-recover", lastQuote: "" });
+    }
+  }, 4500);
 }
 
 let ending1FinaleSpeechWatchId = null;
