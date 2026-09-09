@@ -23,7 +23,12 @@ assert.match(
   voice,
   /Keep next-chapter MCQ hidden the whole time/
 );
+assert.match(
+  voice,
+  /Refresh after those flags clear so Daily→Ch6/
+);
+assert.match(voice, /renderChoiceBar\(getCurrentSegment\(\)\);\s*\n\s*\}\s*\n\}/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-final1-mcq-keep-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-1/);
 
 console.log("check-ch6-mcq-handoff-gate: ok");

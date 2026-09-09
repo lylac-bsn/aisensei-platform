@@ -38,11 +38,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-final1-mcq-keep-1";
+} from "./lesson-engine.js?v=20260910-ch6-mcq-show-1";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-final1-mcq-keep-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-ch6-mcq-show-1";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-final1-mcq-keep-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-ch6-mcq-show-1";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -56,7 +56,7 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-final1-mcq-keep-1";
+} from "./mcq-engine.js?v=20260910-ch6-mcq-show-1";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
@@ -64,7 +64,7 @@ import {
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
   formatCh4ColorChoiceLabel,
-} from "./mcq-audio-config.js?v=20260910-final1-mcq-keep-1";
+} from "./mcq-audio-config.js?v=20260910-ch6-mcq-show-1";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,
@@ -13884,6 +13884,7 @@ async function softHandoffToCurrentSegment({ reason = "handoff", lastQuote = "" 
     isHandoffRunning = false;
     isChapterHandoff = false;
     updateActionUI();
+    renderChoiceBar(getCurrentSegment());
   }
 }
 
@@ -14038,6 +14039,10 @@ async function handoffToCurrentSegment({ reason = "handoff", lastQuote = "" } = 
     if (endingTurnAPrewarm) endChapterTransition();
     flushEnding1QueuedChildTurn("handoff-complete");
     updateActionUI();
+    // kickOpeningTurn may seed the opening + clear the MCQ gate while
+    // isHandoffRunning/isChapterHandoff are still true, which hides Beat 1.
+    // Refresh after those flags clear so Daily→Ch6 (and similar) show buttons.
+    renderChoiceBar(getCurrentSegment());
   }
 }
 
