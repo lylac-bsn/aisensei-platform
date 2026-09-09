@@ -1,11 +1,11 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-accuracy-best-1";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-accuracy-best-1";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-accuracy-best-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-daily1-latency-1";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-daily1-latency-1";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-daily1-latency-1";
 import {
   buildPartReporting,
   normalizeIdList,
   PROGRESS_CONTRACT_VERSION,
-} from "./progress-contract.js?v=20260910-accuracy-best-1";
+} from "./progress-contract.js?v=20260910-daily1-latency-1";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -434,7 +434,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260910-accuracy-best-1")
+  import("./badge-engine.js?v=20260910-daily1-latency-1")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges();
       if (newlyEarned?.length) {
@@ -967,14 +967,11 @@ function ch4StoryRule() {
   return [
     "CHAPTER 4 ONLY — choose a favorite color and make that coloured glass. ONE beat per turn — never combine beats.",
     "Minecraft note: dye is already at a pre-prepared 花壇 (flower bed). Child just picks it up — do NOT teach I need a dye / I found a flower / flower hunting.",
-    "Beat A1: What's your favorite color? / すきな いろは？ Then WAIT. Record favoriteColor with record_memory. NEVER assume blue. " +
-      "If the child names a colour outside the lesson set (rainbow, gold, etc.): do NOT save it. Speak the picker line and WAIT for a button tap. " +
-      "Picker line EXACTLY: Which colour would you pick out of these? この中だったらどの色がすき？",
-    "Beat A2 (NEXT turn after color): short varied praise + Let's make [color] coloured glass! / [colorJa]いろの がらすを つくろう！ Then STOP and WAIT. " +
-      "FORBIDDEN: Beat B, MCQ, I made [color] glass!, or [color] glass! Great job in the same turn.",
-    "Beat B (NEXT turn after A2): Speak EXACTLY: Tell me when you make one! つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ " +
-      "Japanese ONLY inside 「」 — FORBIDDEN: 「I made [color] glass!」 or any English in brackets. " +
-      "THEN show 4-button MCQ. FORBIDDEN: repeat favorite color or Let's make.",
+    "Beat A1: Speak EXACTLY What's your favorite color? / すきな いろは？ Colour MCQ buttons are on screen. WAIT for a button tap only. " +
+      "Record favoriteColor only from a button (orange/red/blue/green/yellow/pink). NEVER assume blue. " +
+      "FORBIDDEN: accepting spoken/typed colour words / inventing rainbow or gold / free-text colour answers.",
+    "Beat A2+B (NEXT turn after colour button): ONE combined client-owned make+tell line, then glass MCQ. " +
+      "FORBIDDEN: asking favorite color again.",
     "When child taps/says I made [color] glass!: praise → call complete_segment(ch4) immediately. Next is Chapter 5 walls.",
     "FORBIDDEN on Ch4: I need a dye, I found a flower, I choose ___, Did you make one?, long crafting, I put glass here, walls (Chapter 5).",
   ].join(" ");
@@ -983,11 +980,11 @@ function ch4StoryRule() {
 function ch4StartNudge() {
   return (
     "[Teacher note — do not read aloud] CHAPTER 4 color start NOW. English then ひらがな. " +
-    "Beat A1 ONLY: What's your favorite color? すきな いろは？ Then WAIT. " +
-    "Record favoriteColor. NEVER assume blue. " +
-    "NEXT beats (separate turns): A2 Let's make [color] coloured glass! → B Tell me when you make one! + MCQ. " +
+    "Beat A1 ONLY: Speak EXACTLY What's your favorite color? すきな いろは？ Then WAIT for a colour button tap. " +
+    "Colour MCQ is on screen — do NOT accept spoken/typed colours. " +
+    "NEXT (after button): client delivers combined make+tell → glass MCQ. " +
     "Dye is at the pre-prepared 花壇 — do NOT teach I need a dye / I found a flower. " +
-    "FORBIDDEN: walls, I put glass here, MCQ before Beat B, [color] glass! Great job."
+    "FORBIDDEN: walls, I put glass here, glass MCQ before make+tell."
   );
 }
 
@@ -1038,7 +1035,8 @@ function quiz1Rule() {
   return [
     "MINI QUIZ 1 ONLY — exactly 3 items in FIXED order. Never invent questions. Never ask すなが ひつよう.",
     "QUIZ SPEAKING (overrides beginner EN→JP): Speak the quiz in FULL Japanese ひらがな only. Do NOT say English first. Do NOT speak the English choices aloud — child taps a 4-button choice.",
-    "Speak EVERY mora of the cue inside 「」 aloud — never shorten. FORBIDDEN: がらすが英語で? without ひつよう.",
+    "Speak EVERY mora of the cue inside 「」 aloud word-by-word — never shorten. " +
+      "FORBIDDEN: くいずたいむ！は英語で？ / くいずたいむ！はえいごで？ without the cue inside 「」; がらすが英語で without ひつよう; saying 英語 instead of えいご.",
     "Item 1 EXACT: くいずたいむ！「がらすが ひつよう」は えいごで？ Correct: I need glass.",
     "Item 2 EXACT: じゃあ つぎは 「すなを みつけた」は えいごで？ Correct: I found some sand.",
     "Item 3 EXACT: じゃあ つぎは 「がらすを つくった！」は えいごで？ Correct: I made glass.",
@@ -1155,11 +1153,11 @@ function ending1Rule() {
   return [
     "ENDING — three phases. Do NOT invent How many / なんびき.",
     "Phase 1 Turn A: Stay SILENT until the client sends the exact Turn A script. Then speak that script ONCE (full English + ひらがな) and WAIT. Never start Turn A on your own. Never repeat it.",
-    "Phase 2 GENUINE OPEN-ENDED FREE TALK (after Turn A): Be the child's friendly English teacher. React specifically to what the child says, then ask ONE natural, friendly follow-up about their words. ONE complete turn only: English first, then matching ひらがな once — never restart or repeat the English. Follow the child's topic with no scripted progression and no automatic turn limit.",
+    "Phase 2 GENUINE OPEN-ENDED FREE TALK (after Turn A): Be the child's friendly English teacher. React specifically to what the child says, then ask ONE natural, friendly follow-up about their words. ONE complete turn only: English first, then matching ひらがな with the SAME meaning in the SAME turn — English-only is FORBIDDEN; never restart or repeat the English. Follow the child's topic with no scripted progression and no automatic turn limit.",
     "During Phase 2, NEVER steer, suggest, hint, or direct the conversation toward ending; never mention the end button/control. Do NOT say goodbye / Next Minecraft / See you / complete_segment until the child explicitly requests 終わりにする through the UI.",
     "Phase 3 Turn C (ONLY when the client says free talk is over / 終わりにする): ONE goodbye message — Hmm... I can't stop thinking about it! + Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! + matching ひらがな → call complete_segment(ending1).",
-    "FORBIDDEN during free talk: How many / なんびき / premature goodbye. FORBIDDEN ever: inventing how many / splitting Turn A or Turn C / saying Perfect twice.",
-    "Keep core child safety and age-appropriate, intelligible language. Every turn: English first, then ひらがな with the SAME full meaning (free talk may be looser).",
+    "FORBIDDEN during free talk: How many / なんびき / premature goodbye / English-only turns. FORBIDDEN ever: inventing how many / splitting Turn A or Turn C / saying Perfect twice.",
+    "Keep core child safety and age-appropriate, intelligible language. Every turn: English first, then ひらがな with the SAME full meaning.",
   ].join(" ");
 }
 
@@ -1176,15 +1174,53 @@ export function buildEndingFreeTalkInstructions(
   const raw = [
     "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
     "ENDING PHASE 2 ONLY — genuine open-ended free talk. The client already played static Turn A and asked: What kind of fish should we catch? どんな おさかなを つかまえよう？ Stay silent until the child answers.",
-    "On every child turn: react specifically to their latest words first, then ask exactly ONE natural, friendly follow-up about that same topic. ONE complete turn only — English first, then matching ひらがな once; never restart or repeat the English. Keep the conversation varied and non-repetitive; follow the child's topic with no scripted progression or turn limit.",
+    "On every child turn: react specifically to their latest words first, then ask exactly ONE natural, friendly follow-up about that same topic. ONE complete turn only — English first, then matching ひらがな with the SAME meaning in the SAME turn (English-only is FORBIDDEN); never restart or repeat the English. Keep the conversation varied and non-repetitive; follow the child's topic with no scripted progression or turn limit.",
     "The first child answer is authoritative even if it is short or Japanese (for example クラゲ). Never ignore it, replace it with an old answer, or ask the Turn A fish question again.",
-    "Use clear age-appropriate English with helpful natural ひらがな support. Never scold pronunciation or grammar.",
+    "REQUIRED bilingual shape every turn: clear age-appropriate English, then helpful natural ひらがな that matches that English. Never scold pronunciation or grammar. Never reply in English only.",
     "Never steer, suggest, hint, or direct the child toward ending. Never mention an end button/control.",
     "Only the explicit client action 終わりにする can start the client-owned static Turn C finale. Before that action, FORBIDDEN: goodbye, See you next time, Next Minecraft, How many / なんびき, complete_segment, lesson review, quiz, Final Challenge, or any previous chapter prompt.",
     noSystemBackendRule(),
     "Never invent facts about the child's tank. Use only what the child says now or these known memories:",
     memoryBlock(state.memories),
     "Tools: record_memory only when the child states a durable fact. Do not call complete_segment and do not mention tools, badges, awards, UI, timers, or technical status.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return adaptCoachTextForLevel(raw, instructionLevel);
+}
+
+/**
+ * Small Daily English-only setup for the fresh post-Ch5 Live session.
+ * Excludes chapter/quiz/MCQ scaffolding that bloated replies (~14k → ~2.5k chars).
+ */
+export function buildDaily1Instructions(
+  state = loadLessonState(),
+  levelId = ACTIVE_LEVEL_ID
+) {
+  const lesson = getLesson(state.lessonId);
+  const instructionLevel = lesson.instructionLevel || levelId;
+  const childName = getLearnerJaName();
+  const color = String(state?.memories?.favoriteColor || "").trim();
+  const colorBit = color
+    ? `Favorite color already chosen (${color}) — never ask about color / すきな いろ.`
+    : "Never ask What's your favorite color? / すきな いろは？";
+  const raw = [
+    "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
+    "DAILY ENGLISH ONLY — sudden friendly chat away from the tank. Keep every reply SHORT.",
+    `FIRST line EXACTLY (if not yet spoken): ${daily1OpenSpeak(childName)} Then WAIT.`,
+    "FORBIDDEN openers: Let's practice today's English / きょうの えいごを れんしゅうしよう.",
+    "After the animal question: at least 4 natural chat rallies. EACH TURN: (1) react to THEIR latest words, (2) ask ONE follow-up on that same topic, (3) WAIT.",
+    "Stay on their topic 1–2 turns. Soft-bridge if you change topics. Never re-ask answered facts. Never Do you like [the animal they just named]?",
+    "Short answers (うん / かわいい / yes / cute): warm ack + ONE same-topic follow-up — do not jump topics.",
+    "Every spoken turn: full English, then matching ひらがな with the SAME meaning. Never English-only.",
+    `FORBIDDEN: Are you tired? / つかれた？ / ${colorBit} / Chapter 6 sand / basement / tank MCQ before the bridge.`,
+    "After 4+ rallies, " +
+      daily1BridgeTurnInstruction() +
+      " Finish speaking that turn, then call complete_segment(daily1). Never complete early. Next is Chapter 6.",
+    noSystemBackendRule(),
+    "Never invent tank facts. Known memories:",
+    memoryBlock(state.memories),
+    "Tools: record_memory for durable facts. complete_segment(daily1) only after the back-to-tank bridge. Do not mention tools, badges, UI, or timers.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1237,9 +1273,9 @@ function ch1StoryRule() {
 function quiz1StartNudge() {
   return (
     "[Teacher note — do not read aloud] MINI QUIZ 1 starts NOW. Speak FULL Japanese ひらがな only (NO English-first). " +
-    "Do NOT jump to Chapter 4 yet. Speak EXACTLY item 1 (every mora inside 「」): " +
+    "Do NOT jump to Chapter 4 yet. Speak EXACTLY item 1 word-by-word (every mora inside 「」): " +
     "くいずたいむ！「がらすが ひつよう」は えいごで？ Then WAIT for a 4-button tap. " +
-    "FORBIDDEN shortcuts: がらすが英語で without ひつよう. " +
+    "FORBIDDEN shortcuts: くいずたいむ！は英語で？ / がらすが英語で without ひつよう / 英語 instead of えいご. " +
     "Do NOT speak the English choices aloud. Next after correct I need glass: すなを みつけた (I found some sand). Then がらすを つくった (I made glass). " +
     "FORBIDDEN: すなが ひつよう quiz, oral どっち 2-choice, English Which one means… After all 3, complete_segment(quiz1) → Chapter 4."
   );

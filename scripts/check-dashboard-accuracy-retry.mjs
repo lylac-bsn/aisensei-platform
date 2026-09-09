@@ -38,7 +38,7 @@ assert.match(retryRule, /@media \(forced-colors: active\)/);
 
 assert.match(
   page,
-  /page1-dashboard\.js\?v=20260910-accuracy-best-1/,
+  /page1-dashboard\.js\?v=20260910-daily1-latency-1/,
   "page1 must load the new dashboard bundle"
 );
 

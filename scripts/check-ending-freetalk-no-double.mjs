@@ -23,8 +23,20 @@ assert.doesNotMatch(
   ),
   /withBeginnerSpeakRule\(outbound\)/
 );
-assert.match(voice, /never restart or repeat the English/);
+assert.match(voice, /[Nn]ever restart or repeat(?: the English)?/);
+assert.match(voice, /English-only is FORBIDDEN/);
+assert.match(voice, /English-only replies are FORBIDDEN/);
+assert.match(
+  voice,
+  /getCurrentSegment\(\)\?\.id === "ending1" && !isEnding1FreeTalkActive\(\)\) return/
+);
 assert.match(lessonEngine, /never restart or repeat the English/);
+assert.match(lessonEngine, /English-only is FORBIDDEN/);
+assert.match(voice, /ending1-freetalk/);
+assert.match(
+  voice.slice(voice.indexOf("const allowed ="), voice.indexOf("if (!allowed)")),
+  /ending1-freetalk/
+);
 
 function functionSource(name) {
   const start = voice.indexOf(`function ${name}`);
@@ -67,6 +79,6 @@ assert.equal(
   "katakana echo must appear once"
 );
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-accuracy-best-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-daily1-latency-1/);
 
 console.log("check-ending-freetalk-no-double: ok");

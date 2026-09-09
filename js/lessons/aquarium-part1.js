@@ -337,10 +337,11 @@ export const AQUARIUM_PART1 = {
       ],
       coach:
         "MINI QUIZ 1 — 4-choice MCQ buttons. Speak FULL Japanese ひらがな only (no English-first beginner pattern). " +
-        "FIXED order, one item per turn — use each item's speak line EXACTLY: " +
+        "FIXED order, one item per turn — use each item's speak line EXACTLY word-by-word: " +
         "(1) くいずたいむ！「がらすが ひつよう」は えいごで？ " +
         "(2) じゃあ つぎは 「すなを みつけた」は えいごで？ " +
         "(3) じゃあ つぎは 「がらすを つくった！」は えいごで？ " +
+        "FORBIDDEN shortcuts: くいずたいむ！は英語で？ (missing cue), 英語 instead of えいご. " +
         "WAIT for a 4-button tap. Wrong: soft おしい！もういちど — do NOT reveal the answer. " +
         "After a correct tap: ONE short varied praise (rotate — never すごい every time) + echo the CORRECT English once, then the NEXT speak line (never repeat the same item). " +
         "FORBIDDEN: すなが ひつよう as a quiz item, inventing questions, English Which one means…, oral どっち 2-choice, walls/color. " +
@@ -373,12 +374,12 @@ export const AQUARIUM_PART1 = {
         },
       ],
       coach:
-        "CHAPTER 4 — Beat A1: What's your favorite color? (NO buttons). Record favoriteColor only from the lesson colour set. " +
-        "Unknown colour (rainbow/gold/etc.): do NOT save — speak Which colour would you pick out of these? / この中だったらどの色がすき？ and WAIT for the colour buttons. " +
+        "CHAPTER 4 — Beat A1: Speak EXACTLY What's your favorite color? すきな いろは？ then WAIT with colour MCQ buttons on screen. " +
+        "ONLY button taps choose favoriteColor (orange/red/blue/green/yellow/pink). Never accept spoken/typed colour words. " +
         "THEN ONE combined turn (A2+B): Let's make [color] coloured glass! Tell me when you make one! / " +
         "[colorJa]いろの がらすを つくろう！つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ " +
-        "THEN show MCQ. Wrong: soft retry. Correct I made [color] glass! → complete_segment(ch4). " +
-        "NEVER complete_segment on color alone. NEVER show MCQ before つくれたら.",
+        "THEN show glass MCQ. Wrong: soft retry. Correct I made [color] glass! → complete_segment(ch4). " +
+        "NEVER complete_segment on color alone. NEVER show glass MCQ before つくれたら.",
     },
     {
       id: "ch5",

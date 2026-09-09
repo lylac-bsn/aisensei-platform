@@ -14,7 +14,7 @@ export const MCQ_AUDIO_COLORS = Object.freeze([
   "magenta",
 ]);
 
-/** Kid-facing Ch4 fallback picker when they name a colour outside the lesson set. */
+/** Kid-facing Ch4 Beat A1 colour MCQ (favorite colour — buttons only). */
 export const CH4_PICKER_COLORS = Object.freeze([
   "orange",
   "red",

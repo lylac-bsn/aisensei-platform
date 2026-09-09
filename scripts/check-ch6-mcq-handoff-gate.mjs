@@ -22,6 +22,6 @@ assert.match(
   /Keep Ch6 MCQ hidden the whole time \(segmentIndex is already on ch6\)/
 );
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-accuracy-best-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-daily1-latency-1/);
 
 console.log("check-ch6-mcq-handoff-gate: ok");

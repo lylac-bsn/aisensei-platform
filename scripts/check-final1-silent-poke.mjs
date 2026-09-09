@@ -17,6 +17,6 @@ assert.match(voice, /stallCount >= 4/);
 assert.match(voice, /final1ItemAlreadyAnswered\(item\)/);
 assert.match(voice, /staying silent/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-accuracy-best-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-daily1-latency-1/);
 
 console.log("check-final1-silent-poke: ok");

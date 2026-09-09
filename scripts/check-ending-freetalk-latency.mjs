@@ -75,7 +75,7 @@ assert.match(
 );
 assert.match(
   source,
-  /afterSegmentAdvanced\("final1", result, \{ lastQuote: "" \}\)/,
+  /afterSegmentAdvanced\("final1", result, \{[\s\S]*?lastQuote: ""/,
   "client-side Final Challenge completion must use the fresh handoff"
 );
 assert.match(

@@ -22,6 +22,7 @@ import {
   getLesson,
   buildLessonInstructions,
   buildEndingFreeTalkInstructions,
+  buildDaily1Instructions,
   buildOpeningNudge,
   buildAdvanceNudge,
   buildHandoffOpeningNudge,
@@ -36,11 +37,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-accuracy-best-1";
+} from "./lesson-engine.js?v=20260910-daily1-latency-1";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-accuracy-best-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-daily1-latency-1";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-accuracy-best-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-daily1-latency-1";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -54,14 +55,14 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-accuracy-best-1";
+} from "./mcq-engine.js?v=20260910-daily1-latency-1";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
   normalizeMcqAudioLabel,
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
-} from "./mcq-audio-config.js?v=20260910-accuracy-best-1";
+} from "./mcq-audio-config.js?v=20260910-daily1-latency-1";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,
@@ -506,12 +507,13 @@ function buildMidChapterResumeNudge(state = loadLessonState()) {
   }
 
   if (segment.id === "ch4") {
-    const phase = String(state.segmentUi?.ch4?.phase || "");
     const color = normalizeAllowedFavoriteColor(state.memories?.favoriteColor || "");
-    if (phase === "pickColor" || (!color && String(state.memories?.favoriteColor || "").trim())) {
+    if (!color) {
       return (
-        "[Teacher note — do not read aloud] Resume Chapter 4 colour picker. Do NOT invent a colour. Speak EXACTLY then WAIT for a button: " +
-        ch4ColorPickerSpeak(state.segmentUi?.ch4?.attemptedColor || "") +
+        "[Teacher note — do not read aloud] Resume Chapter 4 Beat A1 colour MCQ. " +
+        "Speak EXACTLY then WAIT for a colour button: " +
+        CH4_COLOR_ASK_SPEAK +
+        " FORBIDDEN: accept spoken/typed colours / invent a colour." +
         beginnerTurnHint()
       );
     }
@@ -2107,6 +2109,7 @@ function maybeEnding1OffScriptNudge() {
             ? `The child's current topic is "${String(ending1Beat.freeTalkTopic).slice(0, 80)}". `
             : "") +
           "React specifically to the child's topic and ask ONE friendly follow-up about it. " +
+          "REQUIRED: English then matching ひらがな in the SAME turn — English-only is FORBIDDEN. " +
           "Follow their topic; never steer, suggest, hint, or direct them toward ending, and never mention the end button. " +
           "Do NOT ask a generic lesson-review question, say goodbye / Next Minecraft / How many, or repeat どんなおさかな / what kind of fish."
       );
@@ -2184,11 +2187,12 @@ function buildEnding1FreeTalkOutboundCoach(userText = "") {
       : "") +
     "Ignore stale warmup, quiz, Final Challenge, and generic lesson-retrospective questions. " +
     "Reply out loud NOW with ONE complete turn only: a specific reaction, then ONE natural, friendly follow-up about the child's topic. " +
-    "English first, then matching ひらがな once — never restart or repeat the English. " +
+    "REQUIRED bilingual shape: English first, then matching ひらがな with the SAME meaning in the SAME turn — English-only is FORBIDDEN. " +
+    "Never restart or repeat the English. " +
     "Follow it with no scripted progression or turn limit. " +
     "Never steer, suggest, hint, or direct them toward ending; never mention the end button. " +
     "Keep child-safety and clear age-appropriate English with intelligible ひらがな support. " +
-    "FORBIDDEN: Did you have fun with your lesson / generic lesson review / repeating the opening fish question / goodbye / Next Minecraft / See you next time / How many / complete_segment."
+    "FORBIDDEN: Did you have fun with your lesson / generic lesson review / repeating the opening fish question / goodbye / Next Minecraft / See you next time / How many / complete_segment / English-only turns."
   );
 }
 
@@ -2328,7 +2332,7 @@ function nudgeEnding1FreeTalkReply(userText = "") {
     (quote ? ` ("${quote}")` : "") +
     (topic ? `. Keep responding specifically to the current topic "${topic}"` : "") +
     ". React specifically and ask ONE natural, friendly follow-up about their words. " +
-    "ONE complete turn: English then matching ひらがな once — never restart or repeat. " +
+    "ONE complete turn: English then matching ひらがな in the SAME turn — English-only is FORBIDDEN; never restart or repeat. " +
     "Follow their topic; never steer toward ending or mention the end button. " +
     "Do NOT ask a generic lesson-review question or re-ask what kind of fish / How many / goodbye.";
   return sendClientText(withEndingFreeTalkSpeakRule(formatTeacherNote(note)), { force: true });
@@ -2930,28 +2934,37 @@ function buildPart1HandoffOpeningNudge(state, opts = {}) {
 }
 
 /**
- * Quiz 1 Q1 is a single exact-speak Live turn. Do not include the previous
- * chapter quote: asking Live to react to it produced a generic quiz opener
- * instead of the required cue. Keep this on Gemini Live (not hosted TTS) so
- * Learny's realtime voice stays consistent with the rest of the lesson.
+ * Quiz 1 exact-speak Live turn. Do not include the previous chapter quote:
+ * asking Live to react to it produced a generic quiz opener instead of the
+ * required cue. Keep this on Gemini Live (not hosted TTS) so Learny's
+ * realtime voice stays consistent with the rest of the lesson.
  */
-function forceQuiz1ExactOpening(reason = "opening") {
-  if (getCurrentSegment()?.id !== "quiz1" || quiz1State.cursor !== 0) return false;
+function forceQuiz1ExactSpeak(reason = "opening", { item = getCurrentQuiz1Item() } = {}) {
+  if (getCurrentSegment()?.id !== "quiz1") return false;
   if (!client?.connected || (actionState !== "active" && actionState !== "connecting")) {
     return false;
   }
-  const item = getCurrentQuiz1Item();
   const script = quiz1ItemSpeak(item);
   if (!script) return false;
+  const isOpening = quiz1State.cursor === 0 && /^(opening|handoff)/i.test(String(reason || ""));
   const outbound =
-    "[QUIZ] MINI QUIZ 1 Q1 EXACT AUDIO. " +
-    "Speak exactly the text between <exact> tags as your complete audible turn, once. " +
-    "The first audible word must be くいずたいむ. Do not praise or acknowledge the previous answer. " +
+    "[QUIZ] MINI QUIZ 1 EXACT AUDIO. " +
+    "Speak exactly the text between <exact> tags as your complete audible turn, once — every mora, word by word. " +
+    (isOpening
+      ? "The first audible word must be くいずたいむ. Do not praise or acknowledge the previous answer. "
+      : "Do not add praise or a new question — only the exact script. ") +
+    "FORBIDDEN shortcuts: くいずたいむ！は英語で？ / くいずたいむ！はえいごで？ (missing the cue inside 「」), " +
+    "がらすが英語で without ひつよう, saying 英語 instead of えいご. " +
     "Do not add Perfect, Great, Let's do a quick quiz, くいずをしよう, English, a translation, or a readiness opener. " +
     "Do not split the cue and question into separate turns. Stop immediately after えいごで？ and wait.\n" +
     `<exact>${script}</exact>`;
-  dbg("force quiz1 exact opening", reason);
-  return sendClientText(outbound, { force: true });
+  dbg("force quiz1 exact speak", { reason, cursor: quiz1State.cursor, script: script.slice(0, 40) });
+  return sendClientText(withQuizExactSpeakRule(outbound), { force: true });
+}
+
+function forceQuiz1ExactOpening(reason = "opening") {
+  if (getCurrentSegment()?.id !== "quiz1" || quiz1State.cursor !== 0) return false;
+  return forceQuiz1ExactSpeak(reason);
 }
 
 function currentFinal1Prompt() {
@@ -3966,7 +3979,9 @@ function handleDaily1ChatProgress(userText) {
 }
 
 function isDaily1ShortAck(text = "") {
-  return /^(うん+|ん+|はい|ええ|えー|yeah|yes|yep|ok|okay)[.!！？?\s]*$/i.test(String(text || "").trim());
+  return /^(うん+|ん+|はい|ええ|えー|そう|そうだね|かわいい|kawaii|cute|yeah|yes|yep|ok|okay)[.!！？?\s]*$/i.test(
+    String(text || "").trim()
+  );
 }
 
 /** Spot robotic Daily English turns (same echo every time / ignored answers). */
@@ -4102,9 +4117,7 @@ function buildDaily1OutboundCoach(userText) {
     "/" +
     DAILY1_MIN_RALLIES +
     ". " +
-    buildDaily1NaturalTurnCoach(t) +
-    " " +
-    daily1KnownColorHint()
+    buildDaily1NaturalTurnCoach(t)
   );
 }
 
@@ -4136,7 +4149,7 @@ function forceDaily1BackToTank(reason = "rallies-done", { bypassCooldown = false
     // ignore
   }
   dbg("force daily1 back-to-tank", reason, daily1Chat.rallies);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+  return sendClientText(withDaily1SpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function forceDaily1Continue(reason = "need-more-rallies") {
@@ -4155,8 +4168,6 @@ function forceDaily1Continue(reason = "need-more-rallies") {
     DAILY1_MIN_RALLIES +
     ". " +
     buildDaily1NaturalTurnCoach(lastPendingUserText || recentUserMessages(1)[0] || "") +
-    " " +
-    daily1KnownColorHint() +
     " No tank/Ch6 yet.";
   try {
     closeOpenAudioTurn();
@@ -4165,7 +4176,7 @@ function forceDaily1Continue(reason = "need-more-rallies") {
     // ignore
   }
   dbg("force daily1 continue", reason, daily1Chat.rallies);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+  return sendClientText(withDaily1SpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function maybeDaily1ContinueNudge() {
@@ -4233,7 +4244,7 @@ function forceDaily1Open(reason = "wrong-opener") {
     // ignore
   }
   dbg("force daily1 open", reason);
-  return sendClientText(withBeginnerSpeakRule(formatTeacherNote(note)), { force: true });
+  return sendClientText(withDaily1SpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function maybeDaily1CorrectiveNudge() {
@@ -4433,59 +4444,20 @@ function buildCh4OutboundCoach(userText) {
   const past = recentAssistantMessages(12).join("\n");
   const memories = loadLessonState()?.memories || {};
   const rememberedColor = normalizeAllowedFavoriteColor(memories.favoriteColor || "");
-  const colorFromUser = extractFavoriteColor(t);
-  const colorName = colorFromUser || rememberedColor || "that";
+  const colorName = rememberedColor || "that";
 
-  const askedFavorite = /favorite color|what color do you like|すきな\s*いろ|どの\s*いろ|この中だったらどの色/i.test(past);
   const saidLetsMake = ch4AssistantSaidLetsMake(past);
   const askedLetMeKnowMake = ch4AssistantSaidBeatB(past);
 
-  if (looksLikeUnknownColorAttempt(t) || (ch4ColorPickerActive() && !colorFromUser)) {
-    enterCh4ColorPicker(t, "outbound-unknown-color");
-    // Speak exactly once via forceCh4ColorPicker — this coach must stay silent
-    // or Live + force double-speak (Rainbow… / cool colour! …).
-    if (!ch4PickerSpokenAt || Date.now() - ch4PickerSpokenAt > 12000) {
-      whenAssistantIdle(
-        () => forceCh4ColorPicker("outbound-unknown-color", t),
-        "ch4-picker-outbound"
-      );
-    } else {
-      refreshChoiceBarIfNeeded();
-    }
+  // Beat A1 — colour MCQ buttons only. Never accept spoken/typed colour words.
+  if (!rememberedColor) {
+    refreshChoiceBarIfNeeded();
     return (
-      "[Teacher note — do not read aloud] Child named a colour outside the lesson set" +
-      (t ? ` (\"${t.slice(0, 24)}\")` : "") +
-      ". Colour buttons are on screen. Do NOT speak. Do NOT repeat the picker line. " +
-      "Do NOT record_memory that colour. WAIT silently for a colour button tap. " +
-      "FORBIDDEN: Let's make rainbow / invent Japanese / glass MCQ / walls." +
-      beginnerTurnHint()
-    );
-  }
-
-  if (!askedFavorite && !colorFromUser && !rememberedColor) {
-    return (
-      "[Teacher note — do not read aloud] Chapter 4: ask ONLY What's your favorite color? すきな いろは？ Then WAIT. " +
-      "Record favoriteColor. NEVER assume blue. FORBIDDEN: dye/flower phrases, walls." +
-      beginnerTurnHint()
-    );
-  }
-
-  if ((colorFromUser || looksLikeColorAnswer(t)) && !saidLetsMake && !ch4MakeTellUnlocked) {
-    maybeSaveCh4FavoriteColor(t);
-    if (ch4ColorPickerActive()) {
-      persistCh4UiState({ phase: "make", attemptedColor: "" });
-    }
-    // One client-owned make+tell kick — outbound stays silent to avoid interrupt/restart.
-    whenAssistantIdle(() => forceCh4LetsMake("outbound-color-named"), "ch4-make-outbound");
-    return (
-      "[Teacher note — do not read aloud] Child named a color (" +
-      colorName +
-      "). Call record_memory(favoriteColor, " +
-      colorName +
-      ") if not saved. Do NOT speak yet — the client will deliver Beat A2+B exactly once. " +
-      "WAIT for the 4-button MCQ. FORBIDDEN: ask favorite color again / walls / say I made " +
-      colorName +
-      " glass yourself / complete_segment(ch4)." +
+      "[Teacher note — do not read aloud] Chapter 4 Beat A1: colour buttons are on screen. " +
+      "If you have not asked yet, speak EXACTLY once: " +
+      CH4_COLOR_ASK_SPEAK +
+      " Then WAIT silently for a colour button tap. " +
+      "FORBIDDEN: save spoken/typed colours / Let's make / glass MCQ / walls / invent Japanese for rainbow." +
       beginnerTurnHint()
     );
   }
@@ -4514,7 +4486,7 @@ function buildCh4OutboundCoach(userText) {
   }
 
   return (
-    "[Teacher note — do not read aloud] Chapter 4: favorite color → ONE combined make+tell line → I made [color] glass! MCQ. " +
+    "[Teacher note — do not read aloud] Chapter 4: favourite colour button → ONE combined make+tell line → I made [color] glass! MCQ. " +
     "Combined line: " +
     ch4CombinedMakeAndTellSpeak(colorName === "that" ? "orange" : colorName) +
     " FORBIDDEN: Did you make one?, I need a dye, walls, finishing Ch4 on color alone." +
@@ -4552,26 +4524,9 @@ function colorToJaLabel(colorEn) {
   return colorToJaFromConfig(colorEn);
 }
 
-const CH4_COLOR_PICKER_SPEAK_EN = "Which colour would you pick out of these?";
-const CH4_COLOR_PICKER_SPEAK_JA = "この中だったらどの色がすき？";
-
-function ch4ColorPickerSpeak(attempted = "") {
-  const word = String(attempted || "")
-    .trim()
-    .replace(/[.!?。！？]+$/g, "")
-    .slice(0, 24);
-  if (word) {
-    const nice = word.charAt(0).toUpperCase() + word.slice(1);
-    return (
-      nice +
-      " is a cool colour! " +
-      CH4_COLOR_PICKER_SPEAK_EN +
-      " すてきな いろだね！ " +
-      CH4_COLOR_PICKER_SPEAK_JA
-    );
-  }
-  return CH4_COLOR_PICKER_SPEAK_EN + " " + CH4_COLOR_PICKER_SPEAK_JA;
-}
+const CH4_COLOR_ASK_EN = "What's your favorite color?";
+const CH4_COLOR_ASK_JA = "すきな いろは？";
+const CH4_COLOR_ASK_SPEAK = `${CH4_COLOR_ASK_EN} ${CH4_COLOR_ASK_JA}`;
 
 function getCh4UiState() {
   return loadLessonState().segmentUi?.ch4 || {};
@@ -4591,10 +4546,14 @@ function persistCh4UiState(patch) {
   saveLessonState(state);
 }
 
-function ch4ColorPickerActive() {
+function ch4ColorChoiceActive() {
   if (getCurrentSegment()?.id !== "ch4") return false;
-  if (ch4HasFavoriteColor()) return false;
-  return getCh4UiState().phase === "pickColor";
+  return !ch4HasFavoriteColor();
+}
+
+/** @deprecated alias — Beat A1 colour MCQ (not unknown-colour fallback). */
+function ch4ColorPickerActive() {
+  return ch4ColorChoiceActive();
 }
 
 function clearInvalidCh4FavoriteColor() {
@@ -4616,43 +4575,6 @@ function clearInvalidCh4FavoriteColor() {
   return "";
 }
 
-function looksLikeUnknownColorAttempt(text) {
-  if (getCurrentSegment()?.id !== "ch4") return false;
-  if (extractFavoriteColor(text)) return false;
-  if (userHasMadeColorGlassPhrase(text)) return false;
-  if (/\b(i put glass|put glass here|i'?m building a tank|i made a tank)\b/i.test(text)) {
-    return false;
-  }
-  const t = String(text || "").trim();
-  if (!t || t.length > 40) return false;
-  if (ch4ColorPickerActive()) return true;
-  const past = recentAssistantMessages(12).join("\n");
-  const askedFavorite =
-    /favorite color|favou?rite color|what color do you like|すきな\s*いろ|好きな\s*いろ|どの\s*いろ|この中だったらどの色/i.test(
-      past
-    );
-  if (!askedFavorite) return false;
-  if (/\b(i made|i need|i put|i found|building|tank|yes|no|ok|okay|うん|はい|いいえ)\b/i.test(t)) {
-    return false;
-  }
-  const words = t.split(/\s+/).filter(Boolean);
-  if (words.length <= 3) return true;
-  return /色|いろ|colour|color|rainbow|gold|silver|turquoise|navy|beige|グレー|灰色|金|銀|虹/i.test(
-    t
-  );
-}
-
-function enterCh4ColorPicker(attempted = "", reason = "unknown-color") {
-  if (getCurrentSegment()?.id !== "ch4") return false;
-  if (ch4HasFavoriteColor()) return false;
-  persistCh4UiState({
-    phase: "pickColor",
-    attemptedColor: String(attempted || "").trim().slice(0, 40),
-  });
-  dbg("enter ch4 color picker", reason, attempted);
-  return true;
-}
-
 let ch4ColorPickerForceAt = 0;
 
 function ch4PickerAlreadySpoken() {
@@ -4670,17 +4592,14 @@ function markCh4MakeTellUnlocked(reason = "unlock") {
   refreshChoiceBarIfNeeded();
 }
 
-function forceCh4ColorPicker(reason = "unknown-color", attempted = "") {
+/** Re-ask Beat A1 favourite-colour line if Learny drifts — buttons already on screen. */
+function forceCh4ColorAsk(reason = "color-ask") {
   if (getCurrentSegment()?.id !== "ch4") return false;
   if (ch4HasFavoriteColor()) return false;
-  enterCh4ColorPicker(attempted, reason);
   refreshChoiceBarIfNeeded();
   if (ch4PickerAlreadySpoken()) return false;
   if (assistantIsSpeaking()) {
-    whenAssistantIdle(
-      () => forceCh4ColorPicker(reason, attempted),
-      "ch4-picker-wait-idle"
-    );
+    whenAssistantIdle(() => forceCh4ColorAsk(reason), "ch4-color-ask-wait-idle");
     return false;
   }
   if (ch4ColorPickerForceAt && Date.now() - ch4ColorPickerForceAt < 8000) {
@@ -4688,25 +4607,21 @@ function forceCh4ColorPicker(reason = "unknown-color", attempted = "") {
   }
   ch4ColorPickerForceAt = Date.now();
   ch4PickerSpokenAt = Date.now();
-  const spokenAttempt = attempted || getCh4UiState().attemptedColor || "";
-  const script = ch4ColorPickerSpeak(spokenAttempt);
   const note =
     "[Teacher note — do not read aloud] " +
     reason +
-    ". Child named a colour outside the lesson set" +
-    (spokenAttempt ? ` (\"${String(spokenAttempt).slice(0, 24)}\")` : "") +
     ". Speak exactly the text between <exact> tags as your complete audible turn, once. " +
     "Then WAIT for a colour button tap.\n" +
-    `<exact>${script}</exact>\n` +
-    "FORBIDDEN: repeat this line / Let's make rainbow / invent [colorJa] / glass MCQ / walls.";
-  dbg("force ch4 color picker", reason);
-  // Exact-speak rule — never withBeginnerSpeakRule (One short turn → cut + restart).
+    `<exact>${CH4_COLOR_ASK_SPEAK}</exact>\n` +
+    "FORBIDDEN: accept spoken colours / unknown-colour fallback lines / Let's make / glass MCQ / walls.";
+  dbg("force ch4 color ask", reason);
   return sendClientText(withCh4ExactSpeakRule(formatTeacherNote(note)), { force: true });
 }
 
 function handleCh4ColorPickerClick(label) {
   const color = normalizeAllowedFavoriteColor(label);
   if (!color || getCurrentSegment()?.id !== "ch4") return;
+  if (!CH4_PICKER_COLORS.includes(color)) return;
   addUserAnswerBubble(label);
   recordMemory("favoriteColor", color);
   persistCh4UiState({ phase: "make", attemptedColor: "" });
@@ -4714,13 +4629,13 @@ function handleCh4ColorPickerClick(label) {
   ch4LetsMakeForceAt = 0;
   ch4PickerSpokenAt = 0;
   resetCh4MakeTellSpeechLocks();
-  dbg("ch4 color picker chose", color);
+  dbg("ch4 colour MCQ chose", color);
   refreshChoiceBarIfNeeded();
   whenAssistantIdle(() => {
     if (getCurrentSegment()?.id !== "ch4") return;
     if (!ch4HasFavoriteColor()) return;
-    forceCh4LetsMake("ch4-color-picker");
-  }, "ch4-picker-make");
+    forceCh4LetsMake("ch4-color-mcq");
+  }, "ch4-color-make");
 }
 
 function expandMcqColorPlaceholders(text, colorEn) {
@@ -5036,24 +4951,22 @@ function forceCh4BeatB(reason = "wrong-elicit") {
   return forceCh4LetsMake(reason || "force-beat-b");
 }
 
-/** Unstick Ch4: color saved → combined make+tell + MCQ (Learny often praise-loops). */
+/** Unstick Ch4: colour saved → combined make+tell + MCQ (Learny often praise-loops). */
 function maybeCh4BeatBCorrectiveNudge() {
   if (getCurrentSegment()?.id !== "ch4") return;
   if (assistantIsSpeaking()) return;
   const assistant = lastAssistantText();
   const past = recentAssistantMessages(12).join("\n");
 
-  // Invalid / unknown colour path — keep the picker on screen; speak at most once.
-  if (ch4ColorPickerActive() || assistantInventedUnsupportedCh4Color(assistant)) {
-    const attempted = getCh4UiState().attemptedColor || "";
-    enterCh4ColorPicker(attempted, "corrective-picker");
+  // Beat A1 — keep colour MCQ on screen; re-ask only if Learny invents an unsupported colour.
+  if (ch4ColorChoiceActive()) {
     refreshChoiceBarIfNeeded();
-    if (!ch4PickerAlreadySpoken()) {
+    if (assistantInventedUnsupportedCh4Color(assistant) && !ch4PickerAlreadySpoken()) {
       whenAssistantIdle(() => {
         if (getCurrentSegment()?.id !== "ch4") return;
         if (ch4HasFavoriteColor()) return;
-        forceCh4ColorPicker("ch4-unsupported-color", attempted);
-      }, "ch4-picker-corrective");
+        forceCh4ColorAsk("ch4-color-ask-corrective");
+      }, "ch4-color-ask-corrective");
     }
     return;
   }
@@ -5120,13 +5033,8 @@ function ch4CombinedMakeAndTellSpeak(colorEn) {
   return ch4MakeTellSpeak(colorEn);
 }
 
-function maybeSaveCh4FavoriteColor(userText) {
-  if (getCurrentSegment()?.id !== "ch4") return;
-  const color = extractFavoriteColor(userText);
-  if (!color) return;
-  const state = loadLessonState();
-  if (state.memories?.favoriteColor === color) return;
-  recordMemory("favoriteColor", color);
+function maybeSaveCh4FavoriteColor(_userText) {
+  // Beat A1 is colour-button only — never save from typed/spoken colour words.
 }
 
 function looksLikeColorAnswer(text) {
@@ -5529,6 +5437,7 @@ function runPostTurnCoachNudges() {
   maybeBeginnerJapaneseNudge();
   maybeSystemBackendLeakNudge();
   maybeElicitEigoSkipNudge();
+  maybeQuiz1ExactSpeakNudge();
 
   // Praise-only / stalled lead — allow a follow-up spoken beat even after Learny just spoke.
   // Ch4 hard-forces Let's make / Beat B; soft continuation nudge would double-speak.
@@ -5827,22 +5736,84 @@ function quiz1ItemSpeak(item) {
   return `「${cue}」は えいごで？`;
 }
 
+function compactQuizSpeakText(text) {
+  return String(text || "")
+    .replace(/\s+/g, "")
+    .replace(/[！!？?。、･・]/g, "")
+    .replace(/英語/g, "えいご")
+    .toLowerCase();
+}
+
+function quiz1CueCompact(item) {
+  return compactQuizSpeakText(item?.promptHira || item?.promptJa || "");
+}
+
+function assistantHasQuiz1Cue(text, item) {
+  const cue = quiz1CueCompact(item);
+  if (!cue) return true;
+  return compactQuizSpeakText(text).includes(cue);
+}
+
+function assistantMatchesExactQuiz1Speak(text, item) {
+  const script = quiz1ItemSpeak(item);
+  if (!script || !text) return false;
+  const got = compactQuizSpeakText(text);
+  const want = compactQuizSpeakText(script);
+  if (!want) return false;
+  return got.includes(want);
+}
+
+/** Live sometimes drops the 「cue」 and says くいずたいむ！は英語で？ */
+function assistantQuiz1SpeakMangled(text, item = getCurrentQuiz1Item()) {
+  if (!item || !text) return false;
+  const t = String(text || "");
+  if (assistantMatchesExactQuiz1Speak(t, item)) return false;
+  const quizShaped =
+    /くいずたいむ|じゃあ\s*つぎは|は\s*(?:英語|えいご)で/.test(t);
+  if (!quizShaped) return false;
+  if (/は\s*(?:英語|えいご)で/.test(t) && !assistantHasQuiz1Cue(t, item)) return true;
+  if (/くいずたいむ/.test(t) && !assistantHasQuiz1Cue(t, item)) return true;
+  if (/は\s*英語で/.test(t) && !/は\s*えいごで/.test(t)) return true;
+  return false;
+}
+
+function ensureQuiz1BubbleExact(item = getCurrentQuiz1Item()) {
+  const script = quiz1ItemSpeak(item);
+  if (!script) return false;
+  const last = chatMessages[chatMessages.length - 1];
+  if (last?.type !== "assistant") return false;
+  if (!assistantQuiz1SpeakMangled(last.text, item) && assistantMatchesExactQuiz1Speak(last.text, item)) {
+    return false;
+  }
+  if (
+    !assistantQuiz1SpeakMangled(last.text, item) &&
+    !/くいずたいむ|じゃあ\s*つぎは|は\s*(?:英語|えいご)で/.test(String(last.text || ""))
+  ) {
+    return false;
+  }
+  last.text = sanitizeAssistantBubbleText(script);
+  assistantTurnTranscript = script;
+  scheduleRenderChat();
+  return true;
+}
+
 function buildQuiz1SpeakCoach(item = getCurrentQuiz1Item()) {
   if (!item) return "";
+  const script = quiz1ItemSpeak(item);
   if (isVoiceOnlyLesson()) {
     return (
-      "Speak EXACTLY (every mora, including the cue inside 「」): " +
-      quiz1ItemSpeak(item) +
-      " FORBIDDEN shortcuts: がらすが英語で without ひつよう. " +
+      "Speak EXACTLY every mora word-by-word (use <exact> if needed): " +
+      script +
+      " FORBIDDEN: くいずたいむ！は英語で？ / missing cue inside 「」 / がらすが英語で without ひつよう / 英語 instead of えいご. " +
       "Then " +
       intermediateAnswerWaitHint() +
       " Do not speak English choices aloud."
     );
   }
   return (
-    "Speak EXACTLY (every mora, including the cue inside 「」): " +
-    quiz1ItemSpeak(item) +
-    " FORBIDDEN shortcuts: がらすが英語で without ひつよう. " +
+    "Speak EXACTLY every mora word-by-word (use <exact> if needed): " +
+    script +
+    " FORBIDDEN: くいずたいむ！は英語で？ / missing cue inside 「」 / がらすが英語で without ひつよう / 英語 instead of えいご. " +
     "Then WAIT for a 4-button tap. Do not speak English choices aloud."
   );
 }
@@ -6095,6 +6066,35 @@ function buildQuizGateOutboundCoach(userText) {
 
 function maybeQuiz1SkipNudge() {
   // Post-turn teacher notes are disabled; quiz gate is enforced via outbound coaches.
+}
+
+/** Re-speak the exact quiz line when Live drops the 「cue」 (e.g. くいずたいむ！は英語で？). */
+function maybeQuiz1ExactSpeakNudge() {
+  if (getCurrentSegment()?.id !== "quiz1") return;
+  if (!usesBeginnerInstructionProfile() && getActiveLessonId() !== "part1") return;
+  const item = getCurrentQuiz1Item();
+  if (!item) return;
+  if (!assistantTranscriptSettled()) return;
+  const text = lastAssistantText().trim();
+  if (!assistantQuiz1SpeakMangled(text, item)) return;
+
+  ensureQuiz1BubbleExact(item);
+  const key = `quiz1-exact-${item.id || quiz1State.cursor}-${normalizeUserText(text).slice(0, 24)}`;
+  whenAssistantIdle(() => {
+    if (getCurrentSegment()?.id !== "quiz1") return;
+    const cur = getCurrentQuiz1Item();
+    if (!cur || (cur.id || quiz1State.cursor) !== (item.id || quiz1State.cursor)) return;
+    if (!assistantQuiz1SpeakMangled(lastAssistantText(), cur)) return;
+    try {
+      audioPlayer?.interrupt?.();
+      closeOpenAudioTurn();
+    } catch {
+      // ignore
+    }
+    ensureQuiz1BubbleExact(cur);
+    forceQuiz1ExactSpeak("mangled-repair", { item: cur });
+    dbg("quiz1 exact speak repair", key);
+  }, "quiz1-exact");
 }
 
 function looksLikeMoodAnswer(text) {
@@ -6596,8 +6596,25 @@ function beginnerTurnHint() {
 /** Short rule prepended to the child's outbound so every Live reply stays EN→JP. */
 function beginnerOutboundSpeakRule() {
   if (!usesBeginnerInstructionProfile()) return "";
+  if (getCurrentSegment()?.id === "daily1") {
+    return (
+      "[DAILY1] Reply out loud NOW in ONE short turn: react to the child's latest words, then ONE follow-up. " +
+      "English then matching ひらがな. Keep it brief. Then WAIT."
+    );
+  }
   if (isQuizSpeakSegment()) {
-    return "[QUIZ] Speak Japanese ひらがな only. Ask the cue + は えいごで？ Then WAIT.";
+    const script = quiz1ItemSpeak(getCurrentQuiz1Item());
+    if (script) {
+      return (
+        "[QUIZ] Speak EXACTLY once, every mora word-by-word, as your complete audible turn: " +
+        script +
+        " Never drop the cue inside 「」. Never say くいずたいむ！は英語で？ Never say 英語 — always えいご. Then WAIT."
+      );
+    }
+    return (
+      "[QUIZ] Speak Japanese ひらがな only. Speak the EXACT listed speak line including the full cue inside 「」. " +
+      "FORBIDDEN: くいずたいむ！は英語で？ Then WAIT."
+    );
   }
   return "[BEGINNER] Reply out loud NOW: full English, then matching ひらがな. One short turn. React to the child's line. If you say の えいごを 選んでね！, pronounce えいごを fully — never の選んでね.";
 }
@@ -6607,10 +6624,50 @@ function withBeginnerSpeakRule(outbound) {
   if (!rule) return outbound;
   const body = String(outbound || "").trim();
   if (!body) return rule;
-  if (/^\[(BEGINNER|QUIZ|ENDING)\]/i.test(body) || /BEGINNER — mandatory|QUIZ — mandatory/i.test(body)) {
+  if (
+    /^\[(BEGINNER|QUIZ|ENDING|DAILY1)\]/i.test(body) ||
+    /BEGINNER — mandatory|QUIZ — mandatory/i.test(body)
+  ) {
     return body;
   }
   return `${rule}\n\n${body}`;
+}
+
+/**
+ * Daily English free chat — keep the speak-rule tiny. Wrapping with the full
+ * beginner elicit rule made Live replies take many seconds after short turns.
+ */
+function withDaily1SpeakRule(outbound) {
+  const body = String(outbound || "").trim();
+  if (!body) return body;
+  if (/^\[DAILY1\]/i.test(body)) return body;
+  return (
+    "[DAILY1] Reply out loud NOW in ONE short turn: react to the child's latest words, then ONE follow-up on that topic. " +
+    "English then matching ひらがな. Keep it brief. Then WAIT.\n\n" +
+    body
+  );
+}
+
+/** Prefer the shortest speak-rule wrapper for free-chat segments. */
+function withSegmentSpeakRule(outbound, segmentId = getCurrentSegment()?.id) {
+  if (segmentId === "daily1") return withDaily1SpeakRule(outbound);
+  return withBeginnerSpeakRule(outbound);
+}
+
+/**
+ * Quiz lines are fixed ひらがな scripts. The vague "Ask the cue + は えいごで？" rule
+ * let Live drop the 「cue」 (kids heard くいずたいむ！は英語で？).
+ */
+function withQuizExactSpeakRule(outbound) {
+  const body = String(outbound || "").trim();
+  if (!body) return body;
+  if (/^\[QUIZ\]/i.test(body)) return body;
+  return (
+    "[QUIZ] Speak the EXACT Japanese script ONCE in full — every mora word-by-word, including the cue inside 「」. " +
+    "FORBIDDEN: くいずたいむ！は英語で？ / missing 「cue」 / 英語 instead of えいご / shortening / summarizing. " +
+    "Do NOT apply the short-turn beginner rule. Then STOP and WAIT for the child.\n\n" +
+    body
+  );
 }
 
 /**
@@ -6638,7 +6695,8 @@ function withEndingFreeTalkSpeakRule(outbound) {
   if (!body) return body;
   if (/^\[ENDING FREE TALK\]/i.test(body) || /^\[ENDING\]/i.test(body)) return body;
   return (
-    "[ENDING FREE TALK] Reply out loud NOW in ONE complete turn only: full English, then matching ひらがな with the same meaning. " +
+    "[ENDING FREE TALK] Reply out loud NOW in ONE complete turn only: full English, then matching ひらがな with the SAME meaning in the SAME turn. " +
+    "REQUIRED: every English sentence must be followed by ひらがな — English-only replies are FORBIDDEN. " +
     "Speak each sentence ONCE. Do NOT shorten, restart mid-line, or repeat English/Japanese. " +
     "Do NOT apply the short-turn beginner rule. Then STOP and WAIT for the child.\n\n" +
     body
@@ -6881,8 +6939,8 @@ function maybeBeginnerJapaneseNudge() {
   if (!usesBeginnerInstructionProfile()) return;
   // Quiz is Japanese-only by design — do not force English-then-Japanese repair.
   if (isQuizSpeakSegment()) return;
-  // Ending Turn A is a long bilingual script — repair nudges caused a second Perfect!
-  if (getCurrentSegment()?.id === "ending1") return;
+  // Ending Turn A / finale: repair nudges caused a second Perfect! Free talk still needs JP.
+  if (getCurrentSegment()?.id === "ending1" && !isEnding1FreeTalkActive()) return;
   if (!assistantTranscriptSettled()) return;
   const text = lastAssistantText().trim();
   if (!text || assistantHasValidPhraseElicit(text)) return;
@@ -6895,6 +6953,7 @@ function maybeBeginnerJapaneseNudge() {
   const key = `beginner-jp-${normalizeUserText(text).slice(0, 48) || "turn"}`;
   whenAssistantIdle(() => {
     if (!usesBeginnerInstructionProfile() || isQuizSpeakSegment()) return;
+    if (getCurrentSegment()?.id === "ending1" && !isEnding1FreeTalkActive()) return;
     if (!assistantTranscriptSettled()) return;
     const latest = lastAssistantText().trim();
     if (assistantHasValidPhraseElicit(latest)) return;
@@ -6913,6 +6972,11 @@ function maybeBeginnerJapaneseNudge() {
       note +=
         "You spoke long Japanese without matching FULL English. NOW speak the missing English for that same idea, then matching ひらがな if needed. " +
         "Do NOT ask a new question. Then WAIT. ";
+    } else if (isEnding1FreeTalkActive()) {
+      note +=
+        "Your last free-talk turn was English-only or missing full ひらがな. " +
+        "NOW speak ONLY the matching ひらがな for the SAME meaning you just said. " +
+        "Do NOT repeat the English. Do NOT apologize. Then WAIT.";
     } else {
       note +=
         "Your last spoken turn was English-only or missing full ひらがな. " +
@@ -6986,10 +7050,10 @@ function isCh2FreeTalkUi() {
   return p === "chat";
 }
 
-/** Ch4: hide glass MCQ until make+tell — but show the colour picker fallback. */
+/** Ch4: hide glass MCQ until make+tell — colour Beat A1 uses its own buttons. */
 function isCh4FreeTalkUi() {
   if (getCurrentSegment()?.id !== "ch4") return false;
-  if (ch4ColorPickerActive()) return false;
+  if (ch4ColorChoiceActive()) return false;
   if (ch4MakeTellUnlocked) return false;
   return !ch4AssistantSaidBeatB();
 }
@@ -7009,7 +7073,7 @@ function isMcqChoiceUiActive(segment = getCurrentSegment()) {
   }
   if (isCh2FreeTalkUi() || isCh4FreeTalkUi()) return false;
 
-  if (segment?.id === "ch4" && ch4ColorPickerActive()) return true;
+  if (segment?.id === "ch4" && ch4ColorChoiceActive()) return true;
 
   if (segment?.id === "quiz1") {
     return Boolean(getCurrentQuiz1Item());
@@ -7592,6 +7656,81 @@ const choiceAudioBufferCache = new Map();
 const CHOICE_SPEAKER_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>';
 
+const CHOICE_QUESTION_REPLAY_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>';
+
+/** Current on-screen MCQ / quiz question Learny should read aloud. */
+function getActiveMcqQuestionScript(segment = getCurrentSegment()) {
+  if (!segment) return "";
+  if (segment.id === "quiz1") {
+    return quiz1ItemSpeak(getCurrentQuiz1Item());
+  }
+  if (segment.id === "final1") {
+    const displayed = getDisplayedFinal1Item();
+    const item = displayed?.item || getCurrentFinal1Item();
+    return String(item?.promptHira || item?.promptJa || item?.promptEn || "").trim();
+  }
+  if (segment.id === "ch4" && ch4ColorChoiceActive()) {
+    return CH4_COLOR_ASK_SPEAK;
+  }
+  const unlocked = mcqUnlockFlags(segment);
+  const cur = getCurrentMcqBeat(segment, { unlocked });
+  if (!cur?.beat) return "";
+  const color = loadLessonState().memories?.favoriteColor || "orange";
+  const en = expandMcqColorPlaceholders(cur.beat.learnyEn || "", color);
+  const ja = expandMcqColorPlaceholders(cur.beat.learnyJa || "", color);
+  return [en, ja].filter(Boolean).join(" ").trim();
+}
+
+function forceMcqQuestionExactReplay(reason = "ui-replay") {
+  if (!client?.connected || actionState !== "active") return false;
+  const segment = getCurrentSegment();
+  if (segment?.id === "quiz1") {
+    return forceQuiz1ExactSpeak(reason);
+  }
+  const script = getActiveMcqQuestionScript(segment);
+  if (!script) return false;
+  const outbound =
+    "[QUIZ] QUESTION REPLAY. Speak exactly the text between <exact> tags as your complete audible turn, once — every word. " +
+    "Do not add praise, a new question, or English choices. Then WAIT.\n" +
+    `<exact>${script}</exact>`;
+  const wrapped =
+    segment?.id === "ch4"
+      ? withCh4ExactSpeakRule(outbound)
+      : segment?.id === "final1"
+        ? withFinal1ExactSpeakRule(outbound)
+        : withQuizExactSpeakRule(outbound);
+  dbg("force mcq question replay", { reason, segment: segment?.id, script: script.slice(0, 48) });
+  return sendClientText(wrapped, { force: true });
+}
+
+async function replayActiveMcqQuestion(button) {
+  if (choicesLocked() || assistantIsSpeaking()) {
+    setChoiceSpeakerState(button, "error");
+    setTimeout(() => setChoiceSpeakerState(button), 900);
+    return;
+  }
+  const script = getActiveMcqQuestionScript();
+  if (!script) {
+    setChoiceSpeakerState(button, "error");
+    setTimeout(() => setChoiceSpeakerState(button), 900);
+    return;
+  }
+  stopChoiceSpeech();
+  setChoiceSpeakerState(button, "loading");
+  try {
+    audioPlayer?.interrupt?.();
+    closeOpenAudioTurn();
+  } catch {
+    // ignore
+  }
+  const ok = forceMcqQuestionExactReplay("ui-replay");
+  setChoiceSpeakerState(button, ok ? "speaking" : "error");
+  setTimeout(() => {
+    if (button?.isConnected) setChoiceSpeakerState(button);
+  }, ok ? 2200 : 1200);
+}
+
 function setChoiceSpeakerState(button, state = "") {
   button?.classList.toggle("is-loading", state === "loading");
   button?.classList.toggle("is-speaking", state === "speaking");
@@ -7756,10 +7895,32 @@ function renderChoiceBar(segment) {
   const appendChoices = (labels, onClick, titleText, question, { withSpeakers = true } = {}) => {
     show();
     const locked = choicesLocked();
+    const titleRow = document.createElement("div");
+    titleRow.className = "lesson-choice-title-row";
     const title = document.createElement("p");
     title.className = "lesson-choice-title";
     title.textContent = titleText;
-    choiceBar.appendChild(title);
+    titleRow.appendChild(title);
+    const questionScript = getActiveMcqQuestionScript(segment) ||
+      [question?.en, question?.ja].filter(Boolean).join(" ").trim();
+    if (questionScript) {
+      const replay = document.createElement("button");
+      replay.type = "button";
+      replay.className = "lesson-choice-question-replay";
+      replay.innerHTML = CHOICE_QUESTION_REPLAY_ICON;
+      replay.title = "もんだいを もういちど きく";
+      replay.setAttribute("aria-label", "もんだいを もういちど きく");
+      replay.disabled = locked;
+      replay.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        settlePresentedActionableMcq("question-replay-click");
+        if (choicesLocked()) return;
+        replayActiveMcqQuestion(replay);
+      });
+      titleRow.appendChild(replay);
+    }
+    choiceBar.appendChild(titleRow);
     const prompt = canonicalMcqQuestion(question);
     if (prompt.en || prompt.ja) {
       const questionBox = document.createElement("div");
@@ -7885,12 +8046,12 @@ function renderChoiceBar(segment) {
     return;
   }
 
-  if (segment?.id === "ch4" && ch4ColorPickerActive()) {
+  if (segment?.id === "ch4" && ch4ColorChoiceActive()) {
     appendChoices(
       [...CH4_PICKER_COLORS],
       (label) => handleCh4ColorPickerClick(label),
       "すきな色をタップ",
-      { en: CH4_COLOR_PICKER_SPEAK_EN, ja: CH4_COLOR_PICKER_SPEAK_JA },
+      { en: CH4_COLOR_ASK_EN, ja: CH4_COLOR_ASK_JA },
       { withSpeakers: false }
     );
     syncMicForMcqMode();
@@ -8646,6 +8807,9 @@ function isAssistantBubbleComplete(text) {
   if (!t) return false;
   if (assistantEnglishLooksTruncated(t)) return false;
   const seg = getCurrentSegment();
+  if (seg?.id === "quiz1" && assistantQuiz1SpeakMangled(t, getCurrentQuiz1Item())) {
+    return false;
+  }
   if (
     (seg?.id === "daily1" || seg?.type === "daily_english") &&
     usesBeginnerInstructionProfile() &&
@@ -8779,9 +8943,22 @@ function repairIncompleteAssistantBubble() {
   const last = chatMessages[chatMessages.length - 1];
   if (last?.type !== "assistant") return false;
   const cur = String(last.text || "").trim();
-  if (!cur || isAssistantBubbleComplete(cur)) return false;
+  if (!cur) return false;
 
   const expected = getExpectedAssistantSpeakLine();
+  if (expected && getCurrentSegment()?.id === "quiz1") {
+    const item = getCurrentQuiz1Item();
+    if (item && assistantQuiz1SpeakMangled(cur, item)) {
+      last.text = sanitizeAssistantBubbleText(expected);
+      assistantTurnTranscript = expected;
+      scheduleRenderChat();
+      dbg("repaired mangled quiz1 assistant bubble", cur.slice(0, 32));
+      return true;
+    }
+  }
+
+  if (isAssistantBubbleComplete(cur)) return false;
+
   if (expected) {
     const curNorm = normalizeTranscriptPrefix(cur);
     const expNorm = normalizeTranscriptPrefix(expected);
@@ -9803,6 +9980,9 @@ function kickOpeningTurn(opts = {}) {
   const ok = sendClientText(withBeginnerSpeakRule(formatTeacherNote(nudge)), { force: true });
   if (ok) {
     armOpeningDeliveryWatch(kickOpts.reason || kickOpts.handoff || "opening");
+    if (getCurrentSegment(state)?.id === "ch4") {
+      refreshChoiceBarIfNeeded();
+    }
   } else {
     // Allow SETUP_COMPLETE / fallback timer to retry a failed first kick.
     openingSent = false;
@@ -9841,6 +10021,7 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
     key.startsWith("ending1-next-") ||
     key.startsWith("ending1-auto-") ||
     key.startsWith("ending1-finale-") ||
+    key.startsWith("ending1-freetalk") ||
     key.startsWith("beginner-jp") ||
     key.startsWith("no-system") ||
     key.startsWith("lead-cont-") ||
@@ -9872,6 +10053,7 @@ function sendTeacherNote(key, text, { allowRetry: _allowRetry = true } = {}) {
     key.startsWith("ending1-next-") ||
     key.startsWith("ending1-auto-") ||
     key.startsWith("ending1-finale-") ||
+    key.startsWith("ending1-freetalk") ||
     key.startsWith("beginner-jp") ||
     key.startsWith("no-system") ||
     key.startsWith("lead-cont-") ||
@@ -11930,11 +12112,17 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
   updateLearnyThinkingUI();
   if (!skipCh2) handleCh2SearchProgress(t);
   if (!skipDaily1) handleDaily1ChatProgress(t);
-  maybeSaveCh4FavoriteColor(t);
-  if (looksLikeUnknownColorAttempt(t)) {
-    enterCh4ColorPicker(t, "side-effect-unknown");
+  // Ch4 Beat A1 is colour-button only — ignore spoken/typed colour attempts.
+  if (ch4ColorChoiceActive()) {
+    addMessage("すきな色はボタンで選んでね。", "system");
     refreshChoiceBarIfNeeded();
+    awaitingAssistantReply = false;
+    updateLearnyThinkingUI();
+    clearPendingReplyWatch();
+    dbg("side effects: ch4 colour MCQ only — ignore free text/voice");
+    return;
   }
+  maybeSaveCh4FavoriteColor(t);
   if (!skipWarmup) {
     maybeCompleteWarmupFromClient(t);
   }
@@ -12033,9 +12221,10 @@ function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoic
             recoveryReplaySent = dispatched?.text === t;
             userTurnSentViaClientText = recoveryReplaySent;
           } else {
-            const voiceOutbound = buildChildOutbound(t, coach);
+            const voiceMaxCoach = getCurrentSegment()?.id === "daily1" ? 160 : 420;
+            const voiceOutbound = buildChildOutbound(t, coach, { maxCoach: voiceMaxCoach });
             userTurnSentViaClientText = Boolean(
-              sendClientText(withBeginnerSpeakRule(voiceOutbound), { force: true })
+              sendClientText(withSegmentSpeakRule(voiceOutbound), { force: true })
             );
             recoveryReplayOutbound = voiceOutbound;
             recoveryReplaySent = userTurnSentViaClientText;
@@ -12121,6 +12310,11 @@ function sendUserText(text) {
   if (tryRouteFinal1Answer(t)) return;
   if (tryRouteQuiz1Answer(t)) return;
   if (tryRouteTextToMcq(t)) return;
+  if (ch4ColorChoiceActive()) {
+    addMessage("すきな色はボタンで選んでね。", "system");
+    refreshChoiceBarIfNeeded();
+    return;
+  }
 
   addUserAnswerBubble(t);
   assistantTranscriptOpen = false;
@@ -12198,7 +12392,7 @@ function sendUserText(text) {
 
   // Daily English / Ch2: keep coach payload short — long notes stall Live replies.
   const segId = getCurrentSegment()?.id;
-  const maxCoach = segId === "daily1" || segId === "ch2" ? 220 : 420;
+  const maxCoach = segId === "daily1" ? 160 : segId === "ch2" ? 220 : 420;
   const outbound =
     handoffNow || endingClientOwnedTurn
       ? ""
@@ -12222,7 +12416,7 @@ function sendUserText(text) {
     dbg("typed send skipped; voice turn already sent", t.slice(0, 32));
     typedSendSkippedForVoice = true;
     if (!userTurnSentViaClientText && outbound.trim()) {
-      sendClientText(withBeginnerSpeakRule(outbound), { force: true });
+      sendClientText(withSegmentSpeakRule(outbound), { force: true });
       userTurnSentViaClientText = true;
     }
   } else {
@@ -12233,7 +12427,7 @@ function sendUserText(text) {
       if (sendGeneration !== idleGeneration || sendTurnKey !== pendingReplyKey) return;
       if (actionState !== "active" || !client?.connected) return;
       userTurnSentViaClientText = Boolean(
-        sendClientText(withBeginnerSpeakRule(outbound), { force: true })
+        sendClientText(withSegmentSpeakRule(outbound), { force: true })
       );
       pendingReplyMode = "text";
       pendingReplyReplayOutbound = outbound;
@@ -12250,7 +12444,7 @@ function sendUserText(text) {
       if (!outbound.trim()) return;
       dbg("typed-send safety flush");
       sendNow();
-    }, 1200);
+    }, segId === "daily1" ? 600 : 1200);
   } else {
     sendNow();
   }
@@ -12259,12 +12453,16 @@ function sendUserText(text) {
 
 function configureGeminiClient(geminiClient) {
   const state = loadLessonState();
-  const endingPhase2 = getCurrentSegment(state)?.id === "ending1";
+  const segmentId = getCurrentSegment(state)?.id;
+  const endingPhase2 = segmentId === "ending1";
+  const daily1Phase = segmentId === "daily1";
   geminiClient.functions = [];
   geminiClient.functionsMap = {};
   geminiClient.systemInstructions = endingPhase2
     ? buildEndingFreeTalkInstructions(state, LEVEL_INFO.id)
-    : buildLessonInstructions(state, LEVEL_INFO.id);
+    : daily1Phase
+      ? buildDaily1Instructions(state, LEVEL_INFO.id)
+      : buildLessonInstructions(state, LEVEL_INFO.id);
   geminiClient.inputAudioTranscription = true;
   geminiClient.outputAudioTranscription = true;
   geminiClient.googleGrounding = false;
@@ -12286,10 +12484,14 @@ function configureGeminiClient(geminiClient) {
   // resume it after a network drop without losing an in-flight child turn.
   geminiClient.sessionResumptionEnabled = true;
   geminiClient.resumeHandle = sessionResumeHandle || null;
-  if (endingPhase2) {
-    ending1Timing("prompt-configured", {
+  if (endingPhase2 || daily1Phase) {
+    ending1Timing(daily1Phase ? "daily1-prompt-configured" : "prompt-configured", {
       promptChars: geminiClient.systemInstructions.length,
+      segment: segmentId,
       hasFinal1Prompt: /FINAL CHALLENGE ONLY|final1 ONLY/.test(
+        geminiClient.systemInstructions
+      ),
+      hasChapterScaffold: /CHAPTER 1 ONLY|hint → word choices/.test(
         geminiClient.systemInstructions
       ),
     });
@@ -12311,8 +12513,22 @@ function handleTools(functionCalls) {
     if (name === "record_memory") {
       const key = String(args?.key || "").trim();
       const value = String(args?.value || "").trim();
+      if (key === "favoriteColor" && getCurrentSegment()?.id === "ch4" && !ch4HasFavoriteColor()) {
+        queueReply(
+          id,
+          name,
+          {
+            result: "ignored",
+            message:
+              "Beat A1 is colour-button only. Do NOT record_memory from speech. " +
+              "Colour buttons are on screen — WAIT for a tap.",
+          },
+          toolReplyScheduling()
+        );
+        refreshChoiceBarIfNeeded();
+        return;
+      }
       if (key === "favoriteColor" && !normalizeAllowedFavoriteColor(value)) {
-        enterCh4ColorPicker(value, "tool-invalid-color");
         queueReply(
           id,
           name,
@@ -12324,7 +12540,6 @@ function handleTools(functionCalls) {
           },
           toolReplyScheduling()
         );
-        whenAssistantIdle(() => forceCh4ColorPicker("tool-invalid-color", value), "ch4-invalid-color");
         refreshChoiceBarIfNeeded();
         return;
       }

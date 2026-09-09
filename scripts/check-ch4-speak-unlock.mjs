@@ -37,9 +37,11 @@ assert.match(viaLive, /<exact>/);
 assert.match(voice, /shouldDropCh4MakeTellAudio/);
 assert.match(voice, /CH4_AUDIO_MANIFEST/);
 assert.match(voice, /drop Live audio during ch4 make\+tell/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-accuracy-best-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-daily1-latency-1/);
 
 const outbound = functionBody(voice, "buildCh4OutboundCoach");
-assert.match(outbound, /Do NOT speak yet — the client will deliver Beat A2\+B/);
+assert.match(outbound, /colour buttons are on screen/);
+assert.match(outbound, /Do NOT speak — client will deliver Beat A2\+B/);
+assert.doesNotMatch(outbound, /Child named a color/);
 
 console.log("Ch4 speak/MCQ unlock regression checks passed.");

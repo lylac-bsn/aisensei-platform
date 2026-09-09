@@ -14,7 +14,7 @@ import {
   savePendingLessonBadges,
   saveBadgeRevocations,
   saveLessonState,
-} from "./lesson-engine.js?v=20260910-accuracy-best-1";
+} from "./lesson-engine.js?v=20260910-daily1-latency-1";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",
