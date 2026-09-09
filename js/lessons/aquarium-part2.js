@@ -1,4 +1,4 @@
-import { createAquariumPart1Variant } from "./aquarium-part1.js?v=20260910-daily1-latency-1";
+import { createAquariumPart1Variant } from "./aquarium-part1.js?v=20260910-mcq-replay-ui-1";
 
 /** Beginner Part 2: temporary independent copy of Beginner Part 1. */
 export const AQUARIUM_PART2 = createAquariumPart1Variant({

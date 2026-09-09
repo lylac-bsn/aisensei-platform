@@ -154,6 +154,6 @@ assert.equal(
   "stale complete while already on final1 must not re-handoff"
 );
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-daily1-latency-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-mcq-replay-ui-1/);
 
 console.log("check-ch6-replay-final1: ok");

@@ -37,11 +37,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-daily1-latency-1";
+} from "./lesson-engine.js?v=20260910-mcq-replay-ui-1";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-daily1-latency-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-mcq-replay-ui-1";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-daily1-latency-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-mcq-replay-ui-1";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -55,14 +55,14 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-daily1-latency-1";
+} from "./mcq-engine.js?v=20260910-mcq-replay-ui-1";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
   normalizeMcqAudioLabel,
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
-} from "./mcq-audio-config.js?v=20260910-daily1-latency-1";
+} from "./mcq-audio-config.js?v=20260910-mcq-replay-ui-1";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,

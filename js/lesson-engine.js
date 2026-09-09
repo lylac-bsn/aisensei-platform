@@ -1,11 +1,11 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-daily1-latency-1";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-daily1-latency-1";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-daily1-latency-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-mcq-replay-ui-1";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-mcq-replay-ui-1";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-mcq-replay-ui-1";
 import {
   buildPartReporting,
   normalizeIdList,
   PROGRESS_CONTRACT_VERSION,
-} from "./progress-contract.js?v=20260910-daily1-latency-1";
+} from "./progress-contract.js?v=20260910-mcq-replay-ui-1";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -434,7 +434,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260910-daily1-latency-1")
+  import("./badge-engine.js?v=20260910-mcq-replay-ui-1")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges();
       if (newlyEarned?.length) {
