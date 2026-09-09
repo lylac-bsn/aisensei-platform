@@ -96,8 +96,8 @@ const voiceTab = readFileSync(new URL("voice-tab.html", root), "utf8");
 {
   assert.match(voice, /forceQuiz1ExactOpening/);
   assert.doesNotMatch(voice, /playQuiz1StaticAudio|QUIZ1_AUDIO_MANIFEST/);
-  assert.match(voiceTab, /homework-voice\.js\?v=20260910-mcq-replay-ui-1/);
-  assert.match(page1, /page1-dashboard\.js\?v=20260910-mcq-replay-ui-1/);
+  assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
+  assert.match(page1, /page1-dashboard\.js\?v=20260910-warmup-no-glass-1/);
 }
 
 // 3) Unified lesson-engine cache bust across voice + dashboard + mcq
@@ -115,7 +115,7 @@ const voiceTab = readFileSync(new URL("voice-tab.html", root), "utf8");
     ),
   ].map((m) => m[1]);
   assert.ok(versions.length >= 4);
-  assert.ok(versions.every((v) => v === "20260910-mcq-replay-ui-1"));
+  assert.ok(versions.every((v) => v === "20260910-warmup-no-glass-1"));
 }
 
 // 4) Happy-path state walk: complete every segment in order

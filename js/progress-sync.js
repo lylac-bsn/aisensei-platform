@@ -12,12 +12,12 @@ import {
   loadBadgeRevocations,
   saveEarnedLessonBadges,
   savePendingLessonBadges,
-} from "./lesson-engine.js?v=20260910-mcq-replay-ui-1";
+} from "./lesson-engine.js?v=20260910-warmup-no-glass-1";
 import {
   normalizeIdList,
   resolveClaimedBadgeIds,
   resolvePendingBadgeIds,
-} from "./progress-contract.js?v=20260910-mcq-replay-ui-1";
+} from "./progress-contract.js?v=20260910-warmup-no-glass-1";
 
 let syncTimer = null;
 let syncContext = null;

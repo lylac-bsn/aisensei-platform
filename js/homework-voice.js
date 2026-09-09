@@ -37,11 +37,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-mcq-replay-ui-1";
+} from "./lesson-engine.js?v=20260910-warmup-no-glass-1";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-mcq-replay-ui-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-warmup-no-glass-1";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-mcq-replay-ui-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-warmup-no-glass-1";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -55,14 +55,14 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-mcq-replay-ui-1";
+} from "./mcq-engine.js?v=20260910-warmup-no-glass-1";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
   normalizeMcqAudioLabel,
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
-} from "./mcq-audio-config.js?v=20260910-mcq-replay-ui-1";
+} from "./mcq-audio-config.js?v=20260910-warmup-no-glass-1";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,
@@ -5438,6 +5438,7 @@ function runPostTurnCoachNudges() {
   maybeSystemBackendLeakNudge();
   maybeElicitEigoSkipNudge();
   maybeQuiz1ExactSpeakNudge();
+  maybeWarmupHomeworkLeakNudge();
 
   // Praise-only / stalled lead — allow a follow-up spoken beat even after Learny just spoke.
   // Ch4 hard-forces Let's make / Beat B; soft continuation nudge would double-speak.
@@ -6154,6 +6155,45 @@ function maybeWarmupMoodFollowUpNudge() {
       withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint()))
     );
   }, "warmup-mood-followup");
+}
+
+/** Chapter 0 must never speak homework phrase elicits (glass/sand MCQ lines). */
+function assistantWarmupHomeworkLeak(text = lastAssistantText()) {
+  const t = String(text || "");
+  if (!t.trim()) return false;
+  return (
+    /がらすが\s*ひつよう|すなが\s*ひつよう|がらすを\s*つく|すなを\s*みつけ|くいずたいむ|の\s*えいごを\s*選んで|は\s*えいごで[？?]|I need glass|I need sand|I made glass|Can you say it in English/i.test(
+      t
+    ) || /「[^」]{2,24}」の\s*えいごを\s*選んで/.test(t)
+  );
+}
+
+function maybeWarmupHomeworkLeakNudge() {
+  if (getCurrentSegment()?.type !== "warmup") return;
+  if (!assistantTranscriptSettled()) return;
+  const text = lastAssistantText().trim();
+  if (!assistantWarmupHomeworkLeak(text)) return;
+
+  const noUserYet = countWarmupUserReplies() < 1;
+  const key = `warmup-hw-leak-${normalizeUserText(text).slice(0, 32) || "open"}`;
+  whenAssistantIdle(() => {
+    if (getCurrentSegment()?.type !== "warmup") return;
+    if (!assistantWarmupHomeworkLeak(lastAssistantText())) return;
+    try {
+      audioPlayer?.interrupt?.();
+      closeOpenAudioTurn();
+    } catch {
+      // ignore
+    }
+    const note = noUserYet
+      ? "[Teacher note — do not read aloud] STOP. Chapter 0 opening leaked homework. " +
+        "Speak EXACTLY once then WAIT: Hello! How are you today? こんにちは！きょうは どうですか？ " +
+        "FORBIDDEN: homework 「phrase」の えいごを 選んでね！ elicits, glass/sand teaching."
+      : "[Teacher note — do not read aloud] STOP. Chapter 0 must stay everyday chat. " +
+        "Do NOT say homework 「phrase」の えいごを 選んでね！ / glass/sand teaching. " +
+        "React to the child's latest words with ONE everyday follow-up only, then WAIT.";
+    sendTeacherNote(key, withBeginnerSpeakRule(formatTeacherNote(note + beginnerTurnHint())));
+  }, "warmup-hw-leak");
 }
 
 function buildCh1CoachNote(userText, { postTurn = false } = {}) {

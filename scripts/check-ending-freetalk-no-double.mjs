@@ -79,6 +79,6 @@ assert.equal(
   "katakana echo must appear once"
 );
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-mcq-replay-ui-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
 
 console.log("check-ending-freetalk-no-double: ok");

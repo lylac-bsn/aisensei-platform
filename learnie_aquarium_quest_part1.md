@@ -50,7 +50,8 @@
 
 1. `Hello! How are you today?`
   `こんにちは！きょうは どうですか？`  
-   ※ How are you を同じターンで繰り返さない
+   ※ How are you を同じターンで繰り返さない  
+   ※ **FORBIDDEN:** homework phrase elicits（例: `「がらすが ひつよう」の えいごを 選んでね！`）— Chapter 0 は日常チャットのみ
 2. （気分の返事のあと — **この質問固定**）
   `That's great! What did you do today?`  
    `よかった！きょうは なにを したの？`  

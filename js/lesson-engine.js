@@ -1,11 +1,11 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-mcq-replay-ui-1";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-mcq-replay-ui-1";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-mcq-replay-ui-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-warmup-no-glass-1";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-warmup-no-glass-1";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-warmup-no-glass-1";
 import {
   buildPartReporting,
   normalizeIdList,
   PROGRESS_CONTRACT_VERSION,
-} from "./progress-contract.js?v=20260910-mcq-replay-ui-1";
+} from "./progress-contract.js?v=20260910-warmup-no-glass-1";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -434,7 +434,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260910-mcq-replay-ui-1")
+  import("./badge-engine.js?v=20260910-warmup-no-glass-1")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges();
       if (newlyEarned?.length) {
@@ -874,15 +874,47 @@ function scaffoldingLine(levelId) {
   ].join(" ");
 }
 
-function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID) {
+function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID, segment = null) {
+  const segId = segment?.id || "";
+  const segType = segment?.type || "";
+  // Phrase elicits are homework-chapter tools. Seeding them into warmup/daily free chat
+  // made Live append 「がらすが ひつよう」の えいごを 選んでね！ after Hello / How are you.
+  if (
+    segType === "warmup" ||
+    segId === "ch0" ||
+    segId === "daily1" ||
+    segId === "ending1"
+  ) {
+    return "";
+  }
+
   const elicitCue =
     levelId === "intermediate"
       ? "を えいごで いってみて！"
       : "の えいごを 選んでね！";
+  const exampleBySegment = {
+    ch1: PART1_ELICIT_JA.needGlass,
+    ch2: PART1_ELICIT_JA.foundSand,
+    ch3: PART1_ELICIT_JA.ch3NeedGlass,
+    ch5: PART1_ELICIT_JA.ch5PutGlass,
+    ch6: PART1_ELICIT_JA.ch6MoreSand,
+    quiz1: "「がらすが ひつよう」は えいごで？",
+    final1: "がらすが ひつよう！は えいごで？",
+  };
   const exampleCue =
-    levelId === "intermediate"
+    exampleBySegment[segId] ||
+    (levelId === "intermediate"
       ? "「がらすが ひつよう」を えいごで いってみて！"
-      : "「がらすが ひつよう」の えいごを 選んでね！";
+      : "「がらすが ひつよう」の えいごを 選んでね！");
+
+  const segmentElicits = {
+    ch1: `Ch1 only: ${PART1_ELICIT_JA.needGlass} / ${PART1_ELICIT_JA.needSand}`,
+    ch2: `Ch2 only: ${PART1_ELICIT_JA.foundSand}`,
+    ch3: `Ch3 only: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
+    ch5: `Ch5 only: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
+    ch6: `Ch6 only: ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
+  };
+
   return [
     `JAPANESE PHRASE ELICITS (「…」${elicitCue}):`,
     `Always wrap the Japanese phrase in 「」 then say ${elicitCue} — e.g. ${exampleCue}`,
@@ -891,11 +923,7 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID) {
       ? "INTERMEDIATE: Never say 選んでね / tap / button / 4-choice. Child speaks the English."
       : "CRITICAL AUDIO: Pronounce every mora of え・い・ご・を in の えいごを 選んでね！ Never shorten to の選んでね / のを選んでね. The Japanese word えいご is required.",
     'When coaches say "do not speak the English answer", that means do NOT say the target English phrase (e.g. I made a tank!) — it does NOT mean skip the Japanese word えいご.',
-    `Ch1 glass: ${PART1_ELICIT_JA.needGlass} Ch1 sand: ${PART1_ELICIT_JA.needSand}`,
-    `Ch2 found sand: ${PART1_ELICIT_JA.foundSand}`,
-    `Ch3: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
-    `Ch5: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
-    `Ch6: ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
+    segmentElicits[segId] || "",
     "FORBIDDEN: ガラスが必要って… / がらすがひつようって… without 「」 around the phrase.",
   ]
     .filter(Boolean)
@@ -951,7 +979,7 @@ function leadTheTurnRule(levelId = ACTIVE_LEVEL_ID) {
     "Never change topic in the same turn as reacting to their last answer — especially never jump to homework/tank while they shared everyday news (invite turn is the exception: short reaction + Oh! Today…).",
     "Forbidden: two questions in one utterance. Forbidden: stopping after Nice! / I see! / That's cool! / Sand is right! / That's right! そうだね! alone.",
     "Forbidden: TWO spoken replies in a row without the child speaking — ONE message per child turn, then wait.",
-    `Bad end (never do this): "That's right! そうだね!" with no next question. Good end: "That's right! Can you say it in English? ばっちり！${PART1_ELICIT_JA.needSand}"`,
+    'Bad end (never do this): "That\'s right! そうだね!" with no next question. Good chat end: "That\'s right! What did you play? そうだね！なにを あそんだの？" — during warmup/chat NEVER append homework 「phrase」の えいごを 選んでね！ elicits.',
     "Forbidden open filler: What should we do next? / つぎは？ alone — always name the next homework step (e.g. make glass → I need to make glass).",
   ];
   if (levelId === "beginner") {
@@ -1308,6 +1336,7 @@ function warmupRules(segment, lessonId) {
     "Talk like a friendly real teacher who is genuinely interested — NOT a quiz bot reading a script.",
     "First turn ONLY: Hello! How are you today? こんにちは！きょうは どうですか？ Then STOP and WAIT.",
     "FORBIDDEN first turn: That's great! / What did you do today? / Hello there / a second How are you / any follow-up before the child answers. ONE how-are-you only.",
+    "FORBIDDEN forever on warmup/ch0: any homework 「phrase」の えいごを 選んでね！ / は えいごで？ elicit, glass/sand teaching, I need glass, I need sand, Mini quiz, Chapter 1+ homework lines.",
     "How are you answers: warm varied reaction (That's great! / Glad to hear it! / Hope you feel better! — rotate, don't always That's great!) + EXACTLY What did you do today? きょうは なにを したの？ — NOT Did you eat lunch yet?, NOT Are you hungry?, NOT Thank you / ありがとう (thank-you is only for help or gifts).",
     "CONTENT answers mid-chat (I studied / I went to the cafe / I played…): show real interest — name their words, add a tiny human comment (Was it fun? / Cool! / Sounds hard!), THEN ONE curious follow-up about THAT topic — then STOP and WAIT. FORBIDDEN mid-chat: hollow Oh! then fish-tank invite; robotic You X! What did you X? every turn.",
     "Follow their answer with ONE everyday follow-up question — then STOP and wait for the child. Never two chat questions in one turn.",
@@ -1357,7 +1386,7 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     "You are ラーニー先生 (Learny), a warm Japanese-English homework tutor for children — like a real human teacher on a video call, not a chatbot script.",
     "This is HOMEWORK between real Minecraft classes — not live co-play. Do not ask them to share a screen or play Minecraft now.",
     conversationQualityRule(),
-    usesTemplate ? japaneseElicitBracketRule(instructionLevel) : "",
+    usesTemplate ? japaneseElicitBracketRule(instructionLevel, segment) : "",
     noSystemBackendRule(),
     lesson.weekNote,
     lesson.stopRule,
@@ -1424,7 +1453,8 @@ export function buildOpeningNudge(state = loadLessonState()) {
     return (
       "[Teacher note — do not read this aloud.] CHAPTER 0: greet the child like a real English teacher. " +
       "THIS TURN ONLY — say EXACTLY once then STOP and WAIT for the child: Hello! How are you today? こんにちは！きょうは どうですか？ " +
-      "FORBIDDEN this turn: That's great!, What did you do today?, Hello there, a second How are you, any follow-up, Minecraft, tank. " +
+      "FORBIDDEN this turn: That's great!, What did you do today?, Hello there, a second How are you, any follow-up, Minecraft, tank, " +
+      "homework 「phrase」の えいごを 選んでね！ elicits, glass/sand teaching. " +
       "Do NOT continue speaking until the child answers."
     );
   }

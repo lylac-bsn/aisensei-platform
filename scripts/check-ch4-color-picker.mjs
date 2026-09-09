@@ -103,6 +103,6 @@ assert.match(coach, /colour buttons are on screen/);
 assert.doesNotMatch(coach, /looksLikeUnknownColorAttempt/);
 assert.doesNotMatch(coach, /Child named a color/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-mcq-replay-ui-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
 
 console.log("Ch4 colour MCQ Beat A1 regression checks passed.");

@@ -25,7 +25,7 @@ assert.match(voice, /withSegmentSpeakRule/);
 assert.match(voice, /const daily1Phase = segmentId === "daily1"/);
 assert.match(voice, /segId === "daily1" \? 160/);
 assert.match(voice, /isDaily1ShortAck[\s\S]*かわいい/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-mcq-replay-ui-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
 
 const lesson = getActiveLesson();
 const idx = lesson.segments.findIndex((segment) => segment.id === "daily1");
