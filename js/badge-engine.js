@@ -1,5 +1,5 @@
 /**
- * Beginner Part 1 badge evaluation (chapter / freetalk / accuracy).
+ * Shared badge evaluation (chapter / freetalk / accuracy).
  * Awards are deterministic — do not use Gemini award_badge.
  */
 
@@ -8,10 +8,13 @@ import {
   getActiveLessonId,
   getLesson,
   loadLessonState,
-  recordLessonBadge,
   loadEarnedLessonBadges,
+  loadPendingLessonBadges,
+  loadBadgeRevocations,
+  savePendingLessonBadges,
+  saveBadgeRevocations,
   saveLessonState,
-} from "./lesson-engine.js";
+} from "./lesson-engine.js?v=20260910-accuracy-best-1";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",
@@ -24,22 +27,35 @@ export const BADGE_FAMILIES = Object.freeze(["chapter", "freetalk", "accuracy"])
 
 export const TIER_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3 });
 
-/** Gate: Beginner Part 1 only. */
-export function isBeginnerPart1BadgeScope(
+/** Every lesson using the cloned Beginner Part 1 architecture supports badges. */
+export function isBadgeEnabledScope(
   levelId = getActiveLevelId(),
   lessonId = getActiveLessonId()
 ) {
-  return levelId === "beginner" && lessonId === "part1";
+  return getLesson(lessonId, levelId)?.architecture === "beginner-part1-v1";
 }
 
-export function badgeId(family, tier) {
-  return `p1_${family}_${tier}`;
+export function badgeId(
+  family,
+  tier,
+  lesson = getLesson(getActiveLessonId(), getActiveLevelId())
+) {
+  return `${lesson.badgePrefix}_${family}_${tier}`;
+}
+
+export function badgePrefixForScope(
+  levelId = getActiveLevelId(),
+  lessonId = getActiveLessonId()
+) {
+  return getLesson(lessonId, levelId)?.badgePrefix || "";
 }
 
 export function parseBadgeId(id) {
-  const m = String(id || "").match(/^p1_(chapter|freetalk|accuracy)_(bronze|silver|gold)$/);
+  const m = String(id || "").match(
+    /^(.*?)_(chapter|freetalk|accuracy)_(bronze|silver|gold)$/
+  );
   if (!m) return null;
-  return { family: m[1], tier: m[2] };
+  return { prefix: m[1], family: m[2], tier: m[3] };
 }
 
 /**
@@ -68,14 +84,24 @@ export function listScorableBeats(lesson, state = null) {
       }
     }
     if (seg.type === "final_challenge" && Array.isArray(seg.items)) {
-      // Final is a random subset — only count items the learner actually faced.
+      // Final is a random subset — only count items faced on the current play.
       if (!state) continue;
       const firstTry = state.mcqBadgeFirstTry || {};
       const summary = state.mcqSummary || {};
+      const currentPlay =
+        Number(state.mcqBadgePlay?.[seg.id]) ||
+        Number(state.chapterPlayCounts?.[seg.id]) ||
+        0;
       for (const item of seg.items) {
         if (!item?.id) continue;
         const key = `${seg.id}.${item.id}`;
-        if (!(key in firstTry) && !(key in summary)) continue;
+        const entry = firstTry[key];
+        const facedOnCurrentPlay =
+          entry &&
+          (!(currentPlay > 0) || Number(entry.play) === currentPlay);
+        // Keep pre-play-id legacy data readable until the chapter is replayed.
+        const legacyFaced = !(currentPlay > 0) && key in summary;
+        if (!facedOnCurrentPlay && !legacyFaced) continue;
         push(seg.id, item.id, "final");
       }
     }
@@ -100,15 +126,42 @@ export function computeFreetalkTier(count) {
 }
 
 /**
- * Accuracy from latest-play first-try map.
- * Unattempted fixed beats count as incorrect; final only if attempted.
+ * Accuracy from best first-try across plays (いっぱつせいかい).
+ * A beat counts once the learner gets first-click correct on ANY play of its
+ * chapter — later replays can raise the rank; a bad later play does not erase
+ * a clean earlier play. Unattempted fixed beats count as incorrect; final only
+ * if attempted.
  */
+export function resolveBestFirstTryMap(state) {
+  const best = {};
+  for (const [key, value] of Object.entries(state?.mcqBadgeFirstTryBest || {})) {
+    if (value === true) best[key] = true;
+  }
+  for (const [key, entry] of Object.entries(state?.mcqBadgeFirstTry || {})) {
+    if (entry?.correct === true) best[key] = true;
+  }
+  // Lifetime log backup: first click per (beat, play). Survives map wipe races.
+  const seenPlay = new Set();
+  for (const event of state?.mcqLog || []) {
+    const segmentId = String(event?.segmentId || "").trim();
+    const beatId = String(event?.beatId || "").trim();
+    if (!segmentId || !beatId) continue;
+    const key = `${segmentId}.${beatId}`;
+    const play = Number(event.playId ?? event.play) || 0;
+    const stamp = `${key}|${play}`;
+    if (seenPlay.has(stamp)) continue;
+    seenPlay.add(stamp);
+    if (event.correct === true) best[key] = true;
+  }
+  return best;
+}
+
 export function computeAccuracyTier(state, lesson) {
   const beats = listScorableBeats(lesson, state);
-  const firstTry = state?.mcqBadgeFirstTry || {};
+  const best = resolveBestFirstTryMap(state);
   let correct = 0;
   for (const b of beats) {
-    if (firstTry[b.key]?.correct === true) correct += 1;
+    if (best[b.key] === true) correct += 1;
   }
   const total = beats.length;
   const rate = total > 0 ? correct / total : 0;
@@ -119,60 +172,98 @@ export function computeAccuracyTier(state, lesson) {
   return { rate, correct, total, tier };
 }
 
+/**
+ * Whether a completed segment still has beats that have never been first-click
+ * correct on any play (and accuracy can still rank up).
+ */
+export function segmentNeedsAccuracyReplay(
+  state,
+  lesson,
+  segmentId,
+  { earnedAccuracyTier = null } = {}
+) {
+  const id = String(segmentId || "").trim();
+  if (
+    !id ||
+    lesson?.architecture !== "beginner-part1-v1" ||
+    earnedAccuracyTier === "gold" ||
+    !(state?.completedSegmentIds || []).includes(id)
+  ) {
+    return false;
+  }
+
+  const best = resolveBestFirstTryMap(state);
+  return listScorableBeats(lesson, state).some((beat) => {
+    if (beat.segmentId !== id) return false;
+    return best[beat.key] !== true;
+  });
+}
+
 /** All tier ids unlocked up to and including `tier`. */
-export function tierIdsForFamily(family, tier) {
+export function tierIdsForFamily(family, tier, lesson) {
   if (!tier || !BADGE_FAMILIES.includes(family)) return [];
   const order = ["bronze", "silver", "gold"];
   const idx = order.indexOf(tier);
   if (idx < 0) return [];
-  return order.slice(0, idx + 1).map((t) => badgeId(family, t));
+  return order.slice(0, idx + 1).map((t) => badgeId(family, t, lesson));
 }
 
 export function evaluateLessonBadges(state, lesson) {
-  if (!isBeginnerPart1BadgeScope()) return [];
+  if (lesson?.architecture !== "beginner-part1-v1") return [];
   const ids = [];
   const chapter = computeChapterTier(state);
-  ids.push(...tierIdsForFamily("chapter", chapter));
+  ids.push(...tierIdsForFamily("chapter", chapter, lesson));
   const freetalk = computeFreetalkTier(state?.endingFreetalkEnglishCount);
-  ids.push(...tierIdsForFamily("freetalk", freetalk));
+  ids.push(...tierIdsForFamily("freetalk", freetalk, lesson));
   const { tier: accuracy } = computeAccuracyTier(state, lesson);
-  ids.push(...tierIdsForFamily("accuracy", accuracy));
+  ids.push(...tierIdsForFamily("accuracy", accuracy, lesson));
   return [...new Set(ids)];
 }
 
 /**
- * Award any desired ids not yet earned. Returns newly earned ids.
+ * Award any desired ids not yet claimed/pending. Returns newly pending ids.
+ * Re-earn after 「最初から」 clears wipe revocations so sync cannot delete
+ * awaiting うけとる receipts.
  */
 export function syncBadgeAwards(desiredIds) {
-  if (!isBeginnerPart1BadgeScope()) return { newlyEarned: [] };
+  if (!isBadgeEnabledScope()) return { newlyEarned: [] };
   const desired = [...new Set((desiredIds || []).map(String).filter(Boolean))];
-  const have = new Set(loadEarnedLessonBadges());
-  const newlyEarned = [];
+  const claimed = new Set(loadEarnedLessonBadges());
+  const pending = new Set(loadPendingLessonBadges());
+  const newlyPending = [];
   for (const id of desired) {
-    if (have.has(id)) continue;
-    recordLessonBadge(id);
-    have.add(id);
-    newlyEarned.push(id);
+    if (claimed.has(id) || pending.has(id)) continue;
+    pending.add(id);
+    newlyPending.push(id);
   }
-  return { newlyEarned };
+  if (newlyPending.length) {
+    savePendingLessonBadges([...pending]);
+    const revoked = loadBadgeRevocations();
+    if (revoked.length) {
+      const keepPending = new Set(pending);
+      saveBadgeRevocations(revoked.filter((id) => !keepPending.has(id)));
+    }
+  }
+  // Keep the legacy result key because it drives the receipt ceremony.
+  return { newlyEarned: newlyPending, newlyPending };
 }
 
 /** Evaluate current lesson state and award. */
 export function evaluateAndAwardBadges() {
-  if (!isBeginnerPart1BadgeScope()) return { newlyEarned: [], desired: [] };
+  if (!isBadgeEnabledScope()) return { newlyEarned: [], desired: [] };
   const state = loadLessonState();
-  const lesson = getLesson("part1");
+  const lesson = getLesson(getActiveLessonId(), getActiveLevelId());
   const desired = evaluateLessonBadges(state, lesson);
   const { newlyEarned } = syncBadgeAwards(desired);
   return { newlyEarned, desired };
 }
 
 /**
- * Mark chapter play boundary for badge first-try (beginner part1 only).
+ * Mark chapter play boundary for badge first-try.
  * Call when chapterPlayCounts[segmentId] is set/incremented.
  */
 export function markMcqBadgePlay(segmentId, playCount, state = null) {
-  if (!isBeginnerPart1BadgeScope()) return state;
+  if (!isBadgeEnabledScope()) return state;
   const id = String(segmentId || "").trim();
   if (!id || !(Number(playCount) > 0)) return state;
   const s = state || loadLessonState();
@@ -186,18 +277,21 @@ export function markMcqBadgePlay(segmentId, playCount, state = null) {
  * Mutates and saves state when not passed in.
  */
 export function maybeRecordBadgeFirstTry(state, { segmentId, beatId, correct }) {
-  if (!isBeginnerPart1BadgeScope()) return { updated: false, state };
+  if (!isBadgeEnabledScope()) return { updated: false, state };
   const seg = String(segmentId || "");
   const beat = String(beatId || "");
   if (!seg || !beat) return { updated: false, state };
 
-  const play =
-    Number(state.mcqBadgePlay?.[seg]) ||
-    Number(state.chapterPlayCounts?.[seg]) ||
-    1;
+  const play = Math.max(
+    Number(state.mcqBadgePlay?.[seg]) || 0,
+    Number(state.chapterPlayCounts?.[seg]) || 0,
+    1
+  );
   const key = `${seg}.${beat}`;
   const prev = state.mcqBadgeFirstTry?.[key];
   if (prev && Number(prev.play) === play) {
+    // Same play: first click is locked, but promote sticky best if this click
+    // somehow arrives as the recorded first-try correct (already handled above).
     return { updated: false, state };
   }
 
@@ -209,6 +303,12 @@ export function maybeRecordBadgeFirstTry(state, { segmentId, beatId, correct }) 
       at: new Date().toISOString(),
     },
   };
+  if (correct) {
+    state.mcqBadgeFirstTryBest = {
+      ...(state.mcqBadgeFirstTryBest || {}),
+      [key]: true,
+    };
+  }
   return { updated: true, state };
 }
 
@@ -220,11 +320,11 @@ export function isEnglishSentence(text) {
 }
 
 /**
- * Increment ending freetalk English count (beginner part1, ending free-talk only).
+ * Increment ending free-talk English count for the active lesson.
  * Caller must ensure freeTalk phase is active.
  */
 export function recordEndingFreetalkEnglish(text) {
-  if (!isBeginnerPart1BadgeScope()) return { counted: false, count: 0, newlyEarned: [] };
+  if (!isBadgeEnabledScope()) return { counted: false, count: 0, newlyEarned: [] };
   if (!isEnglishSentence(text)) {
     const state = loadLessonState();
     return {
@@ -236,6 +336,15 @@ export function recordEndingFreetalkEnglish(text) {
   const state = loadLessonState();
   const prev = Number(state.endingFreetalkEnglishCount) || 0;
   state.endingFreetalkEnglishCount = prev + 1;
+  const playId =
+    Number(state.mcqBadgePlay?.ending1) ||
+    Number(state.chapterPlayCounts?.ending1) ||
+    1;
+  state.endingFreetalkEnglishByPlay = {
+    ...(state.endingFreetalkEnglishByPlay || {}),
+    [playId]:
+      (Number(state.endingFreetalkEnglishByPlay?.[playId]) || 0) + 1,
+  };
   saveLessonState(state);
   const { newlyEarned } = evaluateAndAwardBadges();
   return {
@@ -246,11 +355,12 @@ export function recordEndingFreetalkEnglish(text) {
 }
 
 /** Highest earned tier per family from earned id list. */
-export function highestTierByFamily(earnedIds) {
+export function highestTierByFamily(earnedIds, badgePrefix = null) {
   const out = { chapter: null, freetalk: null, accuracy: null };
   for (const id of earnedIds || []) {
     const parsed = parseBadgeId(id);
     if (!parsed) continue;
+    if (badgePrefix && parsed.prefix !== badgePrefix) continue;
     const rank = TIER_RANK[parsed.tier] || 0;
     const cur = out[parsed.family];
     if (!cur || rank > (TIER_RANK[cur] || 0)) out[parsed.family] = parsed.tier;
@@ -268,5 +378,8 @@ export function familySlotImage(tier) {
 export const FAMILY_LABELS_JA = Object.freeze({
   chapter: { label: "チャプター", desc: "章をクリアするとランクアップ" },
   freetalk: { label: "フリートーク", desc: "おしまいの英会話でランクアップ" },
-  accuracy: { label: "せいとうりつ", desc: "4択のいちばんさいしょの正解率" },
+  accuracy: {
+    label: "いっぱつせいかい",
+    desc: "4択を各章でさいしょの1かいで正解するとランクアップ（やりなおしOK）",
+  },
 });

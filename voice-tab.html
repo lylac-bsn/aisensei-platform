@@ -559,10 +559,41 @@
             border-radius: 10px;
             padding: 6px 10px;
         }
+        .lesson-choice-question {
+            display: grid;
+            gap: 3px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #fff;
+            border: 1px solid #c8e6c9;
+            text-align: center;
+        }
+        .lesson-choice-question p { margin: 0; }
+        .lesson-choice-question-en {
+            color: #1b5e20;
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+        .lesson-choice-question-ja {
+            color: #455a64;
+            font-size: 0.9rem;
+            font-weight: 600;
+            line-height: 1.45;
+        }
         .lesson-choice-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
+        }
+        .lesson-choice-option {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 42px;
+            align-items: stretch;
+            gap: 6px;
+        }
+        .lesson-choice-option--no-speaker {
+            grid-template-columns: minmax(0, 1fr);
         }
         .lesson-choice-btn {
             font-family: inherit;
@@ -579,6 +610,55 @@
             transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
             box-shadow: 0 2px 0 rgba(46, 125, 50, 0.08);
         }
+        .lesson-choice-speaker {
+            min-width: 42px;
+            min-height: 42px;
+            padding: 0;
+            border: 2px solid #a5d6a7;
+            border-radius: 12px;
+            background: #fff;
+            color: #2e7d32;
+            cursor: pointer;
+            font: inherit;
+            font-size: 1rem;
+            line-height: 1;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+        .lesson-choice-speaker svg {
+            width: 21px;
+            height: 21px;
+            display: block;
+            margin: auto;
+        }
+        .lesson-choice-speaker:hover,
+        .lesson-choice-speaker:focus-visible {
+            border-color: var(--primary);
+            background: #e8f5e9;
+            outline: 3px solid rgba(67, 160, 71, 0.2);
+            outline-offset: 1px;
+        }
+        .lesson-choice-speaker.is-speaking {
+            border-color: #ffb74d;
+            background: #fff3e0;
+            animation: choiceSpeakerPulse 0.7s ease-in-out infinite alternate;
+        }
+        .lesson-choice-speaker.is-loading {
+            color: #78909c;
+            cursor: wait;
+            animation: choiceSpeakerLoading 0.85s linear infinite;
+        }
+        .lesson-choice-speaker.is-error {
+            color: #c62828;
+            border-color: #ef9a9a;
+            background: #ffebee;
+        }
+        @keyframes choiceSpeakerLoading {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes choiceSpeakerPulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.08); }
+        }
         .lesson-choice-btn:hover {
             border-color: var(--primary);
             color: var(--primary-dark);
@@ -588,6 +668,13 @@
         }
         .lesson-choice-btn:active {
             transform: translateY(1px);
+            box-shadow: none;
+        }
+        .lesson-choice-btn:disabled,
+        .lesson-choice-speaker:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
             box-shadow: none;
         }
         .lesson-choice-btn.is-wrong {
@@ -1074,29 +1161,6 @@
             line-height: 1;
             white-space: nowrap;
             letter-spacing: 0.02em;
-        }
-        .quest-skip-btn {
-            appearance: none;
-            border: 1.5px solid #C8E6C9;
-            background: #fff;
-            color: #2E7D32;
-            font-family: inherit;
-            font-size: var(--text-xs);
-            font-weight: 700;
-            line-height: 1.2;
-            padding: 6px 10px;
-            border-radius: 999px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-        }
-        .quest-skip-btn:hover:not(:disabled) {
-            background: #E8F5E9;
-            border-color: #81C784;
-        }
-        .quest-skip-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
         }
         .quest-banner.celebrating {
             border-color: #66BB6A;
@@ -1627,9 +1691,6 @@
                 <div class="quest-card-status">
                     <div class="quest-stars" id="quest-stars" role="img" aria-label="クエスト進捗"></div>
                     <div class="quest-banner-progress" id="quest-banner-progress">0 / 10</div>
-                    <button type="button" class="quest-skip-btn" id="quest-skip-btn" disabled hidden>
-                        スキップ
-                    </button>
                 </div>
             </div>
         </div>
@@ -1727,6 +1788,6 @@
         </div>
     </div>
 
-    <script type="module" src="./js/homework-voice.js"></script>
+    <script type="module" src="./js/homework-voice.js?v=20260910-accuracy-best-1"></script>
 </body>
 </html>

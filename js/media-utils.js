@@ -7,7 +7,7 @@ const CAPTURE_WORKLET_URL = new URL(
   import.meta.url
 ).href;
 const PLAYBACK_WORKLET_URL = new URL(
-  "../audio-processors/playback.worklet.js",
+  "../audio-processors/playback.worklet.js?v=20260909-recovery-1",
   import.meta.url
 ).href;
 
@@ -510,6 +510,13 @@ export class AudioPlayer {
     this.sampleRate = 24000; // Gemini outputs at 24kHz
     /** Wall-clock time (ms) when queued playback is expected to finish. */
     this.playbackEndAt = 0;
+    this.playbackEpoch = 1;
+    this.nextChunkId = 1;
+    this.audioAcceptAfter = 0;
+    this.quarantinedAudio = [];
+    this.quarantineTimer = null;
+    this.onFirstSamplesRendered = () => {};
+    this.onQueueDrained = () => {};
   }
 
   /**
@@ -543,6 +550,25 @@ export class AudioPlayer {
         this.audioContext,
         "pcm-processor"
       );
+      this.workletNode.port.onmessage = (event) => {
+        const message = event.data;
+        if (message?.type === "rendered" && message.epoch === this.playbackEpoch) {
+          try {
+            this.onFirstSamplesRendered(message);
+          } catch {
+            // Playback acknowledgments must never interrupt audio.
+          }
+        } else if (message?.type === "drained" && message.epoch === this.playbackEpoch) {
+          // Gemini sends a response as many small packets. The worklet queue can
+          // briefly empty between packets, so "drained" is not end-of-turn and
+          // must not erase the wall-clock playback estimate.
+          try {
+            this.onQueueDrained({ epoch: this.playbackEpoch });
+          } catch {
+            // Playback acknowledgments must never interrupt audio.
+          }
+        }
+      };
 
       // Create gain node for volume control
       this.gainNode = this.audioContext.createGain();
@@ -559,18 +585,97 @@ export class AudioPlayer {
   }
 
   /**
+   * Start a new logical assistant-delivery epoch. Flush prior queued PCM and
+   * briefly quarantine ingress so a late packet from the completed model turn
+   * cannot be acknowledged as the new child's response.
+   */
+  beginTurn() {
+    this.interrupt();
+    this.audioAcceptAfter = Date.now() + 180;
+    return this.playbackEpoch;
+  }
+
+  confirmTurnResponse() {
+    this.audioAcceptAfter = 0;
+    this._flushQuarantinedAudio();
+  }
+
+  finishTurnIngress() {
+    if (!this.quarantinedAudio.length) return;
+    // A complete turn that only produced packets inside the late-packet window
+    // is treated as stale. Preserve a genuinely useful short utterance when
+    // the quarantined PCM itself contains at least ~120ms of speech.
+    const samples = this.quarantinedAudio.reduce(
+      (total, chunk) => total + (chunk?.length || 0),
+      0
+    );
+    if (samples >= this.sampleRate * 0.12) {
+      this.audioAcceptAfter = 0;
+      this._flushQuarantinedAudio();
+    } else {
+      this._clearQuarantinedAudio();
+    }
+  }
+
+  _clearQuarantinedAudio() {
+    if (this.quarantineTimer) {
+      clearTimeout(this.quarantineTimer);
+      this.quarantineTimer = null;
+    }
+    this.quarantinedAudio = [];
+  }
+
+  _flushQuarantinedAudio() {
+    if (this.quarantineTimer) {
+      clearTimeout(this.quarantineTimer);
+      this.quarantineTimer = null;
+    }
+    const epoch = this.playbackEpoch;
+    const queued = this.quarantinedAudio;
+    this.quarantinedAudio = [];
+    queued.forEach((samples) => this._enqueueSamples(samples, epoch));
+  }
+
+  _enqueueSamples(float32Data, epoch = this.playbackEpoch) {
+    if (
+      this.destroyed ||
+      !this.workletNode ||
+      epoch !== this.playbackEpoch
+    ) {
+      return;
+    }
+    const chunkId = this.nextChunkId++;
+    this.workletNode.port.postMessage({
+      type: "audio",
+      samples: float32Data,
+      epoch,
+      chunkId,
+    });
+    const chunkMs = (float32Data.length / this.sampleRate) * 1000;
+    const now = Date.now();
+    this.playbackEndAt = Math.max(this.playbackEndAt, now) + chunkMs;
+  }
+
+  /**
    * Play audio chunk from base64 PCM
    */
   async play(base64Audio) {
     if (this.destroyed) return;
+    const requestedEpoch = this.playbackEpoch;
     if (!this.isInitialized) {
       await this.init();
     }
-    if (this.destroyed || !this.isInitialized || !this.workletNode) return;
+    if (
+      this.destroyed ||
+      !this.isInitialized ||
+      !this.workletNode ||
+      requestedEpoch !== this.playbackEpoch
+    ) return;
 
     try {
-      // Resume audio context if suspended
-      if (this.audioContext.state === "suspended") {
+      // SpeechSynthesis and OS audio-session changes can leave Safari/WebKit
+      // contexts "interrupted" as well as "suspended".
+      if (this.audioContext.state !== "running" && this.audioContext.state !== "closed") {
         await this.audioContext.resume();
       }
       if (this.destroyed || !this.workletNode) return;
@@ -589,14 +694,21 @@ export class AudioPlayer {
         float32Data[i] = inputArray[i] / 32768;
       }
 
-      // Send to worklet for playback
-      this.workletNode.port.postMessage(float32Data);
-
-      // Audio arrives in a burst (faster than realtime), so track when playback
-      // will actually finish instead of counting queued samples.
-      const chunkMs = (float32Data.length / this.sampleRate) * 1000;
-      const now = Date.now();
-      this.playbackEndAt = Math.max(this.playbackEndAt, now) + chunkMs;
+      const epoch = requestedEpoch;
+      const waitMs = this.audioAcceptAfter - Date.now();
+      if (waitMs > 0) {
+        this.quarantinedAudio.push(float32Data);
+        if (!this.quarantineTimer) {
+          this.quarantineTimer = setTimeout(() => {
+            this.quarantineTimer = null;
+            if (epoch !== this.playbackEpoch) return;
+            this.audioAcceptAfter = 0;
+            this._flushQuarantinedAudio();
+          }, waitMs);
+        }
+      } else {
+        this._enqueueSamples(float32Data, epoch);
+      }
     } catch (error) {
       if (this.destroyed) return;
       throw error;
@@ -607,9 +719,15 @@ export class AudioPlayer {
    * Interrupt current playback
    */
   interrupt() {
+    this.playbackEpoch += 1;
+    this.audioAcceptAfter = 0;
+    this._clearQuarantinedAudio();
     if (this.workletNode) {
       try {
-        this.workletNode.port.postMessage("interrupt");
+        this.workletNode.port.postMessage({
+          type: "interrupt",
+          epoch: this.playbackEpoch,
+        });
       } catch {
         // ignore
       }
@@ -631,6 +749,15 @@ export class AudioPlayer {
   getPlaybackMsRemaining() {
     if (this.destroyed) return 0;
     return Math.max(0, Math.ceil(this.playbackEndAt - Date.now()));
+  }
+
+  /**
+   * Wall-clock estimate can drift ahead of real playback (quarantine flush / packet
+   * bursts). Seal it so MCQ unlock / idle waits are not stuck forever.
+   */
+  sealPlaybackEstimate() {
+    if (this.destroyed) return;
+    this.playbackEndAt = Math.min(this.playbackEndAt || 0, Date.now());
   }
 
   /** @deprecated prefer getPlaybackMsRemaining */
@@ -663,6 +790,8 @@ export class AudioPlayer {
     }
     this.workletNode = null;
     this.gainNode = null;
+    this.onFirstSamplesRendered = () => {};
+    this.onQueueDrained = () => {};
     if (this.audioContext) {
       const ctx = this.audioContext;
       this.audioContext = null;

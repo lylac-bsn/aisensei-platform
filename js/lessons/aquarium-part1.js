@@ -7,28 +7,25 @@ export const PART1_ELICIT_JA = {
   foundSand: "あ！すな あった！「すなを みつけた！」の えいごを 選んでね！",
   ch3NeedGlass: "「がらすを つくらないと」の えいごを 選んでね！",
   ch3MadeGlass: "「がらすを つくった」の えいごを 選んでね！",
-  ch5PutGlass: "「ここにガラスをおく」のえいごを選んでね！",
+  ch5PutGlass: "「ここにガラスをおく」の えいごを 選んでね！",
   ch5Building: "「すいそうを つくってる」の えいごを 選んでね！",
   ch5MadeTank: "「すいそうを つくった」の えいごを 選んでね！",
   ch5LooksGood: "「いい かんじに できた！」の えいごを 選んでね！",
   ch6MoreSand: "「もっと すなが ひつよう」の えいごを 選んでね！",
   ch6ImDone: "「できた！」の えいごを 選んでね！",
-  ch6TankReady: "「さかなを いれられる じゅんびが できた！」の えいごを 選んでね！",
+  ch6TankReady: "「すいそうのじゅんびができた」の えいごを 選んでね！",
 };
 
 export const CH6_BEAT1_SPEAK =
-  "Let's make a basement inside the tank! すいそうの そこに すなを おこう！できたら えいごで おしえてね！";
-
-export const CH6_BEAT2_SPEAK =
-  "Do we have enough sand? " + PART1_ELICIT_JA.ch6MoreSand;
-
-export const CH6_BEAT3_SPEAK = "Are you done? " + PART1_ELICIT_JA.ch6ImDone;
-
-export const CH6_BEAT4_SPEAK =
-  "Is the tank ready for the fishes to swim? " + PART1_ELICIT_JA.ch6TankReady;
+  "Let's make a basement inside the tank! すいそうの そこに すなを おこう！の えいごを 選んでね！";
 
 export const AQUARIUM_PART1 = {
   id: "part1",
+  levelId: "beginner",
+  architecture: "beginner-part1-v1",
+  instructionLevel: "beginner",
+  inputMode: "buttons",
+  badgePrefix: "p1",
   title: "魚を迎える準備をしよう！",
   titleEn: "Get the tank ready",
   weekNote: "Week 2 homework — after the week-1 in-person class.",
@@ -87,24 +84,24 @@ export const AQUARIUM_PART1 = {
       id: "p1_accuracy_bronze",
       family: "accuracy",
       tier: "bronze",
-      label: "せいとうりつ ブロンズ",
-      desc: "4択のいちばんさいしょの正解率が50%より上",
+      label: "いっぱつせいかい ブロンズ",
+      desc: "4択をさいしょの1かいで正解できた数が50%より上",
       image: "images/completion-badge-bronze.png",
     },
     {
       id: "p1_accuracy_silver",
       family: "accuracy",
       tier: "silver",
-      label: "せいとうりつ シルバー",
-      desc: "4択のいちばんさいしょの正解率が75%より上",
+      label: "いっぱつせいかい シルバー",
+      desc: "4択をさいしょの1かいで正解できた数が75%より上",
       image: "images/completion-badge-silver.png",
     },
     {
       id: "p1_accuracy_gold",
       family: "accuracy",
       tier: "gold",
-      label: "せいとうりつ ゴールド",
-      desc: "4択のいちばんさいしょの正解率が100%",
+      label: "いっぱつせいかい ゴールド",
+      desc: "4択をぜんぶさいしょの1かいで正解できた",
       image: "images/completion-badge-gold.png",
     },
   ],
@@ -371,13 +368,13 @@ export const AQUARIUM_PART1 = {
           learnyJa: "[colorJa]いろの がらすを つくろう！つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！",
           choices: ["I made [color] glass!", "I need a dye.", "I put glass here.", "I made a tank!"],
           answer: "I made [color] glass!",
-          patterns: ["i made", "glass"],
           completeSegmentOnCorrect: true,
           afterFreeAsk: true,
         },
       ],
       coach:
-        "CHAPTER 4 — Beat A1: What's your favorite color? (NO buttons). Record favoriteColor. " +
+        "CHAPTER 4 — Beat A1: What's your favorite color? (NO buttons). Record favoriteColor only from the lesson colour set. " +
+        "Unknown colour (rainbow/gold/etc.): do NOT save — speak Which colour would you pick out of these? / この中だったらどの色がすき？ and WAIT for the colour buttons. " +
         "THEN ONE combined turn (A2+B): Let's make [color] coloured glass! Tell me when you make one! / " +
         "[colorJa]いろの がらすを つくろう！つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ " +
         "THEN show MCQ. Wrong: soft retry. Correct I made [color] glass! → complete_segment(ch4). " +
@@ -437,7 +434,7 @@ export const AQUARIUM_PART1 = {
       ],
       coach:
         "CHAPTER 5 — 4-choice MCQ in order: Beat1 Now let's make a tank wall! Where do you want to put the glass? Tell me! " +
-        "すいそうの かべを つくろう！どこに がらすを おく？「ここにガラスをおく」のえいごを選んでね！ → I put glass here → " +
+        "すいそうの かべを つくろう！どこに がらすを おく？「ここにガラスをおく」の えいごを 選んでね！ → I put glass here → " +
         "Beat2 Tell me what you're building! 「すいそうを つくってる」→ I'm building a tank → Beat3 Are you done making it? 「すいそうを つくった」→ I made a tank! → " +
         "Beat4 How does it look? 「いい かんじに できた！」→ It looks good! Wrong: soft retry, never reveal. Last correct → complete_segment(ch5).",
     },
@@ -491,7 +488,7 @@ export const AQUARIUM_PART1 = {
         {
           id: "put_sand",
           learnyEn: "Let's make a basement inside the tank!",
-          learnyJa: "すいそうの そこに すなを おこう！できたら えいごで おしえてね！",
+          learnyJa: "すいそうの そこに すなを おこう！の えいごを 選んでね！",
           choices: [
             "I put the sand on the bottom.",
             "I put sand here.",
@@ -531,7 +528,9 @@ export const AQUARIUM_PART1 = {
         "CHAPTER 6 — after Daily English do NOT re-react to the pet/chat; start Beat1 immediately. " +
         "4 MCQ beats: Beat1 Let's make a basement inside the tank! → I put the sand on the bottom → " +
         "Beat2 Do we have enough sand? 「もっと すなが ひつよう」→ more sand → Beat3 Are you done? 「できた！」→ I'm done! → " +
-        "Beat4 Is the tank ready for the fishes to swim? 「さかなを いれられる じゅんびが できた！」→ My tank is ready! " +
+        "Beat4 Is the tank ready for the fishes to swim? " +
+        PART1_ELICIT_JA.ch6TankReady +
+        " → My tank is ready! " +
         "Wrong: soft retry. Last correct → complete_segment(ch6). ZERO fish.",
     },
     {
@@ -642,9 +641,46 @@ export const AQUARIUM_PART1 = {
       completeWithoutEnglish: true,
       coach:
         "AUTO: client owns all spoken ending beats. Stay SILENT until the client sends Turn A / free-talk / Turn C notes. " +
-        "After Turn A: FREE TALK with no restrictions — react warmly and expand topics until 終わりにする. " +
+        "After Turn A: genuine open-ended FREE TALK — react specifically to the child's words and ask one natural, friendly follow-up about their topic. " +
+        "Never steer, suggest, hint, or direct the child toward ending, never mention the end control, and use no scripted progression or automatic turn limit. Preserve child safety and clear age-appropriate language. " +
         "After 終わりにする: speak Turn C goodbye once → complete_segment(ending1) → disconnect. " +
         "FORBIDDEN: starting Turn A yourself / saying Perfect twice / How many / なんびき / premature goodbye.",
     },
   ],
 };
+
+function cloneLessonValue(value) {
+  if (value instanceof RegExp) {
+    return new RegExp(value.source, value.flags);
+  }
+  if (Array.isArray(value)) {
+    return value.map(cloneLessonValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, cloneLessonValue(child)])
+    );
+  }
+  return value;
+}
+
+/**
+ * Temporary shape-keeping copy of Beginner Part 1.
+ * Each level/part module owns a distinct object and badge namespace so its
+ * script can be replaced later without sharing progress or awards.
+ */
+export function createAquariumPart1Variant({
+  levelId,
+  lessonId,
+  badgePrefix,
+}) {
+  const lesson = cloneLessonValue(AQUARIUM_PART1);
+  lesson.id = lessonId;
+  lesson.levelId = levelId;
+  lesson.badgePrefix = badgePrefix;
+  lesson.badges = lesson.badges.map((badge) => ({
+    ...badge,
+    id: badge.id.replace(/^p1_/, `${badgePrefix}_`),
+  }));
+  return lesson;
+}

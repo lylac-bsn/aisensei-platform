@@ -7,19 +7,24 @@ import {
   jumpToSegment,
   isPart1Complete,
   loadEarnedLessonBadges,
+  loadPendingLessonBadges,
+  claimPendingLessonBadges,
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js";
+} from "./lesson-engine.js?v=20260910-accuracy-best-1";
 import {
   BADGE_FAMILIES,
   FAMILY_LABELS_JA,
   highestTierByFamily,
   familySlotImage,
   parseBadgeId,
+  badgePrefixForScope,
   TIER_RANK,
   BADGE_IMAGES,
-} from "./badge-engine.js";
+  segmentNeedsAccuracyReplay,
+  evaluateAndAwardBadges,
+} from "./badge-engine.js?v=20260910-accuracy-best-1";
 import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
@@ -35,13 +40,181 @@ const TIER_LABEL_JA = {
   gold: "ゴールド",
 };
 
+const PHRASE_TRANSLATIONS_JA = Object.freeze({
+  glass: "がらす",
+  sand: "すな",
+  beach: "びーち",
+  mountains: "やま",
+  left: "ひだり",
+  right: "みぎ",
+  "i need glass": "がらすが ひつよう",
+  "i need sand": "すなが ひつよう",
+  "i found some sand": "すなを みつけた",
+  "i found sand": "すなを みつけた",
+  "i need to make glass": "がらすを つくらないと",
+  "i made glass": "がらすを つくった",
+  "i put glass here": "ここに がらすを おいた",
+  "i'm building a tank": "すいそうを つくっている",
+  "i am building a tank": "すいそうを つくっている",
+  "i made a tank": "すいそうを つくった",
+  "it looks good": "いい かんじに できた",
+  "i put the sand on the bottom": "すいそうの そこに すなを おいた",
+  "i put sand on the bottom": "すいそうの そこに すなを おいた",
+  "i need more sand": "もっと すなが ひつよう",
+  "i'm done": "できた",
+  "i am done": "できた",
+  "my tank is ready": "すいそうの じゅんびが できた",
+});
+
+const COLOR_TRANSLATIONS_JA = Object.freeze({
+  red: "あか",
+  blue: "あお",
+  green: "みどり",
+  yellow: "きいろ",
+  orange: "おれんじ",
+  purple: "むらさき",
+  pink: "ぴんく",
+  black: "くろ",
+  white: "しろ",
+  brown: "ちゃいろ",
+  gray: "はいいろ",
+  grey: "はいいろ",
+});
+
+const BADGE_GUIDE_JA = Object.freeze({
+  chapter: {
+    meaning: "レッスンを どこまで すすめたかが わかる バッジだよ。",
+    hint: "🥉 Chapter 0をクリア　🥈 ミニクイズ1までクリア　🥇 さいごまでクリア",
+  },
+  freetalk: {
+    meaning: "おしまいの フリートークで はなした えいごの ぶんすうだよ。",
+    hint: "🥉 1ぶん　🥈 2ぶん　🥇 3ぶん",
+  },
+  accuracy: {
+    meaning: "4たくを さいしょの 1かいで せいかいできた きろくだよ。やりなおして せいせきを あげられるよ。",
+    hint: "🥉 50%より おおく　🥈 75%より おおく　🥇 ぜんぶ せいかい（どの回のプレイでもOK）",
+  },
+});
+
+function escapeHtml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function phraseTranslationJa(phrase) {
+  const key = String(phrase || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(/[.!?。！？]+$/g, "")
+    .replace(/\s+/g, " ");
+  if (PHRASE_TRANSLATIONS_JA[key]) return PHRASE_TRANSLATIONS_JA[key];
+
+  const colorGlass = key.match(/^i made (.+) glass$/);
+  if (colorGlass) {
+    const color = COLOR_TRANSLATIONS_JA[colorGlass[1]] || colorGlass[1];
+    return `${color}いろの がらすを つくった`;
+  }
+  return "";
+}
+
+function canonicalSearchPlace(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?。！？]+$/g, "")
+    .replace(/\s+/g, " ");
+  if (["mountain", "mountains", "the mountains", "やま", "山"].includes(key)) {
+    return "mountains";
+  }
+  if (["beach", "the beach", "ocean", "びーち", "ビーチ", "うみ", "海"].includes(key)) {
+    return "beach";
+  }
+  return "";
+}
+
+/** Recover the Chapter 2 place from the strongest persisted choice evidence. */
+export function resolveSearchPlace(lessonState = {}) {
+  const remembered = canonicalSearchPlace(lessonState.memories?.searchPlace);
+  if (remembered) return remembered;
+
+  const log = Array.isArray(lessonState.mcqLog) ? lessonState.mcqLog : [];
+  for (let i = log.length - 1; i >= 0; i -= 1) {
+    const entry = log[i];
+    if (entry?.segmentId !== "ch2" || entry?.beatId !== "place" || !entry?.correct) continue;
+    const selected = canonicalSearchPlace(entry.choice);
+    if (selected) return selected;
+  }
+
+  const placeSummary = lessonState.mcqSummary?.["ch2.place"];
+  if (placeSummary?.lastCorrect) {
+    const selected = canonicalSearchPlace(placeSummary.lastChoice);
+    if (selected) return selected;
+  }
+
+  // "mountains" was never the legacy default answer, so it is safe evidence
+  // even in a partial state. A lone legacy "beach" is ambiguous and omitted.
+  for (const phrase of lessonState.phrasesSpoken || []) {
+    const english = typeof phrase === "string" ? phrase : phrase?.english;
+    if (canonicalSearchPlace(english) === "mountains") return "mountains";
+  }
+  return "";
+}
+
+/** Reconcile the learned-place row while preserving all other phrase entries. */
+export function phrasesForChildDisplay(lessonState = {}, { reconcileSearchPlace = false } = {}) {
+  const phrases = Array.isArray(lessonState.phrasesSpoken)
+    ? lessonState.phrasesSpoken
+    : [];
+  if (!reconcileSearchPlace) return phrases;
+
+  const chosenPlace = resolveSearchPlace(lessonState);
+  const result = [];
+  let placeAdded = false;
+  for (const phrase of phrases) {
+    const english = typeof phrase === "string" ? phrase : phrase?.english || "";
+    if (!canonicalSearchPlace(english)) {
+      result.push(phrase);
+      continue;
+    }
+    if (!chosenPlace || placeAdded) continue;
+    result.push(
+      typeof phrase === "object"
+        ? {
+            ...phrase,
+            english: chosenPlace,
+            japanese: phraseTranslationJa(chosenPlace),
+          }
+        : chosenPlace
+    );
+    placeAdded = true;
+  }
+  if (chosenPlace && !placeAdded) result.push(chosenPlace);
+  return result;
+}
+
 let activeLessonId = "part1";
 const badgeSfx = new QuestSfx(0.36);
 let badgeCeremonyQueue = [];
 let badgeCeremonyRunning = false;
+const pendingReceiptBadgeIds = new Set();
+const receivedBadgeIdsThisSession = new Set();
 
-function usePart1BadgeShelf() {
-  return getActiveLevelId() === "beginner" && activeLessonId === "part1";
+function useBadgeShelf() {
+  return getLesson(activeLessonId)?.architecture === "beginner-part1-v1";
+}
+
+function activeBadgePrefix() {
+  return badgePrefixForScope(getActiveLevelId(), activeLessonId);
+}
+
+function displayedEarnedBadges() {
+  return loadEarnedLessonBadges().filter(
+    (id) => !pendingReceiptBadgeIds.has(id)
+  );
 }
 /** In-app confirm (replaces window.confirm) — matches .learny-confirm-* styles. */
 function showLearnyConfirm({
@@ -130,6 +303,7 @@ function showLearnyConfirm({
 export function setActiveHomeworkLesson(lessonId) {
   activeLessonId = lessonId === "part2" ? "part2" : "part1";
   refreshDashboardChrome();
+  if (useBadgeShelf()) queueBadgeReceipts(loadPendingLessonBadges());
 }
 
 function levelId() {
@@ -141,12 +315,12 @@ function state() {
 }
 
 function refreshDashboardChrome() {
-  const allBadges = loadEarnedLessonBadges();
+  const allBadges = displayedEarnedBadges();
   const badgeCount = document.getElementById("trophy-badge-count");
   const slots = document.getElementById("trophy-badge-slots");
 
-  if (usePart1BadgeShelf()) {
-    const tiers = highestTierByFamily(allBadges);
+  if (useBadgeShelf()) {
+    const tiers = highestTierByFamily(allBadges, activeBadgePrefix());
     const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
     if (badgeCount) badgeCount.textContent = `${earnedFamilies}/3`;
     if (slots) {
@@ -191,6 +365,9 @@ function renderChapters(container) {
   const st = state();
   const segments = getSegments(activeLessonId);
   const playCounts = st.chapterPlayCounts || {};
+  const earnedAccuracyTier = useBadgeShelf()
+    ? highestTierByFamily(displayedEarnedBadges(), activeBadgePrefix()).accuracy
+    : null;
   container.innerHTML = `<p class="dashboard-panel-empty" style="margin-bottom:12px">${lesson.title}<br><span class="mission-select-desc">${lesson.weekNote}</span></p>
     <p class="mission-select-note">好きな章をタップして、何度でもやりなおせるよ</p>
     <ul class="mission-select-list">${segments
@@ -207,14 +384,21 @@ function renderChapters(container) {
           plays > 0
             ? `<span class="mission-select-plays">${plays}回プレイ</span>`
             : "";
+        const needsAccuracyReplay = segmentNeedsAccuracyReplay(st, lesson, seg.id, {
+          earnedAccuracyTier,
+        });
+        const replayBadge = needsAccuracyReplay
+          ? '<span class="mission-select-retry" title="この章をもういちどプレイして、いっぱつせいかいをめざそう" aria-label="いっぱつせいかい 再チャレンジ">↻ いっぱつせいかい 再チャレンジ</span>'
+          : "";
         const meta = getSegmentChapterMeta(seg);
         const chapter = formatSegmentChapter(seg);
-        return `<li class="mission-select-item${current ? " selected" : ""}" role="button" tabindex="0" data-segment-id="${seg.id}" aria-label="${chapter} ${seg.title}">
+        const itemAria = `${chapter} ${seg.title}${needsAccuracyReplay ? "、いっぱつせいかい 再チャレンジ" : ""}`;
+        return `<li class="mission-select-item${current ? " selected" : ""}" role="button" tabindex="0" data-segment-id="${seg.id}" aria-label="${escapeHtml(itemAria)}">
           <span class="mission-select-num" title="${chapter}">${meta.num === "" ? meta.label.slice(0, 1) : meta.num}</span>
           <div class="mission-select-body">
             <strong class="mission-select-title">${chapter} · ${seg.title}</strong>
             <span class="mission-select-desc">${seg.titleEn || ""}</span>
-            <span class="mission-select-meta-row">${badge}${playBadge}</span>
+            <span class="mission-select-meta-row">${badge}${playBadge}${replayBadge}</span>
           </div>
         </li>`;
       })
@@ -246,38 +430,63 @@ function jumpToChapterFromPanel(segmentId) {
 }
 
 function renderWords(container) {
-  const phrases = state().phrasesSpoken || [];
+  const lessonState = state();
+  const phrases = phrasesForChildDisplay(lessonState, {
+    reconcileSearchPlace: useBadgeShelf() && activeLessonId === "part1",
+  });
   if (!phrases.length) {
     container.innerHTML =
       '<p class="dashboard-panel-empty">まだフレーズがありません。ラーニー先生と英語で話してみよう！</p>';
     return;
   }
   container.innerHTML = `<ul class="dashboard-phrase-list">${phrases
-    .map(
-      (p) =>
-        `<li class="dashboard-phrase-item"><span class="dashboard-phrase-en">${p}</span></li>`
-    )
+    .map((p) => {
+      const english = typeof p === "string" ? p : p?.english || "";
+      const japanese =
+        (typeof p === "object" && p?.japanese) || phraseTranslationJa(english);
+      return `<li class="dashboard-phrase-item">
+        <span class="dashboard-phrase-en">${escapeHtml(english)}</span>
+        ${japanese ? `<span class="dashboard-phrase-ja">${escapeHtml(japanese)}</span>` : ""}
+      </li>`;
+    })
     .join("")}</ul>`;
 }
 
 function renderBadges(container) {
-  if (usePart1BadgeShelf()) {
-    const tiers = highestTierByFamily(loadEarnedLessonBadges());
+  if (useBadgeShelf()) {
+    const tiers = highestTierByFamily(
+      displayedEarnedBadges(),
+      activeBadgePrefix()
+    );
     const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
     container.innerHTML = `
     <div class="dashboard-badge-board">
-      <p class="dashboard-badge-board-desc">ビギナー Part 1 のバッジ（${earnedFamilies} / 3）</p>
+      <p class="dashboard-badge-board-desc">${getLesson(activeLessonId).title} のバッジ（${earnedFamilies} / 3）</p>
+      <p class="dashboard-badge-help">バッジは がんばった きろく！ じょうけんを クリアすると、ブロンズ → シルバー → ゴールドに ランクアップするよ。</p>
       <div class="dashboard-badge-grid dashboard-badge-grid--main" role="list">
         ${BADGE_FAMILIES.map((family) => {
           const tier = tiers[family];
           const meta = FAMILY_LABELS_JA[family];
           const src = familySlotImage(tier);
           const on = Boolean(tier);
-          const label = on ? `${meta.label}（${tier}）` : "？？？";
-          return `<div class="dashboard-badge-slot${on ? " earned" : ""}" title="${meta.desc}">
+          const label = on
+            ? `${meta.label}（${TIER_LABEL_JA[tier] || tier}）`
+            : meta.label;
+          return `<div class="dashboard-badge-slot${on ? " earned" : ""}" role="listitem" title="${meta.desc}">
             <img class="dashboard-badge-slot-img" src="${src}" alt="" width="72" height="72" decoding="async" />
             <span class="dashboard-badge-slot-label">${label}</span>
           </div>`;
+        }).join("")}
+      </div>
+      <div class="dashboard-badge-guide" aria-label="バッジのとりかた">
+        ${BADGE_FAMILIES.map((family) => {
+          const meta = FAMILY_LABELS_JA[family];
+          const guide = BADGE_GUIDE_JA[family];
+          return `<section class="dashboard-badge-guide-item">
+            <h3>${meta.label}</h3>
+            <p>${guide.meaning}</p>
+            <p class="dashboard-badge-guide-hint"><strong>ヒント：</strong>${guide.hint}</p>
+          </section>`;
         }).join("")}
       </div>
     </div>`;
@@ -286,7 +495,7 @@ function renderBadges(container) {
 
   const catalog = getBadgeCatalogForLesson(activeLessonId);
   const earned = new Set(
-    loadEarnedLessonBadges().filter((id) => catalog.some((b) => b.id === id))
+    displayedEarnedBadges().filter((id) => catalog.some((b) => b.id === id))
   );
   container.innerHTML = `
     <div class="dashboard-badge-board">
@@ -387,11 +596,11 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   });
 
   startOverBtn?.addEventListener("click", async () => {
-    const part1Wipe = usePart1BadgeShelf();
+    const fullHistoryWipe = useBadgeShelf();
     const ok = await showLearnyConfirm({
       title: "最初からやり直す？",
       message: "この Part の宿題を最初からやり直しますか？",
-      note: part1Wipe
+      note: fullHistoryWipe
         ? "進度・4択のきろく・プレイ回数・バッジも消えて、はじめからとりなおします"
         : "いままでの進度はリセットされます",
       confirmLabel: "最初からやり直す",
@@ -404,10 +613,11 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
     const resetEvent = {
       type: "reset",
       level: levelId(),
+      lessonId: activeLessonId,
       questTitle: activeLessonId,
       segmentId: activeLessonId,
       source: "client",
-      wipePart1History: part1Wipe,
+      wipeLessonHistory: fullHistoryWipe,
     };
     try {
       // Same window as page1.js — use CustomEvent only (postMessage would double-log).
@@ -432,28 +642,51 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
       if (activePanel) openPanel(activePanel);
     }
     if (e.data?.type === "gc_badges_earned") {
-      refreshDashboardChrome();
       const ids = e.data.newlyEarned || [];
-      if (ids.length && usePart1BadgeShelf()) {
-        celebrateBadgeAwards(ids);
+      if (ids.length && useBadgeShelf()) {
+        queueBadgeReceipts(ids);
+      } else {
+        refreshDashboardChrome();
       }
     }
   });
 
   window.addEventListener("learny-badges-earned", (e) => {
-    refreshDashboardChrome();
-    if (usePart1BadgeShelf()) celebrateBadgeAwards(e.detail?.newlyEarned || []);
+    if (useBadgeShelf()) queueBadgeReceipts(e.detail?.newlyEarned || []);
+    else refreshDashboardChrome();
   });
 
   refreshDashboardChrome();
+  if (useBadgeShelf()) {
+    // Re-score from sticky best / mcqLog so a clean later play awards gold
+    // even if the previous session missed the ceremony.
+    const { newlyEarned } = evaluateAndAwardBadges();
+    queueBadgeReceipts([
+      ...loadPendingLessonBadges(),
+      ...(newlyEarned || []),
+    ]);
+  }
+
+  window.addEventListener("storage", (e) => {
+    if (
+      e.key === "gc_homework_lessonBadges" ||
+      e.key === "gc_homework_pendingLessonBadges" ||
+      String(e.key || "").startsWith("gc_hw_")
+    ) {
+      refreshDashboardChrome();
+      if (activePanel) openPanel(activePanel);
+      if (useBadgeShelf()) queueBadgeReceipts(loadPendingLessonBadges());
+    }
+  });
 }
 
 /** Pick highest newly earned tier per family (bronze+silver in one burst → show silver). */
 function awardsFromNewlyEarned(newlyEarned) {
   const best = { chapter: null, freetalk: null, accuracy: null };
+  const prefix = activeBadgePrefix();
   for (const id of newlyEarned || []) {
     const parsed = parseBadgeId(id);
-    if (!parsed) continue;
+    if (!parsed || parsed.prefix !== prefix) continue;
     const rank = TIER_RANK[parsed.tier] || 0;
     const cur = best[parsed.family];
     if (!cur || rank > (TIER_RANK[cur] || 0)) best[parsed.family] = parsed.tier;
@@ -464,6 +697,68 @@ function awardsFromNewlyEarned(newlyEarned) {
   }));
 }
 
+function queueBadgeReceipts(newlyEarned) {
+  const prefix = activeBadgePrefix();
+  const fresh = (newlyEarned || []).filter((id) => {
+    const parsed = parseBadgeId(id);
+    return (
+      parsed?.prefix === prefix &&
+      !pendingReceiptBadgeIds.has(String(id)) &&
+      !receivedBadgeIdsThisSession.has(String(id))
+    );
+  });
+  if (!fresh.length) return;
+  fresh.forEach((id) => pendingReceiptBadgeIds.add(String(id)));
+  // Keep newly persisted awards visually locked until the child receives them.
+  refreshDashboardChrome();
+  celebrateBadgeAwards(fresh);
+}
+
+function markBadgeFamilyReceived(family, tier) {
+  const prefix = activeBadgePrefix();
+  const receivedRank = TIER_RANK[tier] || 0;
+  const receivedIds = [];
+  for (const id of [...pendingReceiptBadgeIds]) {
+    const parsed = parseBadgeId(id);
+    if (
+      parsed?.prefix === prefix &&
+      parsed.family === family &&
+      (TIER_RANK[parsed.tier] || 0) <= receivedRank
+    ) {
+      pendingReceiptBadgeIds.delete(id);
+      receivedBadgeIdsThisSession.add(id);
+      receivedIds.push(id);
+    }
+  }
+  const { newlyClaimed } = claimPendingLessonBadges(receivedIds);
+  refreshDashboardChrome();
+  if (!newlyClaimed.length) return;
+  try {
+    for (const badgeId of newlyClaimed) {
+      window.parent?.postMessage?.(
+        {
+          type: "gc_activity_event",
+          event: {
+            type: "badge",
+            level: getActiveLevelId(),
+            lessonId: activeLessonId,
+            badgeId,
+            source: "client",
+          },
+        },
+        "*"
+      );
+    }
+    window.dispatchEvent(new CustomEvent("learny-progress-changed"));
+    window.parent?.postMessage?.(
+      { type: "gc_badges_claimed", newlyClaimed },
+      "*"
+    );
+  } catch {
+    // Local claimed state remains authoritative; remote sync is best-effort.
+  }
+}
+
 function ensureBadgeAwardOverlay() {
   let overlay = document.getElementById("badge-award-overlay");
   if (overlay) return overlay;
@@ -472,13 +767,17 @@ function ensureBadgeAwardOverlay() {
   overlay.className = "badge-award-overlay";
   overlay.hidden = true;
   overlay.setAttribute("aria-live", "polite");
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "badge-award-label");
   overlay.innerHTML = `
     <div class="badge-award-backdrop" aria-hidden="true"></div>
     <div class="badge-award-stage">
       <div class="badge-award-rays" aria-hidden="true"></div>
       <img class="badge-award-img" alt="" width="220" height="220" decoding="async" />
     </div>
-    <p class="badge-award-label"></p>
+    <p class="badge-award-label" id="badge-award-label"></p>
+    <button type="button" class="badge-award-accept" hidden>うけとる</button>
   `;
   document.body.appendChild(overlay);
   return overlay;
@@ -509,10 +808,81 @@ function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function waitForBadgeReceipt(button) {
+  return new Promise((resolve) => {
+    button.addEventListener("click", resolve, { once: true });
+  });
+}
+
+function prefersReducedBadgeMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+}
+
+async function animateBadgeFlight(img, slot, overlay, reducedMotion) {
+  const from = img.getBoundingClientRect();
+  const to = slot.getBoundingClientRect();
+  if (!from.width || !from.height || !to.width || !to.height) return null;
+
+  const flight = img.cloneNode();
+  flight.removeAttribute("id");
+  flight.alt = "";
+  flight.setAttribute("aria-hidden", "true");
+  flight.className = "badge-award-flight";
+  Object.assign(flight.style, {
+    left: `${from.left}px`,
+    top: `${from.top}px`,
+    width: `${from.width}px`,
+    height: `${from.height}px`,
+  });
+  overlay.appendChild(flight);
+  img.classList.add("badge-award-img--in-flight");
+  overlay.classList.add("flying");
+
+  const targetScale = Math.min(
+    (to.width * 0.88) / from.width,
+    (to.height * 0.88) / from.height
+  );
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+  const duration = reducedMotion ? 1 : 820;
+  const flightAnimation = flight.animate(
+    reducedMotion
+      ? [
+          { transform: "translate3d(0, 0, 0) scale(1)" },
+          { transform: `translate3d(${dx}px, ${dy}px, 0) scale(${targetScale})` },
+        ]
+      : [
+          { transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
+          { transform: "translate3d(0, -8px, 0) scale(1.04)", offset: 0.12 },
+          {
+            transform: `translate3d(${dx * 0.82}px, ${dy * 0.82}px, 0) scale(${Math.max(targetScale * 1.12, targetScale + 0.02)})`,
+            offset: 0.78,
+          },
+          {
+            transform: `translate3d(${dx}px, ${dy}px, 0) scale(${targetScale})`,
+            offset: 1,
+          },
+        ],
+    {
+      duration,
+      easing: "cubic-bezier(0.32, 0.72, 0.22, 1)",
+      fill: "forwards",
+    }
+  );
+  try {
+    await flightAnimation.finished;
+  } catch {
+    // The ceremony can still settle if an animation is cancelled by navigation.
+  }
+  return flight;
+}
+
 async function playOneBadgeCeremony(family, tier) {
+  const previousFocus = document.activeElement;
   const overlay = ensureBadgeAwardOverlay();
   const img = overlay.querySelector(".badge-award-img");
   const label = overlay.querySelector(".badge-award-label");
+  const acceptButton = overlay.querySelector(".badge-award-accept");
   const meta = FAMILY_LABELS_JA[family] || { label: family };
   const tierJa = TIER_LABEL_JA[tier] || tier;
   const src = BADGE_IMAGES[tier] || familySlotImage(tier);
@@ -520,10 +890,17 @@ async function playOneBadgeCeremony(family, tier) {
   img.src = src;
   img.alt = `${meta.label} ${tierJa}`;
   label.textContent = `${meta.label} ${tierJa} ゲット！`;
-  overlay.classList.remove("flying", "show");
-  img.style.transition = "";
-  img.style.transform = "";
+  acceptButton.hidden = true;
+  acceptButton.disabled = false;
+  overlay.classList.remove("accepting", "flying", "show", "ready-to-receive");
+  img.classList.remove("badge-award-img--in-flight");
+  overlay.querySelectorAll(".badge-award-flight").forEach((el) => el.remove());
   overlay.hidden = false;
+  try {
+    await img.decode();
+  } catch {
+    // A cached or already-decoded image is ready to animate.
+  }
   // Force reflow so .show animations restart
   void overlay.offsetWidth;
   overlay.classList.add("show");
@@ -531,34 +908,62 @@ async function playOneBadgeCeremony(family, tier) {
   if (tier === "gold") badgeSfx.playLessonComplete();
   else badgeSfx.playQuestComplete();
 
-  await waitMs(1650);
+  const reducedMotion = prefersReducedBadgeMotion();
+  await waitMs(reducedMotion ? 60 : 900);
+  acceptButton.hidden = false;
+  overlay.classList.add("ready-to-receive");
+  acceptButton.focus({ preventScroll: true });
+  await waitForBadgeReceipt(acceptButton);
+  acceptButton.disabled = true;
+  overlay.classList.add("accepting");
+  await waitMs(reducedMotion ? 1 : 130);
+  overlay.classList.remove("ready-to-receive");
 
   const slot = document.querySelector(`.trophy-slot[data-badge-family="${family}"]`);
+  let flight = null;
   if (slot && img.isConnected) {
-    const from = img.getBoundingClientRect();
-    const to = slot.getBoundingClientRect();
-    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
-    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
-    const scale = Math.max(0.22, Math.min(to.width / from.width, 0.38));
-    overlay.classList.add("flying");
-    img.style.transition = "transform 0.75s cubic-bezier(0.45, 0.05, 0.55, 0.95)";
-    img.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    await waitMs(780);
+    flight = await animateBadgeFlight(img, slot, overlay, reducedMotion);
   } else {
-    await waitMs(400);
+    overlay.classList.add("flying");
+    await waitMs(reducedMotion ? 1 : 400);
   }
 
-  overlay.classList.remove("show", "flying");
-  overlay.hidden = true;
-  img.style.transition = "";
-  img.style.transform = "";
+  markBadgeFamilyReceived(family, tier);
+  refreshDashboardChrome();
+  const receivedSlot = document.querySelector(
+    `.trophy-slot[data-badge-family="${family}"]`
+  );
+  if (receivedSlot) {
+    flashBadgeSlot(family);
+  }
+  if (flight) {
+    const fade = flight.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: reducedMotion ? 1 : 220,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    try {
+      await fade.finished;
+    } catch {
+      // Continue cleanup if the crossfade is cancelled.
+    }
+    flight.remove();
+  } else {
+    await waitMs(reducedMotion ? 1 : 180);
+  }
 
-  flashBadgeSlot(family);
+  overlay.classList.remove("show", "accepting", "flying");
+  overlay.hidden = true;
+  img.classList.remove("badge-award-img--in-flight");
+
   // Briefly open badges panel highlight via shelf pulse
   const shelf = document.getElementById("trophy-shelf-badges");
   if (shelf) {
     shelf.classList.add("badge-shelf-pulse");
     setTimeout(() => shelf.classList.remove("badge-shelf-pulse"), 1200);
+  }
+  if (previousFocus?.isConnected && typeof previousFocus.focus === "function") {
+    previousFocus.focus({ preventScroll: true });
   }
 }
 

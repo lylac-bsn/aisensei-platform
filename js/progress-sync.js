@@ -8,15 +8,23 @@ import {
   buildProgressSnapshot,
   getActiveLevelInfo,
   loadEarnedLessonBadges,
+  loadPendingLessonBadges,
   loadBadgeRevocations,
   saveEarnedLessonBadges,
-} from "./lesson-engine.js";
+  savePendingLessonBadges,
+} from "./lesson-engine.js?v=20260910-accuracy-best-1";
+import {
+  normalizeIdList,
+  resolveClaimedBadgeIds,
+  resolvePendingBadgeIds,
+} from "./progress-contract.js?v=20260910-accuracy-best-1";
 
 let syncTimer = null;
+let syncContext = null;
+let storageSyncBound = false;
 
 function normalizeBadgeList(raw) {
-  if (!Array.isArray(raw)) return [];
-  return [...new Set(raw.map((id) => String(id)).filter(Boolean))];
+  return normalizeIdList(raw);
 }
 
 export function mergeBadgeLists(localIds, cloudIds, revocations = []) {
@@ -37,12 +45,27 @@ export async function pullAndMergeBadges(db, userId) {
     const snap = await getDoc(doc(db, "users", userId));
     if (!snap.exists()) return loadEarnedLessonBadges();
     const data = snap.data();
+    const field = getActiveLevelInfo().firestoreField;
+    const localBadges = loadEarnedLessonBadges();
+    const localPending = loadPendingLessonBadges();
+    const revoked = [
+      ...normalizeBadgeList(data.badgeRevocations),
+      ...loadBadgeRevocations(),
+    ];
+    const protectedIds = new Set([...localBadges, ...localPending]);
+    const stillRevoked = revoked.filter((id) => !protectedIds.has(id));
     const merged = mergeBadgeLists(
-      loadEarnedLessonBadges(),
-      normalizeBadgeList(data.lessonBadges),
-      [...normalizeBadgeList(data.badgeRevocations), ...loadBadgeRevocations()]
+      localBadges,
+      resolveClaimedBadgeIds(data, field),
+      stillRevoked
     );
     saveEarnedLessonBadges(merged);
+    const pending = mergeBadgeLists(
+      localPending,
+      resolvePendingBadgeIds(data, field),
+      stillRevoked
+    ).filter((id) => !merged.includes(id));
+    savePendingLessonBadges(pending);
     return merged;
   } catch {
     return loadEarnedLessonBadges();
@@ -67,19 +90,39 @@ export async function syncProgressToFirestore(db, userId) {
       ]),
     ];
     const localBadges = loadEarnedLessonBadges();
-    const stillRevoked = revoked.filter((id) => !localBadges.includes(id));
+    const localPending = loadPendingLessonBadges();
+    // Pending うけとる receipts are intentionally re-earned after a wipe.
+    // Do not treat them as still-revoked or sync will delete them before claim.
+    const protectedIds = new Set([...localBadges, ...localPending]);
+    const stillRevoked = revoked.filter((id) => !protectedIds.has(id));
     const mergedBadges = mergeBadgeLists(
       localBadges,
-      normalizeBadgeList(cloudData.lessonBadges),
+      resolveClaimedBadgeIds(
+        cloudData,
+        getActiveLevelInfo().firestoreField
+      ),
       stillRevoked
     );
     saveEarnedLessonBadges(mergedBadges);
+    const mergedPending = mergeBadgeLists(
+      localPending,
+      resolvePendingBadgeIds(
+        cloudData,
+        getActiveLevelInfo().firestoreField
+      ),
+      stillRevoked
+    ).filter((id) => !mergedBadges.includes(id));
+    savePendingLessonBadges(mergedPending);
 
     const snapshot = buildProgressSnapshot();
     snapshot.lessonBadges = mergedBadges;
+    snapshot.claimedLessonBadgeIds = mergedBadges;
+    snapshot.pendingLessonBadgeIds = mergedPending;
     const field = getActiveLevelInfo().firestoreField;
     await updateDoc(userRef, {
       [field]: snapshot,
+      claimedLessonBadgeIds: mergedBadges,
+      pendingLessonBadgeIds: mergedPending,
       lessonBadges: mergedBadges,
       badgeRevocations: stillRevoked,
       progressUpdatedAt: serverTimestamp(),
@@ -90,6 +133,24 @@ export async function syncProgressToFirestore(db, userId) {
 }
 
 export function initProgressSync(db, userId) {
+  syncContext = { db, userId };
+  if (!storageSyncBound && typeof window !== "undefined") {
+    storageSyncBound = true;
+    window.addEventListener("storage", (event) => {
+      if (
+        !syncContext ||
+        !(
+          event.key === "gc_homework_lessonBadges" ||
+          event.key === "gc_homework_pendingLessonBadges" ||
+          event.key === "gc_hw_badge_revocations" ||
+          String(event.key || "").startsWith("gc_hw_")
+        )
+      ) {
+        return;
+      }
+      scheduleProgressSync(syncContext.db, syncContext.userId);
+    });
+  }
   pullAndMergeBadges(db, userId).finally(() => {
     syncProgressToFirestore(db, userId);
   });

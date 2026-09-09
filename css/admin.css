@@ -314,12 +314,45 @@
 
 .progress-level-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.progress-level-header::-webkit-details-marker {
+  display: none;
+}
+
+.progress-level-header::before {
+  content: "›";
+  flex: 0 0 auto;
+  color: var(--admin-muted-2);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.18s ease;
+}
+
+.progress-level-block[open] > .progress-level-header::before {
+  transform: rotate(90deg);
+}
+
+.progress-level-header:hover h4 {
+  color: var(--primary-red);
+}
+
+.progress-level-content {
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--admin-line);
 }
 
 .progress-level-header h4 {
+  flex: 1;
   margin: 0;
   font-size: 0.82rem;
 }
@@ -561,6 +594,24 @@
   color: #1b5e20;
 }
 
+.progress-mcq-option.is-incorrect-clicked {
+  background: #ffebee;
+  border-color: #e57373;
+  box-shadow: inset 3px 0 0 #c62828;
+}
+
+.progress-mcq-option.is-incorrect-clicked .progress-mcq-option-label {
+  color: #b71c1c;
+  font-weight: 800;
+}
+
+.progress-mcq-option-result {
+  display: inline-block;
+  margin-right: 0.3em;
+  color: #b71c1c;
+  font-weight: 900;
+}
+
 .progress-mcq-option-count {
   flex-shrink: 0;
   min-width: 1.5em;
@@ -572,6 +623,12 @@
   padding: 0.05rem 0.4rem;
   font-size: 0.68rem;
   border: 1px solid #eee;
+}
+
+.progress-mcq-option.is-incorrect-clicked .progress-mcq-option-count {
+  color: #b71c1c;
+  background: #fff5f5;
+  border-color: #ef9a9a;
 }
 
 .progress-mcq-order {
@@ -599,7 +656,8 @@
 }
 
 .progress-mcq-order-list li.is-wrong {
-  color: var(--admin-muted-2);
+  color: #b71c1c;
+  font-weight: 700;
 }
 
 /* —— Phrases —— */

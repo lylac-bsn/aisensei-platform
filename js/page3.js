@@ -4,9 +4,9 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { initProgressSync, scheduleProgressSync } from "./progress-sync.js";
+import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260910-accuracy-best-1";
 import { logUserActivity } from "./activity-log.js";
-import { getActiveLevelInfo } from "./lesson-engine.js";
+import { getActiveLevelInfo } from "./lesson-engine.js?v=20260910-accuracy-best-1";
 import { openLevelSwitcher } from "./level-picker.js";
 
 const firebaseConfig = {
@@ -123,6 +123,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('message', (e) => {
         if (e.data?.type === 'gc_quest_progress_update' && currentUser) {
+            scheduleProgressSync(db, currentUser.uid);
+        }
+        if (e.data?.type === 'gc_badges_earned' && currentUser) {
             scheduleProgressSync(db, currentUser.uid);
         }
         if (e.data?.type === 'gc_activity_event' && currentUser) {

@@ -8,6 +8,7 @@ export const LEVELS = [
     labelEn: "Beginner",
     desc: "英語をはじめたばかりの子ども向け",
     btnClass: "level-btn--beginner",
+    enabled: true,
   },
   {
     id: "intermediate",
@@ -16,6 +17,7 @@ export const LEVELS = [
     labelEn: "Intermediate",
     desc: "基本的な単語やフレーズがわかる",
     btnClass: "level-btn--intermediate",
+    enabled: false,
   },
   {
     id: "advanced",
@@ -24,6 +26,7 @@ export const LEVELS = [
     labelEn: "Advanced",
     desc: "もっと長い会話にチャレンジ",
     btnClass: "level-btn--advanced",
+    enabled: false,
   },
 ];
 
@@ -49,19 +52,20 @@ export function getRememberedLevel() {
 function levelButtonsHtml(currentPage = "") {
   return LEVELS.map((level) => {
     const isCurrent = currentPage && level.page === currentPage;
-    return `<button type="button" class="level-btn ${level.btnClass}${isCurrent ? " is-current" : ""}" data-page="${level.page}" data-level-id="${level.id}"${isCurrent ? ' aria-current="true"' : ""}>
+    const disabled = !level.enabled;
+    return `<button type="button" class="level-btn ${level.btnClass}${isCurrent ? " is-current" : ""}${disabled ? " is-disabled" : ""}" data-page="${level.page}" data-level-id="${level.id}"${isCurrent ? ' aria-current="true"' : ""}${disabled ? ' disabled aria-disabled="true" title="準備中"' : ""}>
       <span class="level-btn__main">
         <span class="level-btn__label">${level.labelJa}</span>
         <span class="level-btn__en">${level.labelEn}</span>
       </span>
       <span class="level-btn__desc">${level.desc}</span>
-      ${isCurrent ? '<span class="level-btn__badge">いまここ</span>' : ""}
+      ${isCurrent ? '<span class="level-btn__badge">いまここ</span>' : disabled ? '<span class="level-btn__badge">準備中</span>' : ""}
     </button>`;
   }).join("");
 }
 
 function continueBannerHtml(remembered) {
-  if (!remembered) return "";
+  if (!remembered?.enabled) return "";
   return `<div class="level-continue-banner" id="level-continue-banner">
     <p class="level-continue-banner__text">前回のレベル：<strong>${remembered.labelJa}</strong></p>
     <button type="button" class="level-continue-btn" id="level-continue-btn" data-page="${remembered.page}">つづきから始める</button>
@@ -117,7 +121,8 @@ export function mountLevelPicker(overlayEl, opts = {}) {
 
   const navigate = (page) => {
     const level = LEVELS.find((l) => l.page === page);
-    if (level) rememberLevel(level.id);
+    if (!level?.enabled) return;
+    rememberLevel(level.id);
     if (onNavigate) onNavigate(page);
     else window.location.href = page;
   };
@@ -126,7 +131,7 @@ export function mountLevelPicker(overlayEl, opts = {}) {
     navigate(e.currentTarget.getAttribute("data-page"));
   });
 
-  overlayEl.querySelectorAll(".level-btn:not(.is-current)").forEach((btn) => {
+  overlayEl.querySelectorAll(".level-btn:not(.is-current):not(:disabled)").forEach((btn) => {
     btn.addEventListener("click", () => navigate(btn.getAttribute("data-page")));
   });
 
@@ -143,7 +148,7 @@ export function mountLevelPicker(overlayEl, opts = {}) {
   });
 
   const firstBtn =
-    overlayEl.querySelector(".level-btn:not(.is-current)") ||
+    overlayEl.querySelector(".level-btn:not(.is-current):not(:disabled)") ||
     overlayEl.querySelector(".level-continue-btn");
   firstBtn?.focus();
 }

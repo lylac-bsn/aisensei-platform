@@ -3,12 +3,12 @@
  * Stats persist in lesson state for admin analysis.
  */
 
-import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js";
+import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260910-accuracy-best-1";
 import {
-  isBeginnerPart1BadgeScope,
+  isBadgeEnabledScope,
   maybeRecordBadgeFirstTry,
   evaluateAndAwardBadges,
-} from "./badge-engine.js";
+} from "./badge-engine.js?v=20260910-accuracy-best-1";
 
 /** @typedef {{
  *   id: string,
@@ -151,6 +151,11 @@ export function recordMcqAttempt({
 }) {
   const state = loadLessonState();
   const at = new Date().toISOString();
+  const playId = Math.max(
+    Number(state.mcqBadgePlay?.[segmentId]) || 0,
+    Number(state.chapterPlayCounts?.[segmentId]) || 0,
+    1
+  );
   const entry = {
     segmentId: String(segmentId || ""),
     beatId: String(beatId || ""),
@@ -159,6 +164,7 @@ export function recordMcqAttempt({
     correct: Boolean(correct),
     answer: String(answer || "").slice(0, 120),
     choices: (choices || []).slice(0, 4).map((c) => String(c).slice(0, 80)),
+    playId,
     at,
   };
 
@@ -174,9 +180,11 @@ export function recordMcqAttempt({
     attempts: 0,
     choiceCounts: {},
   };
-  row.attempts += 1;
+  row.correct = Math.max(0, Number(row.correct) || 0);
+  row.incorrect = Math.max(0, Number(row.incorrect) || 0);
   if (correct) row.correct += 1;
   else row.incorrect += 1;
+  row.attempts = row.correct + row.incorrect;
   const ck = entry.choice || "(blank)";
   row.choiceCounts[ck] = (row.choiceCounts[ck] || 0) + 1;
   row.lastChoice = entry.choice;
@@ -185,9 +193,10 @@ export function recordMcqAttempt({
   summary[key] = row;
   state.mcqSummary = summary;
 
-  // Feed admin phrase checklist — correct taps count as spoken phrases.
+  // Feed the learned-phrase list — a correct tap records what the child
+  // actually chose. This matters for beats with multiple accepted answers.
   if (correct) {
-    const spoken = String(entry.answer || entry.choice || "").trim();
+    const spoken = String(entry.choice || entry.answer || "").trim();
     if (spoken) {
       const list = Array.isArray(state.phrasesSpoken) ? state.phrasesSpoken.slice() : [];
       if (!list.some((p) => String(typeof p === "string" ? p : p?.english || "").trim() === spoken)) {
@@ -198,22 +207,41 @@ export function recordMcqAttempt({
   }
 
   let newlyEarned = [];
-  if (isBeginnerPart1BadgeScope()) {
-    const play =
-      Number(state.mcqBadgePlay?.[entry.segmentId]) ||
-      Number(state.chapterPlayCounts?.[entry.segmentId]) ||
-      0;
+  if (isBadgeEnabledScope()) {
+    const play = Math.max(
+      Number(state.mcqBadgePlay?.[entry.segmentId]) || 0,
+      Number(state.chapterPlayCounts?.[entry.segmentId]) || 0,
+      0
+    );
     if (!(play > 0)) {
       state.mcqBadgePlay = {
         ...(state.mcqBadgePlay || {}),
-        [entry.segmentId]: Number(state.chapterPlayCounts?.[entry.segmentId]) || 1,
+        [entry.segmentId]:
+          Math.max(
+            Number(state.chapterPlayCounts?.[entry.segmentId]) || 0,
+            1
+          ),
+      };
+    } else {
+      state.mcqBadgePlay = {
+        ...(state.mcqBadgePlay || {}),
+        [entry.segmentId]: play,
+      };
+      state.chapterPlayCounts = {
+        ...(state.chapterPlayCounts || {}),
+        [entry.segmentId]: Math.max(
+          Number(state.chapterPlayCounts?.[entry.segmentId]) || 0,
+          play
+        ),
       };
     }
-    maybeRecordBadgeFirstTry(state, {
+    const firstTryResult = maybeRecordBadgeFirstTry(state, {
       segmentId: entry.segmentId,
       beatId: entry.beatId,
       correct,
     });
+    entry.firstTry = firstTryResult.updated;
+    state.mcqLog[state.mcqLog.length - 1].firstTry = firstTryResult.updated;
     saveLessonState(state);
     newlyEarned = evaluateAndAwardBadges().newlyEarned || [];
     if (newlyEarned.length) {
@@ -244,6 +272,8 @@ export function recordMcqAttempt({
     correct,
     learnyPrompt: entry.learnyPrompt,
     attempt: row.attempts,
+    playId,
+    firstTry: entry.firstTry === true,
     source: "client",
     newlyEarned,
   };

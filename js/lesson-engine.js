@@ -1,7 +1,11 @@
-import { AQUARIUM_PART1, PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js";
-import { AQUARIUM_PART2 } from "./lessons/aquarium-part2.js";
-
-const LESSONS = { part1: AQUARIUM_PART1, part2: AQUARIUM_PART2 };
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-accuracy-best-1";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-accuracy-best-1";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-accuracy-best-1";
+import {
+  buildPartReporting,
+  normalizeIdList,
+  PROGRESS_CONTRACT_VERSION,
+} from "./progress-contract.js?v=20260910-accuracy-best-1";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -14,6 +18,7 @@ const LEVEL_META = {
 };
 
 export const LESSON_BADGES_KEY = "gc_homework_lessonBadges";
+export const PENDING_LESSON_BADGES_KEY = "gc_homework_pendingLessonBadges";
 export const BADGE_REVOCATIONS_KEY = "gc_hw_badge_revocations";
 
 let learnerDisplayName = "";
@@ -95,12 +100,22 @@ export function getActiveLevelInfo() {
   return LEVEL_META[ACTIVE_LEVEL_ID];
 }
 
-export function getLesson(lessonId = ACTIVE_LESSON_ID) {
-  return LESSONS[lessonId] || LESSONS.part1;
+export function getLesson(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  return lessonFor(levelId, lessonId);
 }
 
 export function getActiveLesson() {
-  return getLesson(ACTIVE_LESSON_ID);
+  return getLesson(ACTIVE_LESSON_ID, ACTIVE_LEVEL_ID);
+}
+
+export function usesBeginnerPart1Architecture(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  return getLesson(lessonId, levelId)?.architecture === "beginner-part1-v1";
 }
 
 function storageKey(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
@@ -127,19 +142,57 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     segmentUi: {},
     /** How many times the learner started each chapter (jump + natural entry). */
     chapterPlayCounts: {},
-    /** Beginner Part1: play id used for badge first-try overwrite on chapter retry. */
+    /** Play id used for badge first-try overwrite on chapter retry. */
     mcqBadgePlay: {},
-    /** Beginner Part1: latest-play first click result per seg.beat for 正解率 badges. */
+    /** Latest-play first click result per seg.beat for accuracy badges. */
     mcqBadgeFirstTry: {},
-    /** Beginner Part1: English sentences spoken during ending1 free-talk only. */
+    /** Sticky: beat ever first-click correct on any play (いっぱつせいかい). */
+    mcqBadgeFirstTryBest: {},
+    /** English sentences spoken during ending free-talk only. */
     endingFreetalkEnglishCount: 0,
+    /** Ending free-talk sentence counts keyed by ending chapter play id. */
+    endingFreetalkEnglishByPlay: {},
+    /** Frozen totals from the most recently completed ending. */
+    endingFreetalkFinalEnglishCount: 0,
+    endingFreetalkFinalRunEnglishCount: 0,
   };
 }
 
 /** Drop legacy star-system fields from persisted lesson state. */
 function sanitizeLessonState(raw, lessonId) {
   const { stars: _stars, ...rest } = raw && typeof raw === "object" ? raw : {};
-  return { ...emptyState(lessonId), ...rest, lessonId };
+  const state = { ...emptyState(lessonId), ...rest, lessonId };
+  const objectOrEmpty = (value) =>
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  state.completedSegmentIds = normalizeIdList(state.completedSegmentIds);
+  state.phrasesSpoken = Array.isArray(state.phrasesSpoken)
+    ? state.phrasesSpoken
+    : [];
+  state.badges = normalizeIdList(state.badges);
+  state.mcqCursor = objectOrEmpty(state.mcqCursor);
+  state.mcqLog = Array.isArray(state.mcqLog) ? state.mcqLog : [];
+  state.mcqSummary = objectOrEmpty(state.mcqSummary);
+  state.segmentUi = objectOrEmpty(state.segmentUi);
+  state.chapterPlayCounts = objectOrEmpty(state.chapterPlayCounts);
+  state.mcqBadgePlay = objectOrEmpty(state.mcqBadgePlay);
+  state.mcqBadgeFirstTry = objectOrEmpty(state.mcqBadgeFirstTry);
+  state.mcqBadgeFirstTryBest = objectOrEmpty(state.mcqBadgeFirstTryBest);
+  state.endingFreetalkEnglishByPlay = objectOrEmpty(
+    state.endingFreetalkEnglishByPlay
+  );
+  state.endingFreetalkEnglishCount = Math.max(
+    0,
+    Number(state.endingFreetalkEnglishCount) || 0
+  );
+  state.endingFreetalkFinalEnglishCount = Math.max(
+    0,
+    Number(state.endingFreetalkFinalEnglishCount) || 0
+  );
+  state.endingFreetalkFinalRunEnglishCount = Math.max(
+    0,
+    Number(state.endingFreetalkFinalRunEnglishCount) || 0
+  );
+  return state;
 }
 
 export function loadLessonState(lessonId = ACTIVE_LESSON_ID) {
@@ -152,16 +205,103 @@ export function loadLessonState(lessonId = ACTIVE_LESSON_ID) {
   }
 }
 
+/** Never let a stale parent/iframe write shrink chapter play ids (badge replay). */
+function mergeMaxCountMap(primary = {}, secondary = {}) {
+  const out = { ...secondary };
+  for (const [key, value] of Object.entries(primary || {})) {
+    out[key] = Math.max(Number(out[key]) || 0, Number(value) || 0);
+  }
+  for (const [key, value] of Object.entries(secondary || {})) {
+    out[key] = Math.max(Number(out[key]) || 0, Number(value) || 0);
+  }
+  return out;
+}
+
+function mergeFirstTryMaps(incoming = {}, existing = {}) {
+  const out = { ...existing };
+  for (const [key, entry] of Object.entries(incoming || {})) {
+    if (!entry || typeof entry !== "object") continue;
+    const prev = out[key];
+    if (!prev || typeof prev !== "object") {
+      out[key] = entry;
+      continue;
+    }
+    const prevPlay = Number(prev.play) || 0;
+    const nextPlay = Number(entry.play) || 0;
+    // Newer play overwrites; same play keeps the first click already stored.
+    if (nextPlay > prevPlay) out[key] = entry;
+  }
+  return out;
+}
+
+function mergeBestFirstTryMaps(incoming = {}, existing = {}) {
+  const out = { ...existing };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    if (value === true || existing?.[key] === true) out[key] = true;
+  }
+  for (const [key, value] of Object.entries(existing || {})) {
+    if (value === true) out[key] = true;
+  }
+  return out;
+}
+
+function looksLikeLessonWipe(incoming, existing) {
+  const incomingEmpty =
+    (incoming.completedSegmentIds || []).length === 0 &&
+    (incoming.mcqLog || []).length === 0 &&
+    Object.keys(incoming.chapterPlayCounts || {}).length === 0 &&
+    Object.keys(incoming.mcqBadgeFirstTry || {}).length === 0;
+  const existingHadProgress =
+    (existing.completedSegmentIds || []).length > 0 ||
+    (existing.mcqLog || []).length > 0 ||
+    Object.keys(existing.chapterPlayCounts || {}).length > 0 ||
+    Object.keys(existing.mcqBadgeFirstTry || {}).length > 0;
+  return incomingEmpty && existingHadProgress;
+}
+
 export function saveLessonStateFor(state, lessonId, levelId = ACTIVE_LEVEL_ID) {
+  const incoming = sanitizeLessonState(state, lessonId);
+  let toSave = incoming;
+  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+    try {
+      const raw = localStorage.getItem(storageKey(lessonId, levelId));
+      if (raw) {
+        const existing = sanitizeLessonState(JSON.parse(raw), lessonId);
+        if (!looksLikeLessonWipe(incoming, existing)) {
+          toSave = {
+            ...incoming,
+            chapterPlayCounts: mergeMaxCountMap(
+              incoming.chapterPlayCounts,
+              existing.chapterPlayCounts
+            ),
+            mcqBadgePlay: mergeMaxCountMap(
+              incoming.mcqBadgePlay,
+              existing.mcqBadgePlay
+            ),
+            mcqBadgeFirstTry: mergeFirstTryMaps(
+              incoming.mcqBadgeFirstTry,
+              existing.mcqBadgeFirstTry
+            ),
+            mcqBadgeFirstTryBest: mergeBestFirstTryMaps(
+              incoming.mcqBadgeFirstTryBest,
+              existing.mcqBadgeFirstTryBest
+            ),
+          };
+        }
+      }
+    } catch {
+      // keep incoming
+    }
+  }
   try {
     localStorage.setItem(
       storageKey(lessonId, levelId),
-      JSON.stringify(sanitizeLessonState(state, lessonId))
+      JSON.stringify(toSave)
     );
   } catch {
     // ignore
   }
-  if (lessonId === "part1" && state.complete) {
+  if (lessonId === "part1" && toSave.complete) {
     try {
       localStorage.setItem(part1CompleteKey(levelId), "1");
     } catch {
@@ -184,8 +324,11 @@ export function isPart1Complete(levelId = ACTIVE_LEVEL_ID) {
   }
 }
 
-export function getLessonBadgeIds(lessonId = ACTIVE_LESSON_ID) {
-  return (getLesson(lessonId).badges || []).map((b) => b.id);
+export function getLessonBadgeIds(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  return (getLesson(lessonId, levelId).badges || []).map((b) => b.id);
 }
 
 export function loadBadgeRevocations() {
@@ -207,27 +350,23 @@ export function saveBadgeRevocations(ids) {
   return list;
 }
 
-export function revokeBadgesForLesson(lessonId = ACTIVE_LESSON_ID) {
-  const ids = new Set(getLessonBadgeIds(lessonId));
+export function revokeBadgesForLesson(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  const ids = new Set(getLessonBadgeIds(lessonId, levelId));
   if (!ids.size) return [];
   const cleared = loadEarnedLessonBadges().filter((id) => !ids.has(id));
   saveEarnedLessonBadges(cleared);
+  savePendingLessonBadges(
+    loadPendingLessonBadges().filter((id) => !ids.has(id))
+  );
   saveBadgeRevocations([...loadBadgeRevocations(), ...ids]);
   return [...ids];
 }
 
 export function resetLesson(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
-  const prev = loadLessonStateFor(lessonId, levelId);
   const state = emptyState(lessonId);
-  // Beginner Part 1 「最初から」: full wipe (no play-count keep). Other parts keep counts.
-  const fullWipe = levelId === "beginner" && lessonId === "part1";
-  if (
-    !fullWipe &&
-    prev?.chapterPlayCounts &&
-    typeof prev.chapterPlayCounts === "object"
-  ) {
-    state.chapterPlayCounts = { ...prev.chapterPlayCounts };
-  }
   saveLessonStateFor(state, lessonId, levelId);
   if (lessonId === "part1") {
     try {
@@ -236,7 +375,7 @@ export function resetLesson(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_
       // ignore
     }
   }
-  revokeBadgesForLesson(lessonId);
+  revokeBadgesForLesson(lessonId, levelId);
   return state;
 }
 
@@ -248,11 +387,39 @@ export function recordChapterPlay(segmentId, lessonId = ACTIVE_LESSON_ID, levelI
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
-  if (levelId === "beginner" && lessonId === "part1") {
+  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
     state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
   }
   saveLessonStateFor(state, lessonId, levelId);
   return counts[id];
+}
+
+/**
+ * Entering a chapter for the first time counts as play 1.
+ * Never bump an existing play here — selective accuracy retries (jumpToSegment)
+ * own fresh play ids, and auto-incrementing the next chapter after a replay
+ * was wiping that chapter's first-try scores.
+ */
+export function ensureEnteredChapterPlay(state, segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  const id = String(segmentId || "").trim();
+  if (!id || !state) return 0;
+  const counts = { ...(state.chapterPlayCounts || {}) };
+  const existing = Number(counts[id]) || 0;
+  if (existing > 0) {
+    if (
+      usesBeginnerPart1Architecture(lessonId, levelId) &&
+      !(Number(state.mcqBadgePlay?.[id]) > 0)
+    ) {
+      state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: existing };
+    }
+    return existing;
+  }
+  counts[id] = 1;
+  state.chapterPlayCounts = counts;
+  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+    state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: 1 };
+  }
+  return 1;
 }
 
 /** Ensure first visit is counted once (session open / kick opening). */
@@ -260,32 +427,44 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
   const id = String(segmentId || "").trim();
   if (!id) return 0;
   const state = loadLessonStateFor(lessonId, levelId);
-  const counts = { ...(state.chapterPlayCounts || {}) };
-  if ((Number(counts[id]) || 0) > 0) {
-    if (
-      levelId === "beginner" &&
-      lessonId === "part1" &&
-      !(Number(state.mcqBadgePlay?.[id]) > 0)
-    ) {
-      state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
-      saveLessonStateFor(state, lessonId, levelId);
-    }
-    return counts[id];
-  }
-  counts[id] = 1;
-  state.chapterPlayCounts = counts;
-  if (levelId === "beginner" && lessonId === "part1") {
-    state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: 1 };
-  }
+  const play = ensureEnteredChapterPlay(state, id, lessonId, levelId);
   saveLessonStateFor(state, lessonId, levelId);
-  return 1;
+  return play;
+}
+
+function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
+  if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
+  import("./badge-engine.js?v=20260910-accuracy-best-1")
+    .then((m) => {
+      const { newlyEarned } = m.evaluateAndAwardBadges();
+      if (newlyEarned?.length) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
+          );
+          window.parent?.postMessage?.(
+            { type: "gc_badges_earned", newlyEarned },
+            "*"
+          );
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        window.dispatchEvent(new CustomEvent("learny-progress-changed"));
+        window.parent?.postMessage?.({ type: "gc_quest_progress_update" }, "*");
+      } catch {
+        // ignore
+      }
+    })
+    .catch(() => {});
 }
 
 /**
  * Free chapter select / replay — keeps できた history, restarts chapter-local UI.
  */
 export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
-  const lesson = getLesson(lessonId);
+  const lesson = getLesson(lessonId, levelId);
   const idx = (lesson.segments || []).findIndex((s) => s.id === segmentId);
   if (idx < 0) return { ok: false, reason: "unknown_segment" };
   const state = loadLessonStateFor(lessonId, levelId);
@@ -303,7 +482,7 @@ export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = 
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
-  if (levelId === "beginner" && lessonId === "part1") {
+  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
     state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
   }
   saveLessonStateFor(state, lessonId, levelId);
@@ -357,6 +536,17 @@ export function matchesPatterns(text, patterns = []) {
   return patterns.some((p) => n.includes(normalizeText(p)));
 }
 
+/** Chapter 4 requires the child's remembered color, not just "made" or "glass". */
+export function matchesChosenColorGlassPhrase(text, color) {
+  const n = normalizeText(text);
+  const colorName = normalizeText(color);
+  if (!n || !colorName) return false;
+  const escapedColor = colorName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `\\bi made\\s+(?:a\\s+|some\\s+)?${escapedColor}\\s+(?:(?:coloured|colored)\\s+)?glass\\b`
+  ).test(n);
+}
+
 export function loadEarnedLessonBadges() {
   try {
     const arr = JSON.parse(localStorage.getItem(LESSON_BADGES_KEY) || "[]");
@@ -364,6 +554,30 @@ export function loadEarnedLessonBadges() {
   } catch {
     return [];
   }
+}
+
+export function loadPendingLessonBadges() {
+  try {
+    const arr = JSON.parse(
+      localStorage.getItem(PENDING_LESSON_BADGES_KEY) || "[]"
+    );
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePendingLessonBadges(ids) {
+  const claimed = new Set(loadEarnedLessonBadges());
+  const list = [
+    ...new Set((ids || []).map(String).filter((id) => id && !claimed.has(id))),
+  ];
+  try {
+    localStorage.setItem(PENDING_LESSON_BADGES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+  return list;
 }
 
 export function saveEarnedLessonBadges(ids) {
@@ -379,6 +593,9 @@ export function saveEarnedLessonBadges(ids) {
 export function recordLessonBadge(badgeId) {
   if (!badgeId) return loadEarnedLessonBadges();
   const next = saveEarnedLessonBadges([...loadEarnedLessonBadges(), badgeId]);
+  savePendingLessonBadges(
+    loadPendingLessonBadges().filter((id) => id !== badgeId)
+  );
   saveBadgeRevocations(loadBadgeRevocations().filter((id) => id !== badgeId));
   const state = loadLessonState();
   if (!state.badges.includes(badgeId)) {
@@ -386,6 +603,23 @@ export function recordLessonBadge(badgeId) {
     saveLessonState(state);
   }
   return next;
+}
+
+/** Move ceremony receipts into the claimed collection.
+ * うけとる is authoritative: claim every receipt id even if sync wiped pending.
+ */
+export function claimPendingLessonBadges(ids) {
+  const requested = [...new Set((ids || []).map(String).filter(Boolean))];
+  if (!requested.length) {
+    return { newlyClaimed: [], claimed: loadEarnedLessonBadges() };
+  }
+  const before = new Set(loadEarnedLessonBadges());
+  for (const id of requested) recordLessonBadge(id);
+  const claimed = loadEarnedLessonBadges();
+  return {
+    newlyClaimed: claimed.filter((id) => !before.has(id)),
+    claimed,
+  };
 }
 
 export function recordPhrase(phrase) {
@@ -401,11 +635,16 @@ export function recordPhrase(phrase) {
 
 export function recordMemory(key, value) {
   const k = String(key || "").trim();
-  const v = String(value || "").trim();
+  let v = String(value || "").trim();
   if (!k || !v) return { ok: false, reason: "empty" };
   const lesson = getActiveLesson();
   if (lesson.memories && !lesson.memories.includes(k)) {
     return { ok: false, reason: "unknown_key" };
+  }
+  if (k === "favoriteColor") {
+    const allowed = normalizeAllowedFavoriteColor(v);
+    if (!allowed) return { ok: false, reason: "invalid_color" };
+    v = allowed;
   }
   const state = loadLessonState();
   state.memories = { ...state.memories, [k]: v };
@@ -424,20 +663,20 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
     return { ok: false, reason: "not_current", currentId: current.id };
   }
 
-  // Idempotent: already finished this chapter — do not rewind or re-award.
+  // Idempotent: already finished this chapter — advance the banner if needed,
+  // but never bump the next chapter's accuracy play id (that wiped clean
+  // first-try scores when kids selectively retried a red-label chapter).
   if (state.completedSegmentIds.includes(segment.id)) {
     const idxDone = lesson.segments.findIndex((s) => s.id === segment.id);
     if (idxDone >= 0 && state.segmentIndex <= idxDone) {
-      const prevId = lesson.segments[state.segmentIndex]?.id;
       state.segmentIndex = Math.min(idxDone + 1, lesson.segments.length - 1);
       const next = lesson.segments[state.segmentIndex];
-      if (next?.id && next.id !== prevId && next.id !== segment.id) {
-        const counts = { ...(state.chapterPlayCounts || {}) };
-        counts[next.id] = (Number(counts[next.id]) || 0) + 1;
-        state.chapterPlayCounts = counts;
+      if (next?.id && next.id !== segment.id) {
+        ensureEnteredChapterPlay(state, next.id, state.lessonId, ACTIVE_LEVEL_ID);
       }
       saveLessonState(state);
     }
+    emitBadgeAwardsIfNeeded(state.lessonId, ACTIVE_LEVEL_ID);
     return {
       ok: true,
       alreadyDone: true,
@@ -449,13 +688,23 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
 
   const loose = Boolean(segment.completeWithoutEnglish) || saidTogether;
   const quote = userQuote || "";
+  if (
+    segment.id === "ch4" &&
+    usesBeginnerPart1Architecture(state.lessonId, ACTIVE_LEVEL_ID) &&
+    !matchesChosenColorGlassPhrase(quote, state.memories?.favoriteColor)
+  ) {
+    return { ok: false, reason: "no_target_phrase" };
+  }
   if (!loose && segment.targets?.length) {
     const hit = segment.targets.some((t) => matchesPatterns(quote, t.patterns));
     if (!hit && segment.items?.length) {
       const itemHit = segment.items.some((it) => matchesPatterns(quote, it.patterns || []));
       if (!itemHit) return { ok: false, reason: "no_target_phrase" };
     } else if (!hit && !segment.items?.length) {
-      if (segment.id === "ch6" && state.lessonId === "part1") {
+      if (
+        segment.id === "ch6" &&
+        usesBeginnerPart1Architecture(state.lessonId, ACTIVE_LEVEL_ID)
+      ) {
         const tankReady = matchesPatterns(quote, [
           "my tank is ready",
           "tank is ready",
@@ -484,61 +733,28 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
   if (segment.type === "ending" || idx === lesson.segments.length - 1) {
     state.complete = true;
     state.segmentIndex = lesson.segments.length - 1;
+    const endingPlay =
+      Number(state.mcqBadgePlay?.[segment.id]) ||
+      Number(state.chapterPlayCounts?.[segment.id]) ||
+      0;
+    state.endingFreetalkFinalEnglishCount =
+      Number(state.endingFreetalkEnglishCount) || 0;
+    state.endingFreetalkFinalRunEnglishCount =
+      Number(state.endingFreetalkEnglishByPlay?.[endingPlay]) || 0;
   } else {
-    // Count a play for the chapter we just entered via natural advance.
+    // First entry into the next chapter counts as play 1 only.
+    // Fresh accuracy plays are created by jumpToSegment / recordChapterPlay.
     const next = lesson.segments[state.segmentIndex];
     if (next?.id && next.id !== segment.id) {
-      const counts = { ...(state.chapterPlayCounts || {}) };
-      counts[next.id] = (Number(counts[next.id]) || 0) + 1;
-      state.chapterPlayCounts = counts;
-      if (ACTIVE_LEVEL_ID === "beginner" && state.lessonId === "part1") {
-        state.mcqBadgePlay = {
-          ...(state.mcqBadgePlay || {}),
-          [next.id]: counts[next.id],
-        };
-      }
+      ensureEnteredChapterPlay(state, next.id, state.lessonId, ACTIVE_LEVEL_ID);
     }
   }
 
   saveLessonState(state);
-
-  if (ACTIVE_LEVEL_ID === "beginner" && state.lessonId === "part1") {
-    import("./badge-engine.js")
-      .then((m) => {
-        const { newlyEarned } = m.evaluateAndAwardBadges();
-        if (newlyEarned?.length) {
-          try {
-            window.dispatchEvent(
-              new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
-            );
-            window.parent?.postMessage?.(
-              { type: "gc_badges_earned", newlyEarned },
-              "*"
-            );
-          } catch {
-            // ignore
-          }
-        }
-      })
-      .catch(() => {});
-  }
+  emitBadgeAwardsIfNeeded(state.lessonId, ACTIVE_LEVEL_ID);
 
   return { ok: true, state, next: getCurrentSegment(state), lessonComplete: state.complete };
 }
-
-const BADGE_EMOJI = {
-  sand_finder: "🏖️",
-  glass_maker: "🪟",
-  color_designer: "🎨",
-  tank_builder: "🐠",
-  quick_answer_p1: "⚡",
-  english_talker_p1: "💬",
-  fish_finder: "🐟",
-  aquarium_memory: "💭",
-  quick_answer_p2: "⚡",
-  aquarium_speaker: "🗣️",
-  aquarium_master: "🏆",
-};
 
 function mapBadgeCatalog(badges) {
   return (badges || []).map((b) => ({
@@ -546,7 +762,7 @@ function mapBadgeCatalog(badges) {
     label: b.label,
     desc: b.desc,
     hint: b.desc,
-    emoji: BADGE_EMOJI[b.id] || "⭐",
+    emoji: "⭐",
     family: b.family || null,
     tier: b.tier || null,
     image: b.image || null,
@@ -554,21 +770,31 @@ function mapBadgeCatalog(badges) {
 }
 
 export function getBadgeCatalogForLesson(lessonId = ACTIVE_LESSON_ID) {
-  return mapBadgeCatalog(getLesson(lessonId).badges);
+  return mapBadgeCatalog(getLesson(lessonId, ACTIVE_LEVEL_ID).badges);
 }
 
 export function getBadgeCatalog() {
-  return mapBadgeCatalog([...AQUARIUM_PART1.badges, ...AQUARIUM_PART2.badges]);
+  return mapBadgeCatalog(allLessons().flatMap((lesson) => lesson.badges || []));
 }
 
 export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID) {
   const part1 = loadLessonStateFor("part1", levelId);
   const part2 = loadLessonStateFor("part2", levelId);
+  const claimed = loadEarnedLessonBadges();
+  const pending = loadPendingLessonBadges();
   return {
+    progressContractVersion: PROGRESS_CONTRACT_VERSION,
     part1,
     part2,
     part1Complete: Boolean(part1.complete),
-    lessonBadges: loadEarnedLessonBadges(),
+    claimedLessonBadgeIds: claimed,
+    pendingLessonBadgeIds: pending,
+    // Backward-compatible alias. It intentionally contains claimed ids only.
+    lessonBadges: claimed,
+    reporting: {
+      part1: buildPartReporting(part1),
+      part2: buildPartReporting(part2),
+    },
   };
 }
 
@@ -663,7 +889,8 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID) {
     "FORBIDDEN old form: 〜って えいごで いってみて！ / って英語で言ってみて — use the form above instead.",
     levelId === "intermediate"
       ? "INTERMEDIATE: Never say 選んでね / tap / button / 4-choice. Child speaks the English."
-      : "",
+      : "CRITICAL AUDIO: Pronounce every mora of え・い・ご・を in の えいごを 選んでね！ Never shorten to の選んでね / のを選んでね. The Japanese word えいご is required.",
+    'When coaches say "do not speak the English answer", that means do NOT say the target English phrase (e.g. I made a tank!) — it does NOT mean skip the Japanese word えいご.',
     `Ch1 glass: ${PART1_ELICIT_JA.needGlass} Ch1 sand: ${PART1_ELICIT_JA.needSand}`,
     `Ch2 found sand: ${PART1_ELICIT_JA.foundSand}`,
     `Ch3: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
@@ -740,7 +967,9 @@ function ch4StoryRule() {
   return [
     "CHAPTER 4 ONLY — choose a favorite color and make that coloured glass. ONE beat per turn — never combine beats.",
     "Minecraft note: dye is already at a pre-prepared 花壇 (flower bed). Child just picks it up — do NOT teach I need a dye / I found a flower / flower hunting.",
-    "Beat A1: What's your favorite color? / すきな いろは？ Then WAIT. Record favoriteColor with record_memory. NEVER assume blue.",
+    "Beat A1: What's your favorite color? / すきな いろは？ Then WAIT. Record favoriteColor with record_memory. NEVER assume blue. " +
+      "If the child names a colour outside the lesson set (rainbow, gold, etc.): do NOT save it. Speak the picker line and WAIT for a button tap. " +
+      "Picker line EXACTLY: Which colour would you pick out of these? この中だったらどの色がすき？",
     "Beat A2 (NEXT turn after color): short varied praise + Let's make [color] coloured glass! / [colorJa]いろの がらすを つくろう！ Then STOP and WAIT. " +
       "FORBIDDEN: Beat B, MCQ, I made [color] glass!, or [color] glass! Great job in the same turn.",
     "Beat B (NEXT turn after A2): Speak EXACTLY: Tell me when you make one! つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！ " +
@@ -884,7 +1113,7 @@ function ch2ChoiceRule() {
 function ch6StoryRule() {
   return [
     "CHAPTER 6 ONLY — put sand on the bottom. 4 MCQ beats in order (English then Japanese, ONE beat per turn):",
-    "Beat 1: Let's make a basement inside the tank! すいそうの そこに すなを おこう！できたら えいごで おしえてね！ → MCQ I put the sand on the bottom.",
+    "Beat 1: Let's make a basement inside the tank! すいそうの そこに すなを おこう！の えいごを 選んでね！ → MCQ I put the sand on the bottom.",
     `Beat 2: Do we have enough sand? ${PART1_ELICIT_JA.ch6MoreSand} → MCQ I need more sand.`,
     `Beat 3: Are you done? ${PART1_ELICIT_JA.ch6ImDone} → MCQ I'm done!.`,
     `Beat 4: Is the tank ready for the fishes to swim? ${PART1_ELICIT_JA.ch6TankReady} → MCQ My tank is ready! → complete_segment(ch6).`,
@@ -926,11 +1155,40 @@ function ending1Rule() {
   return [
     "ENDING — three phases. Do NOT invent How many / なんびき.",
     "Phase 1 Turn A: Stay SILENT until the client sends the exact Turn A script. Then speak that script ONCE (full English + ひらがな) and WAIT. Never start Turn A on your own. Never repeat it.",
-    "Phase 2 FREE TALK (after Turn A): NO restrictions. React warmly to the child and expand the topic. Do NOT say goodbye / Next Minecraft / See you / complete_segment until 終わりにする.",
+    "Phase 2 GENUINE OPEN-ENDED FREE TALK (after Turn A): Be the child's friendly English teacher. React specifically to what the child says, then ask ONE natural, friendly follow-up about their words. ONE complete turn only: English first, then matching ひらがな once — never restart or repeat the English. Follow the child's topic with no scripted progression and no automatic turn limit.",
+    "During Phase 2, NEVER steer, suggest, hint, or direct the conversation toward ending; never mention the end button/control. Do NOT say goodbye / Next Minecraft / See you / complete_segment until the child explicitly requests 終わりにする through the UI.",
     "Phase 3 Turn C (ONLY when the client says free talk is over / 終わりにする): ONE goodbye message — Hmm... I can't stop thinking about it! + Next Minecraft lesson we'll decorate this tank and add fish to finish it! See you next time! + matching ひらがな → call complete_segment(ending1).",
     "FORBIDDEN during free talk: How many / なんびき / premature goodbye. FORBIDDEN ever: inventing how many / splitting Turn A or Turn C / saying Perfect twice.",
-    "Every turn: English first, then ひらがな with the SAME full meaning (free talk may be looser).",
+    "Keep core child safety and age-appropriate, intelligible language. Every turn: English first, then ひらがな with the SAME full meaning (free talk may be looser).",
   ].join(" ");
+}
+
+/**
+ * Small, phase-specific setup for the fresh Ending Phase 2 Live session.
+ * Deliberately excludes lesson/chapter/final-quiz scripts and prompt history.
+ */
+export function buildEndingFreeTalkInstructions(
+  state = loadLessonState(),
+  levelId = ACTIVE_LEVEL_ID
+) {
+  const lesson = getLesson(state.lessonId);
+  const instructionLevel = lesson.instructionLevel || levelId;
+  const raw = [
+    "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
+    "ENDING PHASE 2 ONLY — genuine open-ended free talk. The client already played static Turn A and asked: What kind of fish should we catch? どんな おさかなを つかまえよう？ Stay silent until the child answers.",
+    "On every child turn: react specifically to their latest words first, then ask exactly ONE natural, friendly follow-up about that same topic. ONE complete turn only — English first, then matching ひらがな once; never restart or repeat the English. Keep the conversation varied and non-repetitive; follow the child's topic with no scripted progression or turn limit.",
+    "The first child answer is authoritative even if it is short or Japanese (for example クラゲ). Never ignore it, replace it with an old answer, or ask the Turn A fish question again.",
+    "Use clear age-appropriate English with helpful natural ひらがな support. Never scold pronunciation or grammar.",
+    "Never steer, suggest, hint, or direct the child toward ending. Never mention an end button/control.",
+    "Only the explicit client action 終わりにする can start the client-owned static Turn C finale. Before that action, FORBIDDEN: goodbye, See you next time, Next Minecraft, How many / なんびき, complete_segment, lesson review, quiz, Final Challenge, or any previous chapter prompt.",
+    noSystemBackendRule(),
+    "Never invent facts about the child's tank. Use only what the child says now or these known memories:",
+    memoryBlock(state.memories),
+    "Tools: record_memory only when the child states a durable fact. Do not call complete_segment and do not mention tools, badges, awards, UI, timers, or technical status.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return adaptCoachTextForLevel(raw, instructionLevel);
 }
 
 function final1StartNudge() {
@@ -1048,6 +1306,8 @@ function noSystemBackendRule() {
 export function buildLessonInstructions(state = loadLessonState(), levelId = ACTIVE_LEVEL_ID) {
   const lesson = getLesson(state.lessonId);
   const segment = getCurrentSegment(state);
+  const usesTemplate = usesBeginnerPart1Architecture(state.lessonId, levelId);
+  const instructionLevel = lesson.instructionLevel || levelId;
   const targets = (segment.targets || [])
     .map((t) => t.phrase)
     .join(" / ");
@@ -1055,35 +1315,42 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     .map((it) => it.promptJa || it.promptEn || it.answer)
     .join("; ");
   const onQuiz = segment?.type === "quiz";
+  const onEndingFreeTalk = segment?.id === "ending1";
 
   const raw = [
     "You are ラーニー先生 (Learny), a warm Japanese-English homework tutor for children — like a real human teacher on a video call, not a chatbot script.",
     "This is HOMEWORK between real Minecraft classes — not live co-play. Do not ask them to share a screen or play Minecraft now.",
     conversationQualityRule(),
-    state.lessonId === "part1" ? japaneseElicitBracketRule(levelId) : "",
+    usesTemplate ? japaneseElicitBracketRule(instructionLevel) : "",
     noSystemBackendRule(),
     lesson.weekNote,
     lesson.stopRule,
-    scaffoldingLine(levelId),
+    onEndingFreeTalk ? "" : scaffoldingLine(instructionLevel),
     quizSpeakException(segment),
-    leadTheTurnRule(levelId),
-    warmupRules(segment, state.lessonId),
-    segment.id === "ch1" && state.lessonId === "part1" ? ch1StoryRule() : "",
-    segment.id === "ch2" && state.lessonId === "part1" ? ch2ChoiceRule() : "",
-    segment.id === "ch3" && state.lessonId === "part1" ? ch3StoryRule() : "",
-    segment.id === "ch4" && state.lessonId === "part1" ? ch4StoryRule() : "",
-    segment.id === "ch5" && state.lessonId === "part1" ? ch5StoryRule() : "",
-    segment.id === "quiz1" && state.lessonId === "part1" ? quiz1Rule() : "",
-    segment.id === "daily1" && state.lessonId === "part1" ? daily1Rule() : "",
-    segment.id === "ch6" && state.lessonId === "part1" ? ch6StoryRule() : "",
-    segment.id === "final1" && state.lessonId === "part1" ? final1Rule() : "",
-    segment.id === "ending1" && state.lessonId === "part1" ? ending1Rule() : "",
-    "If they forget: " +
-      (levelId === "intermediate"
-        ? "give a spoken hint or model the English, then wait for them to speak. Never treat forgetting as failure."
-        : "hint → word choices → 2–3 options → say the English together. Never treat forgetting as failure."),
-    "If they go off-topic: answer 1–3 turns, then return. Conversation over forcing a phrase.",
-    "After success, echo the correct English once. Do not stall on pronunciation or grammar.",
+    onEndingFreeTalk ? "" : leadTheTurnRule(instructionLevel),
+    warmupRules(segment, usesTemplate ? "part1" : state.lessonId),
+    segment.id === "ch1" && usesTemplate ? ch1StoryRule() : "",
+    segment.id === "ch2" && usesTemplate ? ch2ChoiceRule() : "",
+    segment.id === "ch3" && usesTemplate ? ch3StoryRule() : "",
+    segment.id === "ch4" && usesTemplate ? ch4StoryRule() : "",
+    segment.id === "ch5" && usesTemplate ? ch5StoryRule() : "",
+    segment.id === "quiz1" && usesTemplate ? quiz1Rule() : "",
+    segment.id === "daily1" && usesTemplate ? daily1Rule() : "",
+    segment.id === "ch6" && usesTemplate ? ch6StoryRule() : "",
+    segment.id === "final1" && usesTemplate ? final1Rule() : "",
+    segment.id === "ending1" && usesTemplate ? ending1Rule() : "",
+    onEndingFreeTalk
+      ? ""
+      : "If they forget: " +
+        (instructionLevel === "intermediate"
+          ? "give a spoken hint or model the English, then wait for them to speak. Never treat forgetting as failure."
+          : "hint → word choices → 2–3 options → say the English together. Never treat forgetting as failure."),
+    onEndingFreeTalk
+      ? ""
+      : "If they go off-topic: answer 1–3 turns, then return. Conversation over forcing a phrase.",
+    onEndingFreeTalk
+      ? ""
+      : "After success, echo the correct English once. Do not stall on pronunciation or grammar.",
     "Never invent facts about THEIR tank. Only use Known memories or what they just said.",
     memoryBlock(state.memories),
     `Lesson: ${lesson.title} (${lesson.titleEn})`,
@@ -1092,25 +1359,31 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     targets ? `Target phrases: ${targets}` : "",
     items ? `Quiz/challenge prompts: ${items}` : "",
     segment.coach || "",
-    "Tools: record_memory when the child states a fact (color, place, count). complete_segment when this segment's goal is met (warmup/recall/daily/ending can complete without English). Do not mention badges or awards.",
+    onEndingFreeTalk
+      ? "Tools: record_memory when the child states a fact. NEVER call complete_segment during free talk; only the explicit client 終わりにする action authorizes the controlled Turn C completion. Do not mention tools, badges, awards, or the end control."
+      : "Tools: record_memory when the child states a fact (color, place, count). complete_segment when this segment's goal is met (warmup/recall/daily/ending can complete without English). Do not mention badges or awards.",
     onQuiz
-      ? levelId === "intermediate"
+      ? instructionLevel === "intermediate"
         ? "REMINDER (quiz): Speak Japanese ひらがな for questions. Child answers in spoken English only — no buttons. Do not use beginner English-then-Japanese on quiz turns."
         : "REMINDER (quiz): Speak Japanese ひらがな for questions. Child answers in English. Do not use beginner English-then-Japanese on quiz turns."
-      : levelId === "beginner"
+      : instructionLevel === "beginner"
         ? "REMINDER: Every spoken turn = FULL English sentence then FULL matching ひらがな. Never English-only. Never Japanese-only after a short English tag. Never say How are you twice."
-        : levelId === "intermediate"
+        : instructionLevel === "intermediate"
           ? "REMINDER: Intermediate is voice-only — never mention buttons/taps/4-choice. Wait for spoken English."
           : "Sound like a human teacher, not a system.",
   ]
     .filter(Boolean)
     .join("\n");
 
-  return adaptCoachTextForLevel(raw, levelId);
+  return adaptCoachTextForLevel(raw, instructionLevel);
 }
 
 export function buildOpeningNudge(state = loadLessonState()) {
   const segment = getCurrentSegment(state);
+  const usesTemplate = usesBeginnerPart1Architecture(
+    state.lessonId,
+    ACTIVE_LEVEL_ID
+  );
   if (segment.type === "warmup") {
     return (
       "[Teacher note — do not read this aloud.] CHAPTER 0: greet the child like a real English teacher. " +
@@ -1119,28 +1392,28 @@ export function buildOpeningNudge(state = loadLessonState()) {
       "Do NOT continue speaking until the child answers."
     );
   }
-  if (state.lessonId === "part1" && segment.id === "ch1") {
+  if (usesTemplate && segment.id === "ch1") {
     return ch1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch4") {
+  if (usesTemplate && segment.id === "ch4") {
     return ch4StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch5") {
+  if (usesTemplate && segment.id === "ch5") {
     return ch5StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "daily1") {
+  if (usesTemplate && segment.id === "daily1") {
     return daily1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch6") {
+  if (usesTemplate && segment.id === "ch6") {
     return ch6StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "quiz1") {
+  if (usesTemplate && segment.id === "quiz1") {
     return quiz1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "final1") {
+  if (usesTemplate && segment.id === "final1") {
     return final1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ending1") {
+  if (usesTemplate && segment.id === "ending1") {
     return ending1StartNudge();
   }
   return (
@@ -1151,10 +1424,14 @@ export function buildOpeningNudge(state = loadLessonState()) {
 
 export function buildAdvanceNudge(state = loadLessonState()) {
   const segment = getCurrentSegment(state);
-  if (state.lessonId === "part1" && segment.id === "ch1") {
+  const usesTemplate = usesBeginnerPart1Architecture(
+    state.lessonId,
+    ACTIVE_LEVEL_ID
+  );
+  if (usesTemplate && segment.id === "ch1") {
     return ch1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch2") {
+  if (usesTemplate && segment.id === "ch2") {
     return (
       "[Teacher note — do not read aloud] Chapter 2 start. Speak ONLY: Let's go find some sand! Do you want to go to the beach or the mountains? " +
       "すなを さがしに いこう！ びーちと やま、どっちに いく？ Then WAIT. " +
@@ -1162,7 +1439,7 @@ export function buildAdvanceNudge(state = loadLessonState()) {
       "Beginner: English then ひらがな. FORBIDDEN: Keep looking after see / Let me know when you find some sand / put sand in the tank / Chapter 6 / waves / tired."
     );
   }
-  if (state.lessonId === "part1" && segment.id === "ch3") {
+  if (usesTemplate && segment.id === "ch3") {
     return (
       `[Teacher note — do not read aloud] Chapter 3 starts NOW. Speak EXACTLY: Let's make some glass! ${PART1_ELICIT_JA.ch3NeedGlass} ` +
       "Then WAIT for I need to make glass (4-button). Do NOT say Can you say, I need to make glass. " +
@@ -1170,25 +1447,25 @@ export function buildAdvanceNudge(state = loadLessonState()) {
       "FORBIDDEN: I put glass here / walls (Chapter 5) and color/dye (Chapter 4)."
     );
   }
-  if (state.lessonId === "part1" && segment.id === "quiz1") {
+  if (usesTemplate && segment.id === "quiz1") {
     return quiz1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch4") {
+  if (usesTemplate && segment.id === "ch4") {
     return ch4StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch5") {
+  if (usesTemplate && segment.id === "ch5") {
     return ch5StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "daily1") {
+  if (usesTemplate && segment.id === "daily1") {
     return daily1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ch6") {
+  if (usesTemplate && segment.id === "ch6") {
     return ch6StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "final1") {
+  if (usesTemplate && segment.id === "final1") {
     return final1StartNudge();
   }
-  if (state.lessonId === "part1" && segment.id === "ending1") {
+  if (usesTemplate && segment.id === "ending1") {
     return ending1StartNudge();
   }
   return (
@@ -1206,11 +1483,26 @@ export function buildHandoffOpeningNudge(
   { lastQuote = "", reason = "handoff" } = {}
 ) {
   const segment = getCurrentSegment(state);
-  // Daily English already reacted + bridged before this reconnect — never re-ack the pet/chat.
+  const usesTemplate = usesBeginnerPart1Architecture(
+    state.lessonId,
+    ACTIVE_LEVEL_ID
+  );
+  // Never re-ack the previous chapter's answer on a fixed hinge opening — that made
+  // Live praise "I made yellow glass!" while the client already opened Chapter 5,
+  // so STT merged praise into the wall-opening bubble.
   const omitQuote =
     segment?.id === "ch6" ||
+    segment?.id === "ch5" ||
+    segment?.id === "ch4" ||
+    segment?.id === "ch3" ||
+    segment?.id === "ch1" ||
+    segment?.id === "quiz1" ||
+    segment?.id === "final1" ||
+    segment?.id === "ending1" ||
+    segment?.id === "daily1" ||
     reason === "after-daily1" ||
-    String(reason || "").includes("daily1");
+    String(reason || "").includes("daily1") ||
+    /^(?:after-|replay-after-)/.test(String(reason || ""));
   const quote = omitQuote ? "" : String(lastQuote || "").trim().slice(0, 60);
   const quoteBit = quote ? ` Child said "${quote}".` : "";
   const retryBit = reason === "stuck_retry" ? " Stuck-retry." : "";
@@ -1237,29 +1529,38 @@ export function buildHandoffOpeningNudge(
   };
 
   const line = speakExact[segment.id];
-  if (state.lessonId === "part1" && segment.id === "final1") {
+  if (usesTemplate && segment.id === "quiz1") {
     return (
-      `[Coach]${retryBit}${quoteBit} final1 ONLY. Speak EXACTLY ONE turn (no wait): ${final1OpenSpeak()} ` +
-      "then IMMEDIATELY the first listed 〜は えいごで？ cue from coach (ひらがな only). " +
-      "FORBIDDEN: Are you ready? / じゅんびは できてる？ / previous chapter."
+      `[QUIZ]${retryBit} MINI QUIZ 1 item 1 ONLY. Your entire audible turn MUST be exactly: ${line} ` +
+      "Start with くいずたいむ — no praise, acknowledgement, readiness question, English, translation, or generic quiz opener before it. " +
+      "End after えいごで？ and WAIT. Speak this script once; do not split it into separate turns. " +
+      "FORBIDDEN: Perfect, Great, Let's do a quick quiz, くいずをしよう, previous chapter."
     );
   }
-  if (state.lessonId === "part1" && segment.id === "ch6") {
+  if (usesTemplate && segment.id === "final1") {
+    return (
+      `[Coach]${retryBit} final1 ONLY. Speak EXACTLY ONE turn (no wait): ${final1OpenSpeak()} ` +
+      "then IMMEDIATELY the first listed 〜は えいごで？ cue from coach (ひらがな only). " +
+      "FORBIDDEN: Are you ready? / じゅんびは できてる？ / praising previous chapter / Child said My tank is ready."
+    );
+  }
+  if (usesTemplate && segment.id === "ch6") {
     return (
       `[Coach]${retryBit} ch6 ONLY. Speak EXACTLY Beat 1 then WAIT: ${CH6_BEAT1_SPEAK} ` +
       "FORBIDDEN: reacting to Daily English / favourite animal / pet names / トイプードル / previous chat. " +
       "FORBIDDEN: previous chapter."
     );
   }
-  if (state.lessonId === "part1" && segment.id === "ending1") {
+  if (usesTemplate && segment.id === "ending1") {
     return (
       `[Coach]${retryBit} ending1 ONLY. Stay SILENT — client owns Turn A audio. Do not say Perfect / Hold on / what kind of fish.`
     );
   }
-  if (state.lessonId === "part1" && line) {
+  if (usesTemplate && line) {
     return (
       `[Coach]${retryBit}${quoteBit} ${segment.id} ONLY. Speak EXACTLY then WAIT: ${line} ` +
-      "FORBIDDEN: previous chapter / tank invite / How are you."
+      "FORBIDDEN: previous chapter / tank invite / How are you / praising the previous answer " +
+      "(no That's awesome / Great job / I made … glass reaction before this opening)."
     );
   }
 

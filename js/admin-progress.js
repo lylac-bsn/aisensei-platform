@@ -1,17 +1,24 @@
 /**
  * Admin 「学習進捗」dashboard — chapter MCQ click stats, phrase checklist, poke counts.
  */
-import { AQUARIUM_PART1 } from "./lessons/aquarium-part1.js";
-import { AQUARIUM_PART2 } from "./lessons/aquarium-part2.js";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js";
+import { lessonFor } from "./lessons/lesson-catalog.js";
+import { allLessons } from "./lessons/lesson-catalog.js";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260910-accuracy-best-1";
 import { totalPokeCount } from "./activity-log.js";
+import {
+  currentFreetalkStats,
+  normalizeMcqLog,
+  resolveClaimedBadgeIds,
+  resolvePendingBadgeIds,
+  summarizeLifetimeMcq,
+} from "./progress-contract.js?v=20260910-accuracy-best-1";
 import {
   computeAccuracyTier,
   highestTierByFamily,
   FAMILY_LABELS_JA,
   BADGE_FAMILIES,
   familySlotImage,
-} from "./badge-engine.js";
+} from "./badge-engine.js?v=20260910-accuracy-best-1";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
@@ -27,9 +34,6 @@ function mcqSegmentsForLesson(lesson) {
       (s.items?.length && (s.type === "quiz" || s.type === "final_challenge"))
   );
 }
-
-const PART1_MCQ_SEGMENTS = mcqSegmentsForLesson(AQUARIUM_PART1);
-const PART2_MCQ_SEGMENTS = mcqSegmentsForLesson(AQUARIUM_PART2);
 
 export function escapeHtml(text) {
   return String(text ?? "")
@@ -125,8 +129,12 @@ export function buildPhraseCatalog() {
       }
     }
   };
-  pushFrom(AQUARIUM_PART1, "Part 1");
-  pushFrom(AQUARIUM_PART2, "Part 2");
+  for (const lesson of allLessons()) {
+    pushFrom(
+      lesson,
+      `${lesson.levelId || "beginner"} · ${lesson.id === "part2" ? "Part 2" : "Part 1"}`
+    );
+  }
   return out;
 }
 
@@ -165,13 +173,10 @@ function summarizeUserMcqFromParts(user) {
     if (!field) continue;
     sawProgressDoc = true;
     for (const part of [field.part1, field.part2]) {
-      const summary = part?.mcqSummary || {};
-      for (const row of Object.values(summary)) {
-        if (!row || typeof row !== "object") continue;
-        correct += Number(row.correct) || 0;
-        incorrect += Number(row.incorrect) || 0;
-        attempts += Number(row.attempts) || 0;
-      }
+      const totals = summarizeLifetimeMcq(part);
+      correct += totals.correct;
+      incorrect += totals.incorrect;
+      attempts += totals.attempts;
     }
   }
   // Only use legacy rollup when the student has never synced part progress
@@ -228,20 +233,19 @@ export function normalizeStudentProgress(user) {
   };
 }
 
-export function collectUserBadges(user) {
-  const fromTop = Array.isArray(user?.lessonBadges) ? user.lessonBadges : [];
-  const fromBeginner = Array.isArray(user?.beginnerProgress?.lessonBadges)
-    ? user.beginnerProgress.lessonBadges
-    : [];
-  const ids = [...new Set([...fromTop, ...fromBeginner].map(String))];
-  return ids.filter((id) => id.startsWith("p1_"));
+export function collectUserBadges(user, levelField = null) {
+  return resolveClaimedBadgeIds(user, levelField);
 }
 
-function renderBeginnerPart1BadgeRow(user) {
-  const ids = collectUserBadges(user);
-  const tiers = highestTierByFamily(ids);
-  const part1 = user?.beginnerProgress?.part1 || {};
-  const accuracy = computeAccuracyTier(part1, AQUARIUM_PART1);
+function renderLessonBadgeRow(user, meta, partKey) {
+  const lesson = lessonFor(meta.id, partKey);
+  const ids = collectUserBadges(user, meta.field);
+  const pendingIds = resolvePendingBadgeIds(user, meta.field).filter((id) =>
+    String(id).startsWith(`${lesson.badgePrefix}_`)
+  );
+  const tiers = highestTierByFamily(ids, lesson.badgePrefix);
+  const part = user?.[meta.field]?.[partKey] || {};
+  const accuracy = computeAccuracyTier(part, lesson);
   const ratePct =
     accuracy.total > 0 ? Math.round(accuracy.rate * 1000) / 10 : null;
   const chips = BADGE_FAMILIES.map((family) => {
@@ -258,13 +262,20 @@ function renderBeginnerPart1BadgeRow(user) {
   }).join("");
   const rateLine =
     ratePct != null
-      ? `バッジ用せいとうりつ（最新プレイの1回目）: <strong>${ratePct}%</strong>（${accuracy.correct}/${accuracy.total}）· 章リトライで上がることがあります`
-      : "バッジ用せいとうりつ: まだ4択データなし";
-  const freetalkN = Number(part1.endingFreetalkEnglishCount) || 0;
-  return `<div class="progress-badge-row" aria-label="ビギナー Part1 バッジ">
+      ? `いっぱつせいかい正解率: <strong>${ratePct}%</strong>（${accuracy.correct}/${accuracy.total}）· 今回判定 ${accuracy.tier || "対象外"} · 章のどのプレイでも初回正解なら加点（コレクションは過去最高を保持）`
+      : "バッジ用正解率: まだ4択データなし";
+  const freetalk = currentFreetalkStats(part);
+  const pendingLine = pendingIds.length
+    ? `<p class="progress-badge-rate">受け取り待ち（未獲得）: ${pendingIds
+        .map(escapeHtml)
+        .join("、")}</p>`
+    : "";
+  const partLabel = partKey === "part1" ? "Part 1" : "Part 2";
+  return `<div class="progress-badge-row" aria-label="${escapeHtml(meta.label)} ${partLabel} バッジ">
     <div class="progress-badge-chip-grid">${chips}</div>
     <p class="progress-badge-rate">${rateLine}</p>
-    <p class="progress-badge-rate">おしまいフリートーク英語: ${freetalkN} 文</p>
+    <p class="progress-badge-rate">おしまいフリートーク英語: 累計 ${freetalk.total} 文 · 今回 ${freetalk.currentRun} 文 · 前回完了時 ${freetalk.finalRun} 文</p>
+    ${pendingLine}
   </div>`;
 }
 
@@ -274,9 +285,14 @@ export function buildProgressSummary(users) {
     (u) => u.beginnerProgress || u.intermediateProgress || u.advancedProgress
   );
   const lessonComplete = accounts.filter((u) => {
-    const bp = u.beginnerProgress;
-    if (!bp) return false;
-    return Boolean(bp.part1Complete || (bp.part1?.complete && bp.part2?.complete));
+    return LEVEL_META.some((meta) => {
+      const progress = u[meta.field];
+      return Boolean(
+        progress?.part1Complete ||
+        progress?.part1?.complete ||
+        progress?.part2?.complete
+      );
+    });
   }).length;
   const phraseEarnedSum = accounts.reduce((sum, u) => {
     return sum + phraseChecklist(u).filter((p) => p.earned).length;
@@ -328,10 +344,10 @@ function renderChapterPlayCounts(part, lesson) {
   return `<ul class="progress-chapter-plays" aria-label="章プレイ回数">${items}</ul>`;
 }
 
-function renderHomeworkParts(meta, raw) {
+function renderHomeworkParts(meta, raw, user) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
-  const row = (label, part, lesson) => {
+  const row = (label, part, lesson, partKey) => {
     const segCount = (lesson?.segments || []).length || "—";
     const done = part.complete
       ? "完了"
@@ -344,16 +360,19 @@ function renderHomeworkParts(meta, raw) {
         mem ? ` · ${escapeHtml(mem)}` : ""
       }</p>
       ${renderChapterPlayCounts(part, lesson)}
+      ${renderLessonBadgeRow(user, meta, partKey)}
     </div>`;
   };
-  return `<section class="progress-level-block">
-    <header class="progress-level-header">
+  return `<details class="progress-level-block">
+    <summary class="progress-level-header">
       <h4>${escapeHtml(meta.label)}</h4>
       <span class="progress-level-meta">${raw?.part1Complete ? "Part1完了" : "Part1進行中"}</span>
-    </header>
-    ${row("Part 1", p1, AQUARIUM_PART1)}
-    ${row("Part 2", p2, AQUARIUM_PART2)}
-  </section>`;
+    </summary>
+    <div class="progress-level-content">
+      ${row("Part 1", p1, lessonFor(meta.id, "part1"), "part1")}
+      ${row("Part 2", p2, lessonFor(meta.id, "part2"), "part2")}
+    </div>
+  </details>`;
 }
 
 function resolveBeatChoices(beat, memories = {}) {
@@ -407,17 +426,16 @@ function isCorrectChoiceLabel(choice, beat, memories = {}) {
 }
 
 /**
- * Merge mcqSummary + mcqLog for one part into per-beat choice counts and click order.
+ * Build per-beat lifetime click stats. Event rows outrank legacy summaries.
  */
 function beatStatsFromPart(part, segmentId, beatId) {
   const key = `${segmentId}.${beatId}`;
   const summary = part?.mcqSummary?.[key] || null;
-  const log = Array.isArray(part?.mcqLog)
-    ? part.mcqLog.filter((e) => e.segmentId === segmentId && e.beatId === beatId)
-    : [];
-  const choiceCounts = { ...(summary?.choiceCounts || {}) };
-  // Rebuild counts from log if summary empty
-  if (!Object.keys(choiceCounts).length && log.length) {
+  const log = normalizeMcqLog(part?.mcqLog).filter(
+    (e) => e.segmentId === segmentId && e.beatId === beatId
+  );
+  const choiceCounts = log.length ? {} : { ...(summary?.choiceCounts || {}) };
+  if (log.length) {
     for (const e of log) {
       const ck = e.choice || "(blank)";
       choiceCounts[ck] = (choiceCounts[ck] || 0) + 1;
@@ -428,15 +446,19 @@ function beatStatsFromPart(part, segmentId, beatId) {
     choice: e.choice || "",
     correct: Boolean(e.correct),
     at: e.at || null,
+    playId: Number(e.playId) || 0,
+    firstTry: e.firstTry === true,
   }));
   const logCorrect = clickOrder.filter((c) => c.correct).length;
   const logIncorrect = clickOrder.filter((c) => !c.correct).length;
   const firstCorrect = clickOrder.find((c) => c.correct);
   const triesUntilCorrect = firstCorrect ? firstCorrect.n : null;
   return {
-    attempts: summary?.attempts != null ? Number(summary.attempts) : log.length,
-    correct: summary?.correct != null ? Number(summary.correct) : logCorrect,
-    incorrect: summary?.incorrect != null ? Number(summary.incorrect) : logIncorrect,
+    attempts: log.length
+      ? log.length
+      : (Number(summary?.correct) || 0) + (Number(summary?.incorrect) || 0),
+    correct: log.length ? logCorrect : Number(summary?.correct) || 0,
+    incorrect: log.length ? logIncorrect : Number(summary?.incorrect) || 0,
     choiceCounts,
     clickOrder,
     triesUntilCorrect,
@@ -481,8 +503,9 @@ function renderMcqChapterBlock(seg, part) {
             ) ||
             0;
           const ok = isCorrectChoiceLabel(label, beat, memories);
-          return `<li class="progress-mcq-option${ok ? " is-correct" : ""}">
-            <span class="progress-mcq-option-label">${escapeHtml(label)}</span>
+          const clickedIncorrect = !ok && count > 0;
+          return `<li class="progress-mcq-option${ok ? " is-correct" : clickedIncorrect ? " is-incorrect-clicked" : ""}" data-correct="${ok}" data-click-count="${count}"${clickedIncorrect ? ` title="不正解: ${count}回クリック"` : ""}>
+            <span class="progress-mcq-option-label">${clickedIncorrect ? '<span class="progress-mcq-option-result" aria-label="不正解">×</span>' : ""}${escapeHtml(label)}</span>
             <span class="progress-mcq-option-count">${count}</span>
           </li>`;
         })
@@ -492,9 +515,11 @@ function renderMcqChapterBlock(seg, part) {
         ? `<ol class="progress-mcq-order-list">${stats.clickOrder
             .map(
               (c) =>
-                `<li class="${c.correct ? "is-correct" : "is-wrong"}">${escapeHtml(c.n)}. ${escapeHtml(
+                `<li class="${c.correct ? "is-correct" : "is-wrong"}" title="${c.correct ? "正解" : "不正解"}">${escapeHtml(c.n)}. ${escapeHtml(
                   c.choice || "(blank)"
-                )}${c.correct ? " ✓" : ""}</li>`
+                )}${c.correct ? " ✓" : " ×"}${
+                  c.playId ? ` · プレイ${escapeHtml(c.playId)}` : ""
+                }${c.firstTry ? " · 初回" : ""}</li>`
             )
             .join("")}</ol>`
         : '<p class="progress-empty-inline">まだクリック履歴がありません</p>';
@@ -510,7 +535,7 @@ function renderMcqChapterBlock(seg, part) {
       return `<div class="progress-mcq-beat">
         <div class="progress-mcq-beat-head">
           <strong>Beat ${idx + 1}</strong>
-          <span class="progress-mcq-beat-meta">○${stats.correct} ×${stats.incorrect} · ${stats.attempts}回 · ${escapeHtml(
+          <span class="progress-mcq-beat-meta">累計クリック ○${stats.correct} ×${stats.incorrect} · ${stats.attempts}回 · ${escapeHtml(
             triesLabel
           )}</span>
         </div>
@@ -547,10 +572,8 @@ function renderMcqActivity(user) {
   for (const meta of LEVEL_META) {
     const field = user[meta.field];
     if (!field) continue;
-    for (const [partKey, segs] of [
-      ["part1", PART1_MCQ_SEGMENTS],
-      ["part2", PART2_MCQ_SEGMENTS],
-    ]) {
+    for (const partKey of ["part1", "part2"]) {
+      const segs = mcqSegmentsForLesson(lessonFor(meta.id, partKey));
       const part = field[partKey];
       if (!part) continue;
       const attempts = segs.reduce((sum, seg) => {
@@ -576,7 +599,9 @@ function renderMcqActivity(user) {
     }
   }
   if (!sections.length) {
-    const blocks = PART1_MCQ_SEGMENTS.map((seg) => renderMcqChapterBlock(seg, {})).join("");
+    const blocks = mcqSegmentsForLesson(lessonFor("beginner", "part1"))
+      .map((seg) => renderMcqChapterBlock(seg, {}))
+      .join("");
     if (!blocks) return '<p class="progress-activity-empty">4択チャプターがありません</p>';
     return `<div class="progress-mcq-board">${blocks}</div>`;
   }
@@ -649,17 +674,6 @@ function dayKeyJst(date) {
   return date.toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" }); // YYYY-MM-DD
 }
 
-const SEGMENT_LABELS = (() => {
-  const map = Object.create(null);
-  for (const lesson of [AQUARIUM_PART1, AQUARIUM_PART2]) {
-    for (const seg of lesson.segments || []) {
-      if (!seg?.id) continue;
-      map[seg.id] = seg.title || seg.titleEn || seg.id;
-    }
-  }
-  return map;
-})();
-
 const LEVEL_LABEL = {
   beginner: "ビギナー",
   intermediate: "中級",
@@ -680,15 +694,26 @@ function activityTypeMeta(type) {
   return ACTIVITY_TYPE_META[type] || { label: type || "その他", short: type || "?" };
 }
 
+function segmentLabelForEvent(ev) {
+  const segmentId = String(ev?.segmentId || "");
+  if (!segmentId) return "";
+  const lesson = lessonFor(
+    ev?.level || "beginner",
+    ev?.lessonId || "part1"
+  );
+  const segment = (lesson?.segments || []).find((item) => item.id === segmentId);
+  return segment?.title || segment?.titleEn || segmentId;
+}
+
 function renderActivityDetail(ev) {
   if (ev.type === "poke") {
-    const seg = ev.segmentId ? SEGMENT_LABELS[ev.segmentId] || ev.segmentId : "";
+    const seg = segmentLabelForEvent(ev);
     return seg
       ? `<span class="tl-tag">${escapeHtml(seg)}</span>`
       : `<span class="tl-muted">つついた</span>`;
   }
   if (ev.type === "mcq_correct" || ev.type === "mcq_incorrect") {
-    const segLabel = SEGMENT_LABELS[ev.segmentId] || ev.segmentId || "章不明";
+    const segLabel = segmentLabelForEvent(ev) || "章不明";
     const beat = ev.beatId || "";
     const choice = ev.choice || "(未選択)";
     const ok = ev.type === "mcq_correct";
@@ -697,6 +722,8 @@ function renderActivityDetail(ev) {
       ${beat ? `<span class="tl-tag tl-tag-soft">${escapeHtml(beat)}</span>` : ""}
       <span class="tl-choice ${ok ? "is-ok" : "is-ng"}">${escapeHtml(choice)}</span>
       ${ev.attempt ? `<span class="tl-attempt">${escapeHtml(String(ev.attempt))}回目</span>` : ""}
+      ${ev.playId ? `<span class="tl-attempt">プレイ${escapeHtml(String(ev.playId))}</span>` : ""}
+      ${ev.firstTry ? '<span class="tl-attempt">初回</span>' : ""}
     </div>`;
   }
   if (ev.type === "reset") {
@@ -814,15 +841,23 @@ export function renderProgressDashboard(users, searchQuery = "") {
           const checklist = phraseChecklist(u);
           const phraseEarned = checklist.filter((p) => p.earned).length;
           const levelsHtml = LEVEL_META.filter((meta) => u[meta.field])
-            .map((meta) => renderHomeworkParts(meta, u[meta.field] || {}))
+            .map((meta) => renderHomeworkParts(meta, u[meta.field] || {}, u))
             .join("");
           const hasAny = LEVEL_META.some((m) => u[m.field]);
-          const statusClass = u.beginnerProgress?.part1Complete
+          const hasCompletedLesson = LEVEL_META.some((meta) => {
+            const progress = u[meta.field];
+            return Boolean(
+              progress?.part1Complete ||
+              progress?.part1?.complete ||
+              progress?.part2?.complete
+            );
+          });
+          const statusClass = hasCompletedLesson
             ? "complete"
             : hasAny
               ? "active"
               : "empty";
-          const statusLabel = u.beginnerProgress?.part1Complete
+          const statusLabel = hasCompletedLesson
             ? "クリア"
             : hasAny
               ? "学習中"
@@ -847,7 +882,7 @@ export function renderProgressDashboard(users, searchQuery = "") {
                 <span class="progress-stat-value">${phraseEarned}/${checklist.length}</span>
               </div>
               <div class="progress-stat">
-                <span class="progress-stat-label">4択</span>
+                <span class="progress-stat-label">4択 累計クリック</span>
                 <span class="progress-stat-value">○${mcq.correct} ×${mcq.incorrect}</span>
               </div>
               <div class="progress-stat">
@@ -859,8 +894,6 @@ export function renderProgressDashboard(users, searchQuery = "") {
                 <span class="progress-stat-value">${formatSeconds(u.remainingTime)}</span>
               </div>
             </div>
-
-            ${u.beginnerProgress ? renderBeginnerPart1BadgeRow(u) : ""}
 
             ${levelsHtml || '<p class="progress-empty-inline">まだ宿題データがありません</p>'}
 
@@ -896,11 +929,11 @@ export function renderProgressDashboard(users, searchQuery = "") {
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.lessonCompleteCount}</span>
-        <span class="progress-summary-label">ビギナークリア</span>
+        <span class="progress-summary-label">レッスンクリア</span>
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.mcqCorrect || 0}/${summary.mcqIncorrect || 0}</span>
-        <span class="progress-summary-label">4択 正解/不正解</span>
+        <span class="progress-summary-label">4択 累計クリック 正解/不正解</span>
       </div>
       <div class="progress-summary-card">
         <span class="progress-summary-num">${summary.totalPhrases}/${summary.phraseCatalogSize}</span>
@@ -911,8 +944,8 @@ export function renderProgressDashboard(users, searchQuery = "") {
         <span class="progress-summary-label">つつく合計</span>
       </div>
     </div>
-    <p class="progress-legend">章プレイ回数 = その章を開始した回数 · 緑 = 正解の選択肢 · 4択の数字 = クリック回数 · バッジせいとうりつ = 最新プレイの1回目（リトライで上がる）</p>
+    <p class="progress-legend">章プレイ回数 = その章を開始した回数 · 緑 = 正解の選択肢 · 赤い× = クリックした不正解 · 4択の数字 = 生涯クリック回数 · いっぱつせいかい正解率はどのプレイでも初回正解なら加点（獲得済みランクは下がりません）</p>
     <div class="progress-student-grid">${cardsHtml}</div>`;
 }
 
-export { LEVEL_META, PHRASE_CATALOG, PART1_MCQ_SEGMENTS, PART2_MCQ_SEGMENTS };
+export { LEVEL_META, PHRASE_CATALOG };

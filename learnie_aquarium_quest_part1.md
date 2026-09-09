@@ -228,7 +228,8 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 `What's your favorite color?`  
 `すきな いろは？`  
 → 子どもが色を言う（例: orange）→ `favoriteColor` を記録  
-→ **ここで MCQ は出さない / Chapter 5 へ進まない**
+→ **レッスン外の色（rainbow など）:** 保存しない。`Which colour would you pick out of these?` / `この中だったらどの色がすき？` ＋色ボタンで選び直す  
+→ **ここでガラス MCQ は出さない / Chapter 5 へ進まない**
 
 ## Beat A2+B — その色のガラスを作ろう＋できたらいってね（1ターン）
 
@@ -314,7 +315,7 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 **Learny:**  
 `Let's make a basement inside the tank!`  
-`すいそうの そこに すなを おこう！できたら えいごで おしえてね！`  
+`すいそうの そこに すなを おこう！のえいごを選んでね！`
 **4択:** I put the sand on the bottom. / I put sand here. / I put glass here. / I'm done! → **I put the sand on the bottom.**
 
 ## Beat 2
@@ -335,7 +336,7 @@ Learny は**日本語ひらがなのみ**。英語の選択肢は声に出さな
 
 **Learny:**  
 `Is the tank ready for the fishes to swim?`  
-`「さかなを いれられる じゅんびが できた！」の えいごを 選んでね！`  
+`「すいそうのじゅんびができた」のえいごを選んでね！`
 **4択:** My tank is ready! / I'm done! / I need fish. / I made a tank! → **My tank is ready!**  
 → **Final challenge へ**  
 ※ 魚はまだ入れない（水族館完成ではない）

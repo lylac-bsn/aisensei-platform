@@ -75,8 +75,8 @@
 
             <aside class="user-dashboard" aria-label="ダッシュボード">
                 <div class="dashboard-sidebar-stack">
-                    <!-- Always-visible trophy shelf: badges + stars -->
-                    <section class="trophy-shelf" aria-label="バッジとスター">
+                    <!-- Always-visible trophy shelf: badges -->
+                    <section class="trophy-shelf" aria-label="バッジ">
                         <button type="button" class="trophy-shelf__badges" id="trophy-shelf-badges" data-panel="badges" aria-label="バッジを見る">
                             <span class="trophy-shelf__notif" id="trophy-badge-notif" hidden aria-hidden="true"></span>
                             <span class="trophy-shelf__title">
@@ -85,10 +85,6 @@
                                 <span class="trophy-shelf__count" id="trophy-badge-count">0/6</span>
                             </span>
                             <span class="trophy-shelf__slots" id="trophy-badge-slots" aria-hidden="true"></span>
-                        </button>
-                        <button type="button" class="trophy-shelf__stars" id="trophy-shelf-stars" data-panel="stars" aria-label="スターを見る">
-                            <span class="trophy-shelf__stars-row" id="trophy-star-row" aria-hidden="true"></span>
-                            <span class="trophy-shelf__stars-label"><span id="trophy-star-count">0</span> スターゲット！</span>
                         </button>
                     </section>
 
@@ -168,10 +164,10 @@
     </div>
 
     <!-- Page-specific script (Firebase v11 modular SDK loaded via page1.js) -->
-    <script type="module" src="js/page3.js"></script>
-        <script type="module">
-        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js';
-        import { isPart1Complete } from './js/lesson-engine.js';
+    <script type="module" src="js/page3.js?v=20260910-accuracy-best-1"></script>
+    <script type="module">
+        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js?v=20260910-accuracy-best-1';
+        import { isPart1Complete } from './js/lesson-engine.js?v=20260910-accuracy-best-1';
 
         const tab1 = document.getElementById('tab-part1');
         const tab2 = document.getElementById('tab-part2');

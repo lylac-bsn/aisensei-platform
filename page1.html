@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
     <script>window.GC_LEVEL = 'beginner';</script>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20260909-badge-title">
     <link rel="icon" href="images/tab-logo.png" type="image/png">
 </head>
 <body class="page-dashboard">
@@ -33,7 +33,7 @@
                         </span>
                         <div class="header-tab-switcher" role="tablist" aria-label="宿題パート">
                             <button id="tab-part1" class="tab-btn active" role="tab" aria-selected="true" aria-controls="iframe-part1">Part 1</button>
-                            <button id="tab-part2" class="tab-btn" role="tab" aria-selected="false" aria-controls="iframe-part2" disabled title="Part 1 を終わらせてから">Part 2</button>
+                            <button id="tab-part2" class="tab-btn" role="tab" aria-selected="false" aria-controls="iframe-part2" disabled aria-disabled="true" title="準備中">Part 2（準備中）</button>
                         </div>
                     </div>
                 </div>
@@ -53,22 +53,28 @@
         <!-- Main content area -->
         <div id="dashboard-backdrop" class="dashboard-backdrop" hidden aria-hidden="true"></div>
         <div class="main-content-grid main-content-grid--dashboard">
-            <main id="app-content" class="chat-box-wrapper chat-column">
-                <iframe
-                    src="voice-tab.html?level=beginner&lesson=part1"
-                    id="iframe-part1"
-                    frameborder="0"
-                    allow="microphone; display-capture"
-                    style="width:100%; height:100%;">
-                </iframe>
-                <iframe
-                    src="voice-tab.html?level=beginner&lesson=part2"
-                    id="iframe-part2"
-                    frameborder="0"
-                    allow="microphone; display-capture"
-                    style="width:100%; height:100%; display:none;">
-                </iframe>
-            </main>
+            <section class="student-lesson-column" aria-labelledby="student-lesson-title">
+                <h1 id="student-lesson-title" class="student-lesson-title">
+                    <span class="student-lesson-title__part">Part 1</span>
+                    <span>おさかなを迎えるじゅんびをしよう！</span>
+                </h1>
+                <main id="app-content" class="chat-box-wrapper chat-column">
+                    <iframe
+                        src="voice-tab.html?level=beginner&lesson=part1"
+                        id="iframe-part1"
+                        frameborder="0"
+                        allow="microphone; display-capture"
+                        style="width:100%; height:100%;">
+                    </iframe>
+                    <iframe
+                        src="voice-tab.html?level=beginner&lesson=part2"
+                        id="iframe-part2"
+                        frameborder="0"
+                        allow="microphone; display-capture"
+                        style="width:100%; height:100%; display:none;">
+                    </iframe>
+                </main>
+            </section>
 
             <aside class="user-dashboard" aria-label="ダッシュボード">
                 <div class="dashboard-sidebar-stack">
@@ -161,10 +167,9 @@
     </div>
 
     <!-- Page-specific script (Firebase v11 modular SDK loaded via page1.js) -->
-    <script type="module" src="js/page1.js"></script>
-        <script type="module">
-        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js';
-        import { isPart1Complete } from './js/lesson-engine.js';
+    <script type="module" src="js/page1.js?v=20260910-accuracy-best-1"></script>
+    <script type="module">
+        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js?v=20260910-accuracy-best-1';
 
         const tab1 = document.getElementById('tab-part1');
         const tab2 = document.getElementById('tab-part2');
@@ -194,22 +199,11 @@
             setActiveHomeworkLesson(part);
         }
 
-        function refreshLock() {
-            if (!tab2) return;
-            const unlocked = isPart1Complete();
-            tab2.disabled = !unlocked;
-            tab2.title = unlocked ? 'Part 2（4週目の宿題）' : 'Part 1 を終わらせてから';
-        }
-
         tab1.addEventListener('click', () => switchTab('part1'));
         tab2.addEventListener('click', () => {
             if (tab2.disabled) return;
             switchTab('part2');
         });
-        window.addEventListener('message', (e) => {
-            if (e.data?.type === 'gc_quest_progress_update') refreshLock();
-        });
-        refreshLock();
     </script>
 
     <!-- Growbuddy Logo -->

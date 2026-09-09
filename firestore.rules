@@ -61,6 +61,11 @@ service cloud.firestore {
           && request.resource.data.source == 'client'
           && request.resource.data.keys().hasAll(['type', 'source', 'at']);
 
+        // 「最初から」 lets a student erase their own Part 1 activity history.
+        // The path is restricted to the authenticated user's own document.
+        allow delete: if request.auth != null
+          && request.auth.uid == userId;
+
         allow create, update, delete: if isAdmin();
       }
     }
