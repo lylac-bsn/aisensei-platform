@@ -546,14 +546,14 @@
         .lesson-choice-title-row {
             position: relative;
             display: grid;
-            grid-template-columns: 28px minmax(0, 1fr) 28px;
+            grid-template-columns: minmax(0, 1fr) auto;
             align-items: center;
             width: 100%;
             min-height: 28px;
-            gap: 4px;
+            gap: 6px;
         }
         .lesson-choice-title {
-            grid-column: 2;
+            grid-column: 1;
             width: auto;
             max-width: 100%;
             font-size: 0.95rem;
@@ -571,33 +571,31 @@
             padding: 4px 8px;
         }
         .lesson-choice-question-replay {
-            grid-column: 3;
+            grid-column: 2;
             justify-self: end;
             align-self: center;
             box-sizing: border-box;
-            width: 28px;
-            height: 28px;
-            min-width: 28px;
+            width: auto;
+            height: auto;
+            min-width: 0;
             min-height: 28px;
-            padding: 0;
+            padding: 4px 8px;
             border: 1.5px solid #a5d6a7;
             border-radius: 8px;
             background: #fff;
             color: #2e7d32;
             cursor: pointer;
             font: inherit;
-            line-height: 0;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
-            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-        }
-        .lesson-choice-question-replay svg {
-            width: 14px;
-            height: 14px;
-            display: block;
-            transform-origin: center;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
         }
         .lesson-choice-question-replay:hover,
         .lesson-choice-question-replay:focus-visible {
@@ -609,16 +607,12 @@
         .lesson-choice-question-replay.is-speaking {
             border-color: #ffb74d;
             background: #fff3e0;
-        }
-        .lesson-choice-question-replay.is-speaking svg {
             animation: choiceQuestionReplayPulse 0.7s ease-in-out infinite alternate;
         }
         .lesson-choice-question-replay.is-loading {
             color: #78909c;
             cursor: wait;
-        }
-        .lesson-choice-question-replay.is-loading svg {
-            animation: choiceSpeakerLoading 0.85s linear infinite;
+            opacity: 0.78;
         }
         .lesson-choice-question-replay.is-error {
             color: #c62828;
@@ -626,8 +620,8 @@
             background: #ffebee;
         }
         @keyframes choiceQuestionReplayPulse {
-            from { transform: scale(1); }
-            to { transform: scale(1.12); }
+            from { opacity: 1; }
+            to { opacity: 0.72; }
         }
         .lesson-choice-question {
             display: grid;
@@ -1859,6 +1853,6 @@
         </div>
     </div>
 
-    <script type="module" src="./js/homework-voice.js?v=20260910-warmup-no-glass-1"></script>
+    <script type="module" src="./js/homework-voice.js?v=20260910-final1-mcq-keep-1"></script>
 </body>
 </html>

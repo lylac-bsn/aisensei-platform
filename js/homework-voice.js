@@ -23,6 +23,7 @@ import {
   buildLessonInstructions,
   buildEndingFreeTalkInstructions,
   buildDaily1Instructions,
+  buildFinal1Instructions,
   buildOpeningNudge,
   buildAdvanceNudge,
   buildHandoffOpeningNudge,
@@ -37,11 +38,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-warmup-no-glass-1";
+} from "./lesson-engine.js?v=20260910-final1-mcq-keep-1";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-warmup-no-glass-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-final1-mcq-keep-1";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-warmup-no-glass-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-final1-mcq-keep-1";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -55,14 +56,15 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-warmup-no-glass-1";
+} from "./mcq-engine.js?v=20260910-final1-mcq-keep-1";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
   normalizeMcqAudioLabel,
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
-} from "./mcq-audio-config.js?v=20260910-warmup-no-glass-1";
+  formatCh4ColorChoiceLabel,
+} from "./mcq-audio-config.js?v=20260910-final1-mcq-keep-1";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,
@@ -2803,12 +2805,15 @@ function findFinal1QueuePosFromAssistant(assistant) {
 }
 
 function getDisplayedFinal1Item() {
-  // Prefer what Learny spoke (even if already answered) so MCQ never shows the *next*
-  // item's choices under a repeated 「できた！」 prompt.
   const spoken = resolveFinal1ItemFromAssistant(lastAssistantText(), {
     allowAnswered: true,
   });
-  if (spoken) return spoken;
+  // Prefer the live spoken cue while it is still unanswered (wrong-tap retry).
+  if (spoken?.item && !final1ItemAlreadyAnswered(spoken.item)) {
+    return spoken;
+  }
+  // After a correct tap the bubble still shows the old cue, but the cursor has
+  // already advanced — keep the MCQ panel open on the next item instead of hiding.
   const item = getCurrentFinal1Item();
   return item ? { item, queuePos: final1Quiz.cursor, inQueue: true } : null;
 }
@@ -2883,6 +2888,26 @@ function forceFinal1OpenWithFirstQuestion(reason = "final1-open") {
   return sendClientText(withFinal1ExactSpeakRule(formatTeacherNote(outbound)), {
     force: true,
   });
+}
+
+/** After a correct Final1 tap — exact praise+next cue (avoids slow free generation). */
+function forceFinal1NextCueSpeak(reason = "next-cue") {
+  if (!client?.connected || actionState !== "active") return false;
+  if (getCurrentSegment()?.id !== "final1") return false;
+  const cue = currentFinal1Prompt();
+  if (!cue) return false;
+  const remaining = final1RemainingCount();
+  const lead =
+    remaining === 1
+      ? "Yes! This is the last question! さいごの もんだいだよ！ "
+      : "You got it! せいかい！ ";
+  const script = `${lead}${cue}`;
+  const outbound =
+    "[FINAL1] NEXT CUE. Speak exactly the text between <exact> tags as your complete audible turn, once. " +
+    "Do not add a second question. Then WAIT for the 4-button tap.\n" +
+    `<exact>${script}</exact>`;
+  dbg("force final1 next cue", { reason, cue: cue.slice(0, 32), remaining });
+  return sendClientText(withFinal1ExactSpeakRule(outbound), { force: true });
 }
 
 function maybeFinal1OpenNudge() {
@@ -3287,15 +3312,44 @@ function handleFinal1ChoiceClick(label) {
     return;
   }
 
+  if (correct) {
+    // Exact next-cue speak — full lesson prompt free-generation was multi-second lag.
+    const requestId = ++childTurnRequestId;
+    const sendExact = () => {
+      if (requestId !== childTurnRequestId) return false;
+      if (actionState !== "active" || !client?.connected) return false;
+      const ok = forceFinal1NextCueSpeak("after-correct-tap");
+      userTurnSentViaClientText = ok;
+      if (ok) {
+        lastPendingUserText = label;
+        lastUserTurnAt = Date.now();
+        awaitingAssistantReply = true;
+        updateLearnyThinkingUI();
+        armSilentReplyWatch(label, {
+          fromVoice: false,
+          mode: "final1",
+          replaySent: true,
+        });
+      }
+      return ok;
+    };
+    if (assistantIsSpeaking()) {
+      sealStaleAssistantPlaybackEstimate("final1-next-cue-queue");
+      whenAssistantIdle(sendExact, "final1-next-cue");
+    } else {
+      sendExact();
+    }
+    renderChoiceBar(getCurrentSegment());
+    return;
+  }
+
   const coach = buildFinal1OutboundCoach(label);
-  dispatchChildTurn(label, coach || (correct ? "Brief praise, next Final1 cue." : buildMcqWrongRetryCoach()), {
+  dispatchChildTurn(label, coach || buildMcqWrongRetryCoach(), {
     mode: "final1",
   });
 
   renderChoiceBar(getCurrentSegment());
-  if (!correct) {
-    flashMcqIncorrectFeedback(label);
-  }
+  flashMcqIncorrectFeedback(label);
 }
 
 function tryRouteFinal1Answer(text) {
@@ -4396,7 +4450,8 @@ function buildCh5OutboundCoach(userText) {
     return (
       "[Teacher note — do not read aloud] Child said I'm building a tank. Short praise, then Speak EXACTLY Beat 3: " +
       buildMcqSpeakCoach(beat) +
-      " FORBIDDEN: say I made a tank yourself. FORBIDDEN: praise-only." +
+      " FORBIDDEN: say I made a tank yourself. FORBIDDEN: praise-only. " +
+      "FORBIDDEN: 「すいそうを つくってる」 on Beat 3 — JP must be すいそうを つくった の えいごを 選んでね！ only." +
       beginnerTurnHint()
     );
   }
@@ -5439,6 +5494,7 @@ function runPostTurnCoachNudges() {
   maybeElicitEigoSkipNudge();
   maybeQuiz1ExactSpeakNudge();
   maybeWarmupHomeworkLeakNudge();
+  maybeCh5Beat3ExactSpeakNudge();
 
   // Praise-only / stalled lead — allow a follow-up spoken beat even after Learny just spoke.
   // Ch4 hard-forces Let's make / Beat B; soft continuation nudge would double-speak.
@@ -6096,6 +6152,94 @@ function maybeQuiz1ExactSpeakNudge() {
     forceQuiz1ExactSpeak("mangled-repair", { item: cur });
     dbg("quiz1 exact speak repair", key);
   }, "quiz1-exact");
+}
+
+/** Ch5 Beat3 must pair Are you done making it? with すいそうを つくった — not Beat2's つくってる. */
+function ch5OnMadeTankBeat() {
+  if (getCurrentSegment()?.id !== "ch5") return false;
+  if (userHasMadeTankPhrase() || userHasLooksGoodPhrase()) return false;
+  if (userHasBuildingTankPhrase()) return true;
+  const unlocked = mcqUnlockFlags(getCurrentSegment());
+  const cur = getCurrentMcqBeat(getCurrentSegment(), { unlocked });
+  return cur?.beat?.id === "made_tank";
+}
+
+function assistantCh5Beat3Mangled(text = lastAssistantText()) {
+  const t = String(text || "");
+  if (!t.trim()) return false;
+  const hasDoneAsk = /are you done making it/i.test(t);
+  const hasBuildingElicit = /すいそうを\s*つくって(?:いる|る)/.test(t);
+  const hasMadeElicit = /すいそうを\s*つくった/.test(t);
+  if (hasDoneAsk && hasBuildingElicit) return true;
+  if (ch5OnMadeTankBeat() && hasBuildingElicit && !hasMadeElicit && /えいごを\s*選んで/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+function fixCh5Beat3Bubble(text) {
+  let t = String(text || "");
+  if (!t) return t;
+  const shouldFix =
+    /are you done making it/i.test(t) ||
+    (ch5OnMadeTankBeat() && /すいそうを\s*つくって(?:いる|る)/.test(t));
+  if (!shouldFix) return t;
+  t = t.replace(
+    /「すいそうを\s*つくって(?:いる|る)」の\s*えいごを\s*選んでね！?/g,
+    PART1_ELICIT_JA.ch5MadeTank
+  );
+  t = t.replace(
+    /すいそうを\s*つくって(?:いる|る)」?の\s*えいごを\s*選んでね！?/g,
+    PART1_ELICIT_JA.ch5MadeTank
+  );
+  return t;
+}
+
+function forceCh5Beat3ExactSpeak(reason = "mangled-repair") {
+  if (!client?.connected || actionState !== "active") return false;
+  if (getCurrentSegment()?.id !== "ch5") return false;
+  const segment = getCurrentSegment();
+  const beat =
+    getSegmentMcqBeats(segment).find((b) => b.id === "made_tank") ||
+    getCurrentMcqBeat(segment, { unlocked: mcqUnlockFlags(segment) })?.beat;
+  if (!beat) return false;
+  const script = [beat.learnyEn, beat.learnyJa].filter(Boolean).join(" ").trim();
+  const outbound =
+    "[QUIZ] Ch5 Beat 3 REPAIR. Speak exactly the text between <exact> tags as your complete audible turn, once. " +
+    "Do not add praise or a new question. Then WAIT for the 4-button tap.\n" +
+    `<exact>${script}</exact>\n` +
+    "FORBIDDEN: 「すいそうを つくってる」 (Beat2). Beat3 JP is すいそうを つくった の えいごを 選んでね！ only.";
+  dbg("force ch5 beat3 exact speak", { reason, script: script.slice(0, 48) });
+  return sendClientText(withQuizExactSpeakRule(outbound), { force: true });
+}
+
+function maybeCh5Beat3ExactSpeakNudge() {
+  if (getCurrentSegment()?.id !== "ch5") return;
+  if (!usesBeginnerInstructionProfile() && getActiveLessonId() !== "part1") return;
+  if (!assistantTranscriptSettled()) return;
+  const text = lastAssistantText().trim();
+  if (!assistantCh5Beat3Mangled(text)) return;
+
+  const fixed = fixCh5Beat3Bubble(text);
+  const last = messages?.length ? messages[messages.length - 1] : null;
+  if (last?.type === "assistant" && fixed && fixed !== text) {
+    last.text = sanitizeAssistantBubbleText(fixed);
+    assistantTurnTranscript = last.text;
+    scheduleRenderChat();
+  }
+  const key = `ch5-beat3-exact-${normalizeUserText(text).slice(0, 28) || "open"}`;
+  whenAssistantIdle(() => {
+    if (getCurrentSegment()?.id !== "ch5") return;
+    if (!assistantCh5Beat3Mangled(lastAssistantText())) return;
+    try {
+      audioPlayer?.interrupt?.();
+      closeOpenAudioTurn();
+    } catch {
+      // ignore
+    }
+    forceCh5Beat3ExactSpeak("mangled-repair");
+    dbg("ch5 beat3 exact speak repair", key);
+  }, "ch5-beat3-exact");
 }
 
 function looksLikeMoodAnswer(text) {
@@ -7696,8 +7840,7 @@ const choiceAudioBufferCache = new Map();
 const CHOICE_SPEAKER_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>';
 
-const CHOICE_QUESTION_REPLAY_ICON =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>';
+const CHOICE_QUESTION_REPLAY_LABEL = "もういちど聞く";
 
 /** Current on-screen MCQ / quiz question Learny should read aloud. */
 function getActiveMcqQuestionScript(segment = getCurrentSegment()) {
@@ -7947,9 +8090,9 @@ function renderChoiceBar(segment) {
       const replay = document.createElement("button");
       replay.type = "button";
       replay.className = "lesson-choice-question-replay";
-      replay.innerHTML = CHOICE_QUESTION_REPLAY_ICON;
-      replay.title = "もんだいを もういちど きく";
-      replay.setAttribute("aria-label", "もんだいを もういちど きく");
+      replay.textContent = CHOICE_QUESTION_REPLAY_LABEL;
+      replay.title = CHOICE_QUESTION_REPLAY_LABEL;
+      replay.setAttribute("aria-label", CHOICE_QUESTION_REPLAY_LABEL);
       replay.disabled = locked;
       replay.addEventListener("click", (event) => {
         event.preventDefault();
@@ -8058,21 +8201,8 @@ function renderChoiceBar(segment) {
       syncMicForMcqMode();
       return;
     }
-    // After a correct tap, keep the answered cue off-screen until Learny asks the next one.
-    if (final1ItemAlreadyAnswered(item)) {
-      const spoken = resolveFinal1ItemFromAssistant(lastAssistantText(), {
-        allowAnswered: true,
-      });
-      if (
-        spoken?.item &&
-        final1ItemKey(spoken.item) &&
-        final1ItemKey(spoken.item) === final1ItemKey(item)
-      ) {
-        hide();
-        syncMicForMcqMode();
-        return;
-      }
-    }
+    // Keep the panel open after a tap — show the next (or same-on-retry) cue
+    // while Learny speaks. Buttons stay locked via choicesLocked() until idle.
     appendChoices(
       getShuffledChoiceLabels(
         `final1:${item.id || item.answer || "item"}`,
@@ -8088,7 +8218,7 @@ function renderChoiceBar(segment) {
 
   if (segment?.id === "ch4" && ch4ColorChoiceActive()) {
     appendChoices(
-      [...CH4_PICKER_COLORS],
+      CH4_PICKER_COLORS.map(formatCh4ColorChoiceLabel),
       (label) => handleCh4ColorPickerClick(label),
       "すきな色をタップ",
       { en: CH4_COLOR_ASK_EN, ja: CH4_COLOR_ASK_JA },
@@ -8899,6 +9029,9 @@ function seedHandoffOpeningBubble(script) {
   if (!text) return;
   handoffOpeningDisplayLocked = true;
   handoffOpeningSeededScript = text;
+  // Opening is on screen — drop transition overlay / MCQ gate so Beat 1 buttons can appear
+  // (still locked while Learny is speaking via choicesLocked).
+  markChapterTransitionSpeaking();
   const last = chatMessages[chatMessages.length - 1];
   if (
     last?.type === "assistant" &&
@@ -9167,6 +9300,7 @@ function sanitizeAssistantBubbleText(text) {
   t = trimCorruptEnglishRestartAfterJapanese(t);
   t = fixCh4BeatBBubble(t);
   t = stripCh4FavoriteColorReask(t);
+  t = fixCh5Beat3Bubble(t);
   if (getCurrentSegment()?.id === "ch4") {
     t = trimCh4MakeTellRestart(t);
   }
@@ -10650,7 +10784,7 @@ function segmentContinuationHint() {
       return (
         " Ch5: elicit Beat 3 Are you done making it? " +
         PART1_ELICIT_JA.ch5MadeTank +
-        " → I made a tank! FORBIDDEN: say it yourself / praise-only / skip えいごを."
+        " → I made a tank! FORBIDDEN: 「すいそうを つくってる」 (Beat2 only). FORBIDDEN: say it yourself / praise-only / skip えいごを."
       );
     }
     if (userHasPutGlassPhrase()) {
@@ -12496,13 +12630,16 @@ function configureGeminiClient(geminiClient) {
   const segmentId = getCurrentSegment(state)?.id;
   const endingPhase2 = segmentId === "ending1";
   const daily1Phase = segmentId === "daily1";
+  const final1Phase = segmentId === "final1";
   geminiClient.functions = [];
   geminiClient.functionsMap = {};
   geminiClient.systemInstructions = endingPhase2
     ? buildEndingFreeTalkInstructions(state, LEVEL_INFO.id)
     : daily1Phase
       ? buildDaily1Instructions(state, LEVEL_INFO.id)
-      : buildLessonInstructions(state, LEVEL_INFO.id);
+      : final1Phase
+        ? buildFinal1Instructions(state, LEVEL_INFO.id)
+        : buildLessonInstructions(state, LEVEL_INFO.id);
   geminiClient.inputAudioTranscription = true;
   geminiClient.outputAudioTranscription = true;
   geminiClient.googleGrounding = false;
@@ -12524,8 +12661,8 @@ function configureGeminiClient(geminiClient) {
   // resume it after a network drop without losing an in-flight child turn.
   geminiClient.sessionResumptionEnabled = true;
   geminiClient.resumeHandle = sessionResumeHandle || null;
-  if (endingPhase2 || daily1Phase) {
-    ending1Timing(daily1Phase ? "daily1-prompt-configured" : "prompt-configured", {
+  if (endingPhase2 || daily1Phase || final1Phase) {
+    ending1Timing(daily1Phase ? "daily1-prompt-configured" : final1Phase ? "final1-prompt-configured" : "prompt-configured", {
       promptChars: geminiClient.systemInstructions.length,
       segment: segmentId,
       hasFinal1Prompt: /FINAL CHALLENGE ONLY|final1 ONLY/.test(
@@ -13432,7 +13569,13 @@ function beginChapterTransition(segment = getCurrentSegment()) {
 
 /** Learny started the new chapter — drop loading and show MCQ if ready. */
 function endChapterTransition() {
-  if (!chapterTransitionActive && !questLoadingOverlay?.classList.contains("active")) {
+  const overlayActive = Boolean(questLoadingOverlay?.classList.contains("active"));
+  // Always clear the MCQ gate — armMcqHandoffGate can run before beginChapterTransition
+  // (Daily→Ch6 wait), and an early return here used to leave Beat 1 buttons hidden forever.
+  clearMcqHandoffGate("chapter-opening-started");
+  if (!chapterTransitionActive && !overlayActive) {
+    renderChoiceBar(getCurrentSegment());
+    updateActionUI();
     return;
   }
   chapterTransitionActive = false;
@@ -13441,14 +13584,18 @@ function endChapterTransition() {
     chapterTransitionSafetyId = null;
   }
   hideChapterLoadingOverlay();
-  clearMcqHandoffGate("chapter-opening-started");
   scheduleRepairIncompleteAssistantBubble();
   renderChoiceBar(getCurrentSegment());
   updateActionUI();
 }
 
 function markChapterTransitionSpeaking() {
-  if (!chapterTransitionActive) return;
+  // Opening audio/STT arrived — never keep MCQ gated even if transition flag already cleared.
+  if (!chapterTransitionActive) {
+    clearMcqHandoffGate("chapter-speaking");
+    renderChoiceBar(getCurrentSegment());
+    return;
+  }
   endChapterTransition();
 }
 
@@ -13593,10 +13740,21 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
     return false;
   }
   armMcqHandoffGate(request.destinationId);
+  // Fresh chapter entry — never inherit a stale MCQ cursor from an earlier attempt.
+  try {
+    resetMcqCursor(request.destinationId);
+  } catch {
+    // ignore
+  }
   renderChoiceBar(getCurrentSegment());
   if (isAutoReconnecting) return queueChapterHandoff(request);
 
-  const waitForBridgeSpeech = reason === "after-daily1";
+  const reasonStrForWait = String(reason || "");
+  const waitForBridgeSpeech =
+    reason === "after-daily1" ||
+    reason === "after-ch5" ||
+    /^replay-after-daily1/.test(reasonStrForWait) ||
+    /^replay-after-ch5/.test(reasonStrForWait);
   const prewarmDuringEndingTurnA =
     reason === "after-final1" && request.destinationId === "ending1";
 
@@ -13632,8 +13790,8 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
   };
 
   if (waitForBridgeSpeech) {
-    // STT often shows the bridge before audio finishes — don't interrupt mid-sentence.
-    // Keep Ch6 MCQ hidden the whole time (segmentIndex is already on ch6).
+    // STT often shows the bridge/praise before audio finishes — don't interrupt mid-sentence.
+    // Keep next-chapter MCQ hidden the whole time (segmentIndex already advanced).
     clearPendingReplyWatch();
     clearLeadWatch();
     awaitingAssistantReply = false;
@@ -13642,14 +13800,14 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
       12000,
       Math.max(2800, estimateSpeechMs(lastAssistantText()) + 900)
     );
-    dbg("handoff after-daily1 waiting for bridge speech", { safetyMs });
+    dbg("handoff waiting for closing speech", { reason, safetyMs });
     let started = false;
     const startOnce = () => {
       if (started || isHandoffRunning || actionState === "idle") return;
       started = true;
       startReconnect();
     };
-    whenAssistantIdle(startOnce, "handoff-after-daily1");
+    whenAssistantIdle(startOnce, `handoff-${reasonStrForWait || "speech"}`);
     pendingHandoffTimer = setTimeout(startOnce, safetyMs);
     return true;
   }

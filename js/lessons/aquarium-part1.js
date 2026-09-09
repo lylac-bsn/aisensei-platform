@@ -9,15 +9,17 @@ export const PART1_ELICIT_JA = {
   ch3MadeGlass: "「がらすを つくった」の えいごを 選んでね！",
   ch5PutGlass: "「ここにガラスをおく」の えいごを 選んでね！",
   ch5Building: "「すいそうを つくってる」の えいごを 選んでね！",
-  ch5MadeTank: "「すいそうを つくった」の えいごを 選んでね！",
+  ch5MadeTank: "すいそうを つくった の えいごを 選んでね！",
   ch5LooksGood: "「いい かんじに できた！」の えいごを 選んでね！",
+  ch6PutSand: "「すなを そこに おいた」の えいごを 選んでね！",
   ch6MoreSand: "「もっと すなが ひつよう」の えいごを 選んでね！",
   ch6ImDone: "「できた！」の えいごを 選んでね！",
   ch6TankReady: "「すいそうのじゅんびができた」の えいごを 選んでね！",
 };
 
 export const CH6_BEAT1_SPEAK =
-  "Let's make a basement inside the tank! すいそうの そこに すなを おこう！の えいごを 選んでね！";
+  "Let's make a basement inside the tank! すいそうの そこに すなを おこう！" +
+  "「すなを そこに おいた」の えいごを 選んでね！";
 
 export const AQUARIUM_PART1 = {
   id: "part1",
@@ -436,7 +438,7 @@ export const AQUARIUM_PART1 = {
       coach:
         "CHAPTER 5 — 4-choice MCQ in order: Beat1 Now let's make a tank wall! Where do you want to put the glass? Tell me! " +
         "すいそうの かべを つくろう！どこに がらすを おく？「ここにガラスをおく」の えいごを 選んでね！ → I put glass here → " +
-        "Beat2 Tell me what you're building! 「すいそうを つくってる」→ I'm building a tank → Beat3 Are you done making it? 「すいそうを つくった」→ I made a tank! → " +
+        "Beat2 Tell me what you're building! 「すいそうを つくってる」→ I'm building a tank → Beat3 Are you done making it? すいそうを つくった の えいごを 選んでね！ → I made a tank! → " +
         "Beat4 How does it look? 「いい かんじに できた！」→ It looks good! Wrong: soft retry, never reveal. Last correct → complete_segment(ch5).",
     },
     {
@@ -489,7 +491,8 @@ export const AQUARIUM_PART1 = {
         {
           id: "put_sand",
           learnyEn: "Let's make a basement inside the tank!",
-          learnyJa: "すいそうの そこに すなを おこう！の えいごを 選んでね！",
+          learnyJa:
+            "すいそうの そこに すなを おこう！" + PART1_ELICIT_JA.ch6PutSand,
           choices: [
             "I put the sand on the bottom.",
             "I put sand here.",

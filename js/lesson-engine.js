@@ -1,11 +1,11 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-warmup-no-glass-1";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-warmup-no-glass-1";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-warmup-no-glass-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-final1-mcq-keep-1";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-final1-mcq-keep-1";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-final1-mcq-keep-1";
 import {
   buildPartReporting,
   normalizeIdList,
   PROGRESS_CONTRACT_VERSION,
-} from "./progress-contract.js?v=20260910-warmup-no-glass-1";
+} from "./progress-contract.js?v=20260910-final1-mcq-keep-1";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -434,7 +434,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260910-warmup-no-glass-1")
+  import("./badge-engine.js?v=20260910-final1-mcq-keep-1")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges();
       if (newlyEarned?.length) {
@@ -897,7 +897,7 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID, segment = null) {
     ch2: PART1_ELICIT_JA.foundSand,
     ch3: PART1_ELICIT_JA.ch3NeedGlass,
     ch5: PART1_ELICIT_JA.ch5PutGlass,
-    ch6: PART1_ELICIT_JA.ch6MoreSand,
+    ch6: PART1_ELICIT_JA.ch6PutSand,
     quiz1: "「がらすが ひつよう」は えいごで？",
     final1: "がらすが ひつよう！は えいごで？",
   };
@@ -911,8 +911,8 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID, segment = null) {
     ch1: `Ch1 only: ${PART1_ELICIT_JA.needGlass} / ${PART1_ELICIT_JA.needSand}`,
     ch2: `Ch2 only: ${PART1_ELICIT_JA.foundSand}`,
     ch3: `Ch3 only: ${PART1_ELICIT_JA.ch3NeedGlass} / ${PART1_ELICIT_JA.ch3MadeGlass}`,
-    ch5: `Ch5 only: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
-    ch6: `Ch6 only: ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
+    ch5: `Ch5 only — keep EN/JP beat pairs; NEVER mix Beat3 Are you done making it? with 「すいそうを つくってる」 (that is Beat2). Beat3 JP is ONLY ${PART1_ELICIT_JA.ch5MadeTank}. Beats: ${PART1_ELICIT_JA.ch5PutGlass} / ${PART1_ELICIT_JA.ch5Building} / ${PART1_ELICIT_JA.ch5MadeTank} / ${PART1_ELICIT_JA.ch5LooksGood}`,
+    ch6: `Ch6 only: ${PART1_ELICIT_JA.ch6PutSand} / ${PART1_ELICIT_JA.ch6MoreSand} / ${PART1_ELICIT_JA.ch6ImDone} / ${PART1_ELICIT_JA.ch6TankReady}`,
   };
 
   return [
@@ -1026,6 +1026,7 @@ function ch5StoryRule() {
     `Beat 3: Are you done making it? ${PART1_ELICIT_JA.ch5MadeTank} → MCQ I made a tank!.`,
     `Beat 4: How does it look? ${PART1_ELICIT_JA.ch5LooksGood} → MCQ It looks good! → complete_segment(ch5).`,
     "CRITICAL: Speak EXACTLY each beat line. Wrong MCQ: soft retry, never reveal. Never end on praise alone.",
+    "FORBIDDEN Beat 3 mix-up: Are you done making it? with 「すいそうを つくってる」— Beat 3 JP is ONLY すいそうを つくった の えいごを 選んでね！.",
     "FORBIDDEN: Learny saying I put glass here / I'm building a tank / I made a tank! / It looks good! as her own lines.",
     "FORBIDDEN: How big / what shape / Let me know where you put / Can you say, I put glass here (old script).",
     "FORBIDDEN on Ch5: What's your favorite color? / dye / flower bed (color was Chapter 4).",
@@ -1139,7 +1140,9 @@ function ch2ChoiceRule() {
 function ch6StoryRule() {
   return [
     "CHAPTER 6 ONLY — put sand on the bottom. 4 MCQ beats in order (English then Japanese, ONE beat per turn):",
-    "Beat 1: Let's make a basement inside the tank! すいそうの そこに すなを おこう！の えいごを 選んでね！ → MCQ I put the sand on the bottom.",
+    "Beat 1: Let's make a basement inside the tank! すいそうの そこに すなを おこう！" +
+      PART1_ELICIT_JA.ch6PutSand +
+      " → MCQ I put the sand on the bottom.",
     `Beat 2: Do we have enough sand? ${PART1_ELICIT_JA.ch6MoreSand} → MCQ I need more sand.`,
     `Beat 3: Are you done? ${PART1_ELICIT_JA.ch6ImDone} → MCQ I'm done!.`,
     `Beat 4: Is the tank ready for the fishes to swim? ${PART1_ELICIT_JA.ch6TankReady} → MCQ My tank is ready! → complete_segment(ch6).`,
@@ -1249,6 +1252,38 @@ export function buildDaily1Instructions(
     "Never invent tank facts. Known memories:",
     memoryBlock(state.memories),
     "Tools: record_memory for durable facts. complete_segment(daily1) only after the back-to-tank bridge. Do not mention tools, badges, UI, or timers.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return adaptCoachTextForLevel(raw, instructionLevel);
+}
+
+/**
+ * Slim Final Challenge Live prompt — full lesson instructions (~14k) made each
+ * tap wait several seconds before Learny praised / asked the next cue.
+ */
+export function buildFinal1Instructions(
+  state = loadLessonState(),
+  levelId = ACTIVE_LEVEL_ID
+) {
+  const lesson = getLesson(state.lessonId);
+  const instructionLevel = lesson.instructionLevel || levelId;
+  const raw = [
+    "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
+    "FINAL CHALLENGE ONLY — short review quiz. Keep every reply SHORT.",
+    `FIRST turn EXACTLY (if not yet spoken): ${final1OpenSpeak()} then IMMEDIATELY the first 〜は えいごで？ cue the client lists. Then WAIT.`,
+    "FORBIDDEN openers: Are you ready? / じゅんびは できてる？ / stopping after the opener before the first cue.",
+    "Each item: EXACT listed cue + は えいごで？ (ひらがな ONLY — no kanji / katakana). Examples: がらすが ひつよう！は えいごで？ / すなを みつけた！は えいごで？",
+    "After a correct answer: ONE short message = brief praise + NEXT cue in the SAME turn. FORBIDDEN: praise-only / two messages / inventing cues / bare は えいごで？.",
+    "Say This is the last question! / さいごの もんだい！ ONLY when exactly ONE item remains.",
+    "After the LAST correct answer: brief praise, then call complete_segment(final1). FORBIDDEN: another quiz question.",
+    "Wrong tap: soft おしい！もういちど + re-ask the SAME cue. Never reveal the English answer.",
+    "Every spoken turn: English first, then matching ひらがな with the SAME meaning.",
+    noSystemBackendRule(),
+    "Never invent tank facts. Known memories:",
+    memoryBlock(state.memories),
+    "Tools: record_memory for durable facts. complete_segment(final1) only after the last quiz item. Do not mention tools, badges, UI, or timers.",
+    "FORBIDDEN: Chapter story mode, aquarium build, Daily English, ending Perfect script.",
   ]
     .filter(Boolean)
     .join("\n");

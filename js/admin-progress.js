@@ -3,7 +3,7 @@
  */
 import { lessonFor } from "./lessons/lesson-catalog.js";
 import { allLessons } from "./lessons/lesson-catalog.js";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260910-warmup-no-glass-1";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260910-final1-mcq-keep-1";
 import { totalPokeCount } from "./activity-log.js";
 import {
   currentFreetalkStats,
@@ -11,14 +11,14 @@ import {
   resolveClaimedBadgeIds,
   resolvePendingBadgeIds,
   summarizeLifetimeMcq,
-} from "./progress-contract.js?v=20260910-warmup-no-glass-1";
+} from "./progress-contract.js?v=20260910-final1-mcq-keep-1";
 import {
   computeAccuracyTier,
   highestTierByFamily,
   FAMILY_LABELS_JA,
   BADGE_FAMILIES,
   familySlotImage,
-} from "./badge-engine.js?v=20260910-warmup-no-glass-1";
+} from "./badge-engine.js?v=20260910-final1-mcq-keep-1";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },

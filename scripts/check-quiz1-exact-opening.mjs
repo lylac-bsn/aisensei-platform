@@ -42,9 +42,11 @@ assert.match(voice, /maybeQuiz1ExactSpeakNudge/);
 assert.match(voice, /withQuizExactSpeakRule/);
 assert.match(voice, /lesson-choice-question-replay/);
 assert.match(voice, /forceMcqQuestionExactReplay/);
-assert.match(voice, /もんだいを もういちど きく/);
+assert.match(voice, /CHOICE_QUESTION_REPLAY_LABEL = "もういちど聞く"/);
 assert.match(voiceTab, /lesson-choice-question-replay/);
 assert.match(voiceTab, /\.lesson-choice-title-row/);
+assert.doesNotMatch(voice, /CHOICE_QUESTION_REPLAY_ICON/);
+assert.doesNotMatch(voiceTab, /lesson-choice-question-replay svg/);
 
 const exactSpeak = functionBody(voice, "forceQuiz1ExactSpeak");
 assert.match(exactSpeak, /<exact>\$\{script\}<\/exact>/);

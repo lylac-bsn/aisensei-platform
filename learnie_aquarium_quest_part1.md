@@ -281,7 +281,7 @@ FORBIDDEN 短縮: `くいずたいむ！は英語で？`（「がらすが ひ�
 
 **Learny:**  
 `Are you done making it?`  
-`「すいそうを つくった」の えいごを 選んでね！`  
+`すいそうを つくった の えいごを 選んでね！`  
 **4択:** I made a tank! / I'm building a tank. / I put glass here. / My tank is ready! → **I made a tank!**
 
 ## Beat 4
@@ -332,7 +332,7 @@ Live セッションは **短い Daily English 専用プロンプト**（章・�
 
 **Learny:**  
 `Let's make a basement inside the tank!`  
-`すいそうの そこに すなを おこう！のえいごを選んでね！`
+`すいそうの そこに すなを おこう！「すなを そこに おいた」の えいごを 選んでね！`  
 **4択:** I put the sand on the bottom. / I put sand here. / I put glass here. / I'm done! → **I put the sand on the bottom.**
 
 ## Beat 2

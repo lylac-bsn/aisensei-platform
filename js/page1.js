@@ -4,9 +4,9 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260910-warmup-no-glass-1";
+import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260910-final1-mcq-keep-1";
 import { logUserActivity } from "./activity-log.js";
-import { getActiveLevelInfo } from "./lesson-engine.js?v=20260910-warmup-no-glass-1";
+import { getActiveLevelInfo } from "./lesson-engine.js?v=20260910-final1-mcq-keep-1";
 import { openLevelSwitcher } from "./level-picker.js";
 
 const firebaseConfig = {

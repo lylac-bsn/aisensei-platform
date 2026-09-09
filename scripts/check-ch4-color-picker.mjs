@@ -35,6 +35,7 @@ const {
   MCQ_AUDIO_COLORS,
   normalizeAllowedFavoriteColor,
   colorToJaLabel,
+  formatCh4ColorChoiceLabel,
 } = await import("../js/mcq-audio-config.js");
 const { recordMemory, loadLessonState, resetLesson } = await import("../js/lesson-engine.js");
 
@@ -56,7 +57,17 @@ for (const color of CH4_PICKER_COLORS) {
   assert.ok(MCQ_AUDIO_COLORS.includes(color), `${color} must be in lesson colour set`);
   assert.equal(normalizeAllowedFavoriteColor(color), color);
   assert.notEqual(colorToJaLabel(color), color);
+  assert.equal(
+    normalizeAllowedFavoriteColor(`${color} / ${colorToJaLabel(color)}`),
+    color,
+    `bilingual picker label must resolve to ${color}`
+  );
 }
+
+assert.equal(formatCh4ColorChoiceLabel("orange"), "orange / おれんじ");
+assert.equal(formatCh4ColorChoiceLabel("blue"), "blue / あお");
+assert.match(voice, /formatCh4ColorChoiceLabel/);
+assert.match(voice, /CH4_PICKER_COLORS\.map\(formatCh4ColorChoiceLabel\)/);
 
 assert.equal(normalizeAllowedFavoriteColor("rainbow"), "");
 assert.equal(recordMemory("favoriteColor", "rainbow").ok, false);
@@ -103,6 +114,6 @@ assert.match(coach, /colour buttons are on screen/);
 assert.doesNotMatch(coach, /looksLikeUnknownColorAttempt/);
 assert.doesNotMatch(coach, /Child named a color/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-final1-mcq-keep-1/);
 
 console.log("Ch4 colour MCQ Beat A1 regression checks passed.");

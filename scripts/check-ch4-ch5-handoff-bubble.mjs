@@ -40,6 +40,6 @@ assert.match(
 
 assert.match(voice, /if \(segment\.id === "ch4"\) \{\s*resetCh4MakeTellSpeechLocks/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-final1-mcq-keep-1/);
 
 console.log("check-ch4-ch5-handoff-bubble: ok");

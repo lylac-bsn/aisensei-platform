@@ -37,7 +37,7 @@ assert.match(viaLive, /<exact>/);
 assert.match(voice, /shouldDropCh4MakeTellAudio/);
 assert.match(voice, /CH4_AUDIO_MANIFEST/);
 assert.match(voice, /drop Live audio during ch4 make\+tell/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-final1-mcq-keep-1/);
 
 const outbound = functionBody(voice, "buildCh4OutboundCoach");
 assert.match(outbound, /colour buttons are on screen/);

@@ -17,11 +17,13 @@ assert.match(voice, /clearMcqHandoffGate\("chapter-opening-started"\)/);
 assert.match(voice, /pendingHandoffTimer \|\|/);
 assert.match(voice, /pendingChapterHandoff \|\|/);
 assert.match(voice, /shouldHideMcqForHandoffGate\(segment\)/);
+assert.match(voice, /Always clear the MCQ gate/);
+assert.match(voice, /reason === "after-ch5"/);
 assert.match(
   voice,
-  /Keep Ch6 MCQ hidden the whole time \(segmentIndex is already on ch6\)/
+  /Keep next-chapter MCQ hidden the whole time/
 );
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-warmup-no-glass-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-final1-mcq-keep-1/);
 
 console.log("check-ch6-mcq-handoff-gate: ok");

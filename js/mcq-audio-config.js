@@ -41,13 +41,23 @@ const COLOR_JA = Object.freeze({
 });
 
 export function normalizeAllowedFavoriteColor(value) {
-  const color = normalizeMcqAudioLabel(value);
+  const raw = String(value || "").trim();
+  // Bilingual picker labels: "orange / おれんじ" → orange
+  const enPart = raw.split(/\s*\/\s*/)[0];
+  const color = normalizeMcqAudioLabel(enPart);
   return MCQ_AUDIO_COLORS.includes(color) ? color : "";
 }
 
 export function colorToJaLabel(colorEn) {
   const color = normalizeAllowedFavoriteColor(colorEn) || "orange";
   return COLOR_JA[color] || color;
+}
+
+/** Kid-facing Ch4 colour button: English + ひらがな. */
+export function formatCh4ColorChoiceLabel(colorEn) {
+  const color = normalizeAllowedFavoriteColor(colorEn);
+  if (!color) return String(colorEn || "").trim();
+  return `${color} / ${colorToJaLabel(color)}`;
 }
 
 export function normalizeMcqAudioLabel(value) {
