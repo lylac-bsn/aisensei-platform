@@ -1,9 +1,9 @@
-import { AQUARIUM_PART1 } from "./aquarium-part1.js?v=20260910-ch6-mcq-show-1";
-import { AQUARIUM_PART2 } from "./aquarium-part2.js?v=20260910-ch6-mcq-show-1";
-import { AQUARIUM_INTERMEDIATE_PART1 } from "./aquarium-intermediate-part1.js?v=20260910-ch6-mcq-show-1";
-import { AQUARIUM_INTERMEDIATE_PART2 } from "./aquarium-intermediate-part2.js?v=20260910-ch6-mcq-show-1";
-import { AQUARIUM_ADVANCED_PART1 } from "./aquarium-advanced-part1.js?v=20260910-ch6-mcq-show-1";
-import { AQUARIUM_ADVANCED_PART2 } from "./aquarium-advanced-part2.js?v=20260910-ch6-mcq-show-1";
+import { AQUARIUM_PART1 } from "./aquarium-part1.js?v=20260910-ch6-mcq-show-2";
+import { AQUARIUM_PART2 } from "./aquarium-part2.js?v=20260910-ch6-mcq-show-2";
+import { AQUARIUM_INTERMEDIATE_PART1 } from "./aquarium-intermediate-part1.js?v=20260910-ch6-mcq-show-2";
+import { AQUARIUM_INTERMEDIATE_PART2 } from "./aquarium-intermediate-part2.js?v=20260910-ch6-mcq-show-2";
+import { AQUARIUM_ADVANCED_PART1 } from "./aquarium-advanced-part1.js?v=20260910-ch6-mcq-show-2";
+import { AQUARIUM_ADVANCED_PART2 } from "./aquarium-advanced-part2.js?v=20260910-ch6-mcq-show-2";
 
 export const LESSON_CATALOG = Object.freeze({
   beginner: Object.freeze({

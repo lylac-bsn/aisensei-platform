@@ -33,6 +33,6 @@ assert.match(voice, /maybeCh5Beat3ExactSpeakNudge\(\)/);
 assert.match(voice, /fixCh5Beat3Bubble\(t\)/);
 assert.match(voice, /FORBIDDEN: 「すいそうを つくってる」 on Beat 3/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
 
 console.log("Ch5 Beat3 made-tank elicit regression checks passed.");

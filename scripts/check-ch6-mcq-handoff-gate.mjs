@@ -2,6 +2,7 @@
 /**
  * Daily English → Chapter 6: Beat 1 MCQ must stay hidden until Chapter 6's
  * opening actually starts (segmentIndex advances early while bridge speech plays).
+ * Also: never leave Beat 1 hidden after a duplicate client+tool schedule.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -29,6 +30,17 @@ assert.match(
 );
 assert.match(voice, /renderChoiceBar\(getCurrentSegment\(\)\);\s*\n\s*\}\s*\n\}/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-1/);
+assert.match(voice, /chapterHandoffArmedFor/);
+assert.match(voice, /skip duplicate chapter handoff schedule/);
+assert.match(voice, /function shouldForceShowMcqAfterOpening/);
+assert.match(voice, /function chapterOpeningLooksPresented/);
+assert.match(voice, /opening-already-presented/);
+assert.match(voice, /function clearHandoffKickWatch/);
+assert.match(
+  voice,
+  /clearPendingHandoffTimer\(\) \{\s*\n\s*if \(pendingHandoffTimer\)/
+);
+
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
 
 console.log("check-ch6-mcq-handoff-gate: ok");

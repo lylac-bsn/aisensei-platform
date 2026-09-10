@@ -23,7 +23,7 @@ assert.match(engine, /during warmup\/chat NEVER append homework/);
 assert.match(voice, /function assistantWarmupHomeworkLeak/);
 assert.match(voice, /function maybeWarmupHomeworkLeakNudge/);
 assert.match(voice, /maybeWarmupHomeworkLeakNudge\(\)/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
 
 const lesson = getActiveLesson();
 const warmupIdx = lesson.segments.findIndex(

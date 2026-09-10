@@ -38,11 +38,11 @@ import {
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-1";
+} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-ch6-mcq-show-1";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-ch6-mcq-show-2";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-ch6-mcq-show-1";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -56,7 +56,7 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-ch6-mcq-show-1";
+} from "./mcq-engine.js?v=20260910-ch6-mcq-show-2";
 import {
   MCQ_AUDIO_COLORS,
   CH4_PICKER_COLORS,
@@ -64,7 +64,7 @@ import {
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
   formatCh4ColorChoiceLabel,
-} from "./mcq-audio-config.js?v=20260910-ch6-mcq-show-1";
+} from "./mcq-audio-config.js?v=20260910-ch6-mcq-show-2";
 import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
 import {
   ENDING1_FINALE_SPEAK,
@@ -239,6 +239,12 @@ let isHandoffRunning = false;
 let pendingHandoffTimer = null;
 /** One serialized chapter destination waiting for drop recovery to settle. */
 let pendingChapterHandoff = null;
+/**
+ * Destination id for an in-flight scheduleChapterHandoff (wait → reconnect → opening).
+ * Prevents client + Live tool both completing Daily from re-arming the MCQ gate
+ * and cancelling the opening kick watch.
+ */
+let chapterHandoffArmedFor = "";
 let handoffKickWatchId = null;
 let openingKickFallbackId = null;
 /** True from chapter handoff start until Learny begins speaking the new chapter. */
@@ -8053,7 +8059,7 @@ function renderChoiceBar(segment) {
   // Hide MCQ while reconnecting / until Learny starts the new chapter.
   // Also hide while a hinge handoff is queued (Daily→Ch6 waits for bridge speech
   // with segmentIndex already on ch6 — without this gate Beat 1 buttons flash early).
-  if (
+  const handoffHidingMcq =
     actionState !== "active" ||
     chapterTransitionActive ||
     isHandoffRunning ||
@@ -8061,11 +8067,32 @@ function renderChoiceBar(segment) {
     skipOutboundForHandoff ||
     pendingHandoffTimer ||
     pendingChapterHandoff ||
-    shouldHideMcqForHandoffGate(segment)
-  ) {
-    hide();
-    syncMicForMcqMode();
-    return;
+    shouldHideMcqForHandoffGate(segment);
+  if (handoffHidingMcq) {
+    // Opening already on screen but a late duplicate schedule re-armed hide flags
+    // (or skipOutbound/pendingHandoffTimer stuck). Never leave Beat 1 buttonsless.
+    if (shouldForceShowMcqAfterOpening(segment)) {
+      clearMcqHandoffGate("opening-already-presented");
+      skipOutboundForHandoff = false;
+      pendingChapterHandoff = null;
+      if (pendingHandoffTimer) {
+        clearTimeout(pendingHandoffTimer);
+        pendingHandoffTimer = null;
+      }
+      if (chapterTransitionActive) {
+        chapterTransitionActive = false;
+        if (chapterTransitionSafetyId) {
+          clearTimeout(chapterTransitionSafetyId);
+          chapterTransitionSafetyId = null;
+        }
+        hideChapterLoadingOverlay();
+      }
+      // Fall through and render choices.
+    } else {
+      hide();
+      syncMicForMcqMode();
+      return;
+    }
   }
 
   // Free-talk stretches (Ch2 chat/wait, Ch4 color ask before Beat B, etc.): no buttons.
@@ -9029,6 +9056,8 @@ function seedHandoffOpeningBubble(script) {
   if (!text) return;
   handoffOpeningDisplayLocked = true;
   handoffOpeningSeededScript = text;
+  // Opening is owned by the new chapter — never keep outbound-skip hiding MCQ.
+  skipOutboundForHandoff = false;
   // Opening is on screen — drop transition overlay / MCQ gate so Beat 1 buttons can appear
   // (still locked while Learny is speaking via choicesLocked).
   markChapterTransitionSpeaking();
@@ -10154,7 +10183,10 @@ function kickOpeningTurn(opts = {}) {
   const ok = sendClientText(withBeginnerSpeakRule(formatTeacherNote(nudge)), { force: true });
   if (ok) {
     armOpeningDeliveryWatch(kickOpts.reason || kickOpts.handoff || "opening");
-    if (getCurrentSegment(state)?.id === "ch4") {
+    // Ch4 / Ch6 (and other MCQ hinges): refresh after seed cleared the gate so
+    // buttons appear even if handoff finally already ran while flags were set.
+    const openedId = getCurrentSegment(state)?.id || "";
+    if (openedId === "ch4" || openedId === "ch6" || openedId === "ch5" || openedId === "ch3") {
       refreshChoiceBarIfNeeded();
     }
   } else {
@@ -13310,9 +13342,11 @@ function resetSessionScopedReliabilityState() {
   cancelAssistantTurnEnd();
   cancelScheduledRepairIncompleteAssistantBubble();
   clearPendingHandoffTimer();
+  clearHandoffKickWatch();
   pendingChapterHandoff = null;
   pendingHandoffQuote = "";
   skipOutboundForHandoff = false;
+  chapterHandoffArmedFor = "";
   if (ending1FinaleSpeechWatchId) {
     clearTimeout(ending1FinaleSpeechWatchId);
     ending1FinaleSpeechWatchId = null;
@@ -13599,11 +13633,48 @@ function markChapterTransitionSpeaking() {
   endChapterTransition();
 }
 
+/** True when the destination chapter's opening bubble/script is already on screen. */
+function chapterOpeningLooksPresented(segmentId = getCurrentSegment()?.id) {
+  const id = String(segmentId || "");
+  if (!id) return false;
+  if (handoffOpeningDisplayLocked || handoffOpeningSeededScript) return true;
+  const t = String(lastAssistantText() || "");
+  if (!t.trim()) return false;
+  if (id === "ch6") {
+    return /basement inside the tank|すなを\s*そこに\s*おいた|すいそうの\s*そこに\s*すなを\s*おこう/i.test(
+      t
+    );
+  }
+  if (id === "ch5") {
+    return /tank wall|すいそうの\s*かべ|where do you want to put the glass/i.test(t);
+  }
+  if (id === "ch4") {
+    return /favorite color|すきな\s*いろ/i.test(t);
+  }
+  if (id === "ch3") {
+    return /make some glass|がらすが\s*ひつよう/i.test(t);
+  }
+  return false;
+}
+
+/**
+ * Opening is visible and Live is connected — stale handoff hide flags must not
+ * blank the MCQ panel (intermittent Daily→Ch6 / tool+client double schedule).
+ */
+function shouldForceShowMcqAfterOpening(segment = getCurrentSegment()) {
+  if (actionState !== "active") return false;
+  if (isHandoffRunning || isChapterHandoff) return false;
+  return chapterOpeningLooksPresented(segment?.id);
+}
+
 function clearPendingHandoffTimer() {
   if (pendingHandoffTimer) {
     clearTimeout(pendingHandoffTimer);
     pendingHandoffTimer = null;
   }
+}
+
+function clearHandoffKickWatch() {
   if (handoffKickWatchId) {
     clearTimeout(handoffKickWatchId);
     handoffKickWatchId = null;
@@ -13630,9 +13701,11 @@ function shouldHideMcqForHandoffGate(segment = getCurrentSegment()) {
 
 function clearChapterHandoffState({ endTransition = false } = {}) {
   clearPendingHandoffTimer();
+  clearHandoffKickWatch();
   pendingChapterHandoff = null;
   pendingHandoffQuote = "";
   skipOutboundForHandoff = false;
+  chapterHandoffArmedFor = "";
   if (endTransition) {
     clearMcqHandoffGate("clear-handoff-state");
     endChapterTransition();
@@ -13708,10 +13781,30 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
     clearChapterHandoffState({ endTransition: true });
     return false;
   }
+  const destId = getCurrentSegment()?.id || "";
+  // Client auto-complete + Live complete_segment often both fire at Daily→Ch6.
+  // A second schedule used to re-arm the MCQ gate, cancel the wait/kick timers,
+  // and leave Beat 1 hidden after the opening was already on screen.
+  if (chapterHandoffArmedFor && chapterHandoffArmedFor === destId) {
+    dbg("skip duplicate chapter handoff schedule", { reason, destId });
+    return true;
+  }
+  if (
+    destId &&
+    actionState === "active" &&
+    openingSent &&
+    chapterOpeningLooksPresented(destId)
+  ) {
+    dbg("skip chapter handoff; opening already presented", { reason, destId });
+    clearMcqHandoffGate("opening-already-presented");
+    skipOutboundForHandoff = false;
+    chapterHandoffArmedFor = destId;
+    renderChoiceBar(getCurrentSegment());
+    return false;
+  }
   skipOutboundForHandoff = true;
   // Fixed hinge openings must not re-ack the prior answer (Ch4 "I made yellow glass!"
   // praise was merging into the Chapter 5 wall-opening bubble).
-  const destId = getCurrentSegment()?.id || "";
   const reasonStr = String(reason || "");
   const quoteForNext =
     reasonStr === "after-daily1" ||
@@ -13733,12 +13826,13 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
   const request = {
     reason: reason || "handoff",
     lastQuote: quoteForNext,
-    destinationId: getCurrentSegment()?.id || "",
+    destinationId: destId,
   };
   if (!request.destinationId) {
     clearChapterHandoffState({ endTransition: true });
     return false;
   }
+  chapterHandoffArmedFor = request.destinationId;
   armMcqHandoffGate(request.destinationId);
   // Fresh chapter entry — never inherit a stale MCQ cursor from an earlier attempt.
   try {
@@ -13767,7 +13861,10 @@ function scheduleChapterHandoff({ reason, lastQuote = "" } = {}) {
   }
 
   const startReconnect = () => {
-    pendingHandoffTimer = null;
+    if (pendingHandoffTimer) {
+      clearTimeout(pendingHandoffTimer);
+      pendingHandoffTimer = null;
+    }
     try {
       audioPlayer?.interrupt?.();
       closeOpenAudioTurn();
@@ -14083,9 +14180,11 @@ function disconnectAPI() {
   stopChoiceSpeech();
   clearOpeningKickFallback();
   clearPendingHandoffTimer();
+  clearHandoffKickWatch();
   pendingChapterHandoff = null;
   pendingHandoffQuote = "";
   skipOutboundForHandoff = false;
+  chapterHandoffArmedFor = "";
   clearMcqHandoffGate("disconnect");
   isChapterHandoff = false;
   isHandoffRunning = false;

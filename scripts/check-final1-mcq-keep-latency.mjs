@@ -30,7 +30,7 @@ assert.doesNotMatch(
 );
 assert.match(voice, /prefer the advanced quiz cursor so the MCQ panel stays open|already advanced — keep the MCQ panel open/);
 
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-1/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
 
 const lesson = getActiveLesson();
 const idx = lesson.segments.findIndex((segment) => segment.id === "final1");

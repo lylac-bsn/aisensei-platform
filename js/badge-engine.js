@@ -14,7 +14,7 @@ import {
   savePendingLessonBadges,
   saveBadgeRevocations,
   saveLessonState,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-1";
+} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",

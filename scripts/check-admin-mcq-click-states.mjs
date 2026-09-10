@@ -46,6 +46,6 @@ const wrongOrderRule = css.slice(css.indexOf(".progress-mcq-order-list li.is-wro
 assert.match(wrongOrderRule, /color:\s*#b71c1c/i);
 
 assert.match(page, /admin\.css\?v=20260910-mcq-errors/);
-assert.match(page, /admin-progress\.js\?v=20260910-ch6-mcq-show-1/);
+assert.match(page, /admin-progress\.js\?v=20260910-ch6-mcq-show-2/);
 
 console.log("Admin MCQ click-state checks passed.");

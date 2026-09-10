@@ -12,7 +12,7 @@ import {
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-1";
+} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
 import {
   BADGE_FAMILIES,
   FAMILY_LABELS_JA,
@@ -24,7 +24,7 @@ import {
   BADGE_IMAGES,
   segmentNeedsAccuracyReplay,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260910-ch6-mcq-show-1";
+} from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
 import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
