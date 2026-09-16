@@ -4,7 +4,9 @@ import { allLessons } from "../js/lessons/lesson-catalog.js";
 import { formatChoiceLabel } from "../js/mcq-engine.js";
 import {
   MCQ_AUDIO_COLORS,
+  MCQ_AUDIO_FISH_COUNTS,
   expandMcqAudioPlaceholders,
+  expandMcqAudioFishPlaceholders,
   mcqAudioSpokenText,
   normalizeMcqAudioLabel,
 } from "../js/mcq-audio-config.js";
@@ -15,20 +17,42 @@ function addLabel(rawLabel, source) {
   const template = String(rawLabel || "").trim();
   if (!template) return;
   const hasColor = /\[color(?:Ja)?\]|___/i.test(template);
-  const variants = hasColor ? MCQ_AUDIO_COLORS : [null];
-  for (const color of variants) {
-    const expanded = color ? expandMcqAudioPlaceholders(template, color) : template;
-    const display = formatChoiceLabel(expanded);
-    const key = normalizeMcqAudioLabel(display);
-    if (!key || labels.has(key)) continue;
-    labels.set(key, {
-      key,
-      display,
-      spokenText: mcqAudioSpokenText(expanded),
-      source,
-      ...(color ? { color } : {}),
-    });
+  const hasFishCount = /\[fishCount(?:Minus1|Plus1)?\]/i.test(template);
+
+  if (hasColor && hasFishCount) {
+    for (const color of MCQ_AUDIO_COLORS) {
+      for (const count of MCQ_AUDIO_FISH_COUNTS) {
+        let expanded = expandMcqAudioPlaceholders(template, color);
+        expanded = expandMcqAudioFishPlaceholders(expanded, count);
+        addExpandedLabel(expanded, source, { color, fishCount: count });
+      }
+    }
+  } else if (hasColor) {
+    for (const color of MCQ_AUDIO_COLORS) {
+      const expanded = expandMcqAudioPlaceholders(template, color);
+      addExpandedLabel(expanded, source, { color });
+    }
+  } else if (hasFishCount) {
+    for (const count of MCQ_AUDIO_FISH_COUNTS) {
+      const expanded = expandMcqAudioFishPlaceholders(template, count);
+      addExpandedLabel(expanded, source, { fishCount: count });
+    }
+  } else {
+    addExpandedLabel(template, source, {});
   }
+}
+
+function addExpandedLabel(expanded, source, meta) {
+  const display = formatChoiceLabel(expanded);
+  const key = normalizeMcqAudioLabel(display);
+  if (!key || labels.has(key)) return;
+  labels.set(key, {
+    key,
+    display,
+    spokenText: mcqAudioSpokenText(expanded),
+    source,
+    ...meta,
+  });
 }
 
 function visit(value, path = "lesson") {

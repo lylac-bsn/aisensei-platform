@@ -1,7 +1,7 @@
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260916-part2-full";
 import { PART2_ELICIT_JA } from "./lessons/aquarium-part2.js?v=20260916-part2-full";
 import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260916-part2-full";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-full";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {
   buildPartReporting,
   normalizeIdList,

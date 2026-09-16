@@ -68,8 +68,8 @@ import {
   normalizeAllowedFavoriteColor,
   colorToJaLabel as colorToJaFromConfig,
   formatCh4ColorChoiceLabel,
-} from "./mcq-audio-config.js?v=20260910-ch6-mcq-show-2";
-import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260909-mcq-audio-4";
+} from "./mcq-audio-config.js?v=20260916-part2-audio";
+import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260916-part2-audio";
 import {
   ENDING1_FINALE_SPEAK,
   ENDING1_INTRO_SPEAK,
@@ -4754,9 +4754,7 @@ function expandMcqFishCountPlaceholders(text, fishCount) {
     .replace(/\[fishCountMinus1\]/gi, countMinus1)
     .replace(/\[fishCountPlus1\]/gi, countPlus1)
     .replace(/\[fishCount\]/gi, countWord);
-  if (count === 1) {
-    result = result.replace(/There are one fish/gi, "There is one fish");
-  }
+  result = result.replace(/There are one fish/gi, "There is one fish");
   return result;
 }
 
