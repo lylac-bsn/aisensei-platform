@@ -35,12 +35,16 @@ import {
   getActiveLevelId,
   setLearnerDisplayName,
   daily1OpenSpeak,
+  daily1OpenSpeakPart2,
+  daily1BackToAquariumSpeak,
   daily1BridgeTurnInstruction,
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
+  usesBeginnerPart2Architecture,
+} from "./lesson-engine.js?v=20260916-part2-full";
 import { resolveProxyUrl } from "./proxy-config.js";
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-ch6-mcq-show-2";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260916-part2-full";
+import { PART2_ELICIT_JA } from "./lessons/aquarium-part2.js?v=20260916-part2-full";
 import { QuestSfx } from "./quest-sfx.js";
 import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
 import {
@@ -127,6 +131,18 @@ function usesTemplateArchitecture(state = loadLessonState()) {
     state?.lessonId || getActiveLessonId(),
     getActiveLevelId()
   );
+}
+
+function usesPart2Architecture(state = loadLessonState()) {
+  return usesBeginnerPart2Architecture(
+    state?.lessonId || getActiveLessonId(),
+    getActiveLevelId()
+  );
+}
+
+/** Part 2 ending has no free-talk, just three fixed turns then auto-disconnect. */
+function isEnding1Part2() {
+  return getCurrentSegment()?.id === "ending1" && usesPart2Architecture();
 }
 
 function usesBeginnerInstructionProfile() {
@@ -1610,6 +1626,8 @@ function syncEnding1FinaleProgress() {
 }
 
 function isEnding1FreeTalkActive() {
+  // Part 2 has no free-talk — three fixed turns then auto-disconnect.
+  if (isEnding1Part2()) return false;
   return (
     getCurrentSegment()?.id === "ending1" &&
     ending1AutoIntroComplete() &&
@@ -1629,6 +1647,14 @@ function paintEndingEndButton() {
 /** After Turn A, follow the child's topic until an explicit 終わりにする action. */
 function enterEnding1FreeTalkIfReady() {
   if (getCurrentSegment()?.id !== "ending1") return false;
+  // Part 2 has no free-talk — skip this phase entirely.
+  // The ending for Part 2 is handled differently (three fixed turns, auto-disconnect).
+  if (isEnding1Part2()) {
+    // For Part 2, after Turn A completes, we trigger turns B and C via the coach,
+    // then complete_segment and disconnect. No free-talk or end button needed.
+    paintEndingEndButton(); // Will hide the button for Part 2
+    return false;
+  }
   // Exact Turn A audio still playing — do not open free talk / 終わりにする yet.
   if (ending1Beat.introDisplayLocked) return false;
   if (!ending1AutoIntroComplete() || ending1Beat.finaleRequested || ending1FinaleComplete()) {
@@ -4708,6 +4734,40 @@ function expandMcqColorPlaceholders(text, colorEn) {
     .replace(/___/g, color);
 }
 
+const FISH_COUNT_WORD_MAP = {
+  1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+  6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+};
+
+function numberToEnglishWord(n) {
+  const num = parseInt(n, 10);
+  if (isNaN(num) || num < 1) return "one";
+  return FISH_COUNT_WORD_MAP[num] || String(num);
+}
+
+function expandMcqFishCountPlaceholders(text, fishCount) {
+  const count = parseInt(fishCount, 10) || 1;
+  const countWord = numberToEnglishWord(count);
+  const countMinus1 = numberToEnglishWord(Math.max(1, count - 1));
+  const countPlus1 = numberToEnglishWord(count + 1);
+  let result = String(text || "")
+    .replace(/\[fishCountMinus1\]/gi, countMinus1)
+    .replace(/\[fishCountPlus1\]/gi, countPlus1)
+    .replace(/\[fishCount\]/gi, countWord);
+  if (count === 1) {
+    result = result.replace(/There are one fish/gi, "There is one fish");
+  }
+  return result;
+}
+
+function expandMcqPlaceholders(text, memories = {}) {
+  const color = memories?.favoriteColor || "orange";
+  const fishCount = memories?.fishCount || 1;
+  let result = expandMcqColorPlaceholders(text, color);
+  result = expandMcqFishCountPlaceholders(result, fishCount);
+  return result;
+}
+
 function ch4BeatBJaLine(colorEn = loadLessonState().memories?.favoriteColor || "orange") {
   return expandMcqColorPlaceholders(
     "つくれたら「[colorJa]いろの がらすを つくった！」って えいごで おしえてね！",
@@ -7361,9 +7421,9 @@ function refreshChoiceBarIfNeeded() {
 
 function resolveMcqChoices(beat) {
   if (!beat) return [];
-  const color = loadLessonState().memories?.favoriteColor || "orange";
+  const memories = loadLessonState().memories || {};
   const labels = (beat.choices || []).slice(0, 4).map((c) =>
-    formatChoiceLabel(expandMcqColorPlaceholders(String(c), color))
+    formatChoiceLabel(expandMcqPlaceholders(String(c), memories))
   );
   const segmentId = getCurrentSegment()?.id || "mcq";
   const beatKey = beat.id || `beat-${loadMcqCursor(segmentId)}`;
@@ -7372,16 +7432,16 @@ function resolveMcqChoices(beat) {
 
 function resolveMcqAnswer(beat) {
   if (!beat) return "";
-  const color = loadLessonState().memories?.favoriteColor || "orange";
-  return formatChoiceLabel(expandMcqColorPlaceholders(String(beat.answer || ""), color));
+  const memories = loadLessonState().memories || {};
+  return formatChoiceLabel(expandMcqPlaceholders(String(beat.answer || ""), memories));
 }
 
 function buildMcqSpeakCoach(beat) {
   if (!beat) return "";
-  const color = loadLessonState().memories?.favoriteColor || "orange";
-  const en = expandMcqColorPlaceholders(String(beat.learnyEn || ""), color);
+  const memories = loadLessonState().memories || {};
+  const en = expandMcqPlaceholders(String(beat.learnyEn || ""), memories);
   const ja = elicitJaForActiveLevel(
-    expandMcqColorPlaceholders(String(beat.learnyJa || ""), color)
+    expandMcqPlaceholders(String(beat.learnyJa || ""), memories)
   );
   const eigoGuard = /の\s*えいごを\s*選んでね/.test(ja)
     ? " Pronounce every mora of え・い・ご・を — never shorten to の選んでね. " +
@@ -7865,9 +7925,9 @@ function getActiveMcqQuestionScript(segment = getCurrentSegment()) {
   const unlocked = mcqUnlockFlags(segment);
   const cur = getCurrentMcqBeat(segment, { unlocked });
   if (!cur?.beat) return "";
-  const color = loadLessonState().memories?.favoriteColor || "orange";
-  const en = expandMcqColorPlaceholders(cur.beat.learnyEn || "", color);
-  const ja = expandMcqColorPlaceholders(cur.beat.learnyJa || "", color);
+  const memories = loadLessonState().memories || {};
+  const en = expandMcqPlaceholders(cur.beat.learnyEn || "", memories);
+  const ja = expandMcqPlaceholders(cur.beat.learnyJa || "", memories);
   return [en, ja].filter(Boolean).join(" ").trim();
 }
 
@@ -8263,19 +8323,14 @@ function renderChoiceBar(segment) {
     return;
   }
 
+  const memories = loadLessonState().memories || {};
   appendChoices(
     resolveMcqChoices(cur.beat),
     (label) => handleMcqChoiceClick(label),
     `答えをタップ（${cur.index + 1} / ${cur.total}）`,
     {
-      en: expandMcqColorPlaceholders(
-        cur.beat.learnyEn || "",
-        loadLessonState().memories?.favoriteColor || "orange"
-      ),
-      ja: expandMcqColorPlaceholders(
-        cur.beat.learnyJa || "",
-        loadLessonState().memories?.favoriteColor || "orange"
-      ),
+      en: expandMcqPlaceholders(cur.beat.learnyEn || "", memories),
+      ja: expandMcqPlaceholders(cur.beat.learnyJa || "", memories),
     }
   );
   syncMicForMcqMode();
@@ -11025,15 +11080,10 @@ function currentActionableMcqPrompts(segment = getCurrentSegment()) {
   if (isCh2FreeTalkUi() || isCh4FreeTalkUi()) return [];
   const cur = getCurrentMcqBeat(segment, { unlocked: mcqUnlockFlags(segment) });
   if (!cur?.beat) return [];
+  const memories = loadLessonState().memories || {};
   return [
-    expandMcqColorPlaceholders(
-      cur.beat.learnyEn || "",
-      loadLessonState().memories?.favoriteColor || "orange"
-    ),
-    expandMcqColorPlaceholders(
-      cur.beat.learnyJa || "",
-      loadLessonState().memories?.favoriteColor || "orange"
-    ),
+    expandMcqPlaceholders(cur.beat.learnyEn || "", memories),
+    expandMcqPlaceholders(cur.beat.learnyJa || "", memories),
   ].filter(Boolean);
 }
 
@@ -12945,9 +12995,12 @@ function handleTools(functionCalls) {
         );
         return;
       }
+      // Part 1 ending requires finale to be requested and completed before segment completion.
+      // Part 2 ending is simpler — just three fixed turns then complete, no free-talk.
       if (
         sid === "ending1" &&
         usesTemplateArchitecture() &&
+        !usesPart2Architecture() &&
         (!ending1Beat.finaleRequested ||
           (!ending1FinaleComplete() && !looksLikeEnding1FinalLineComplete(lastAssistantText())))
       ) {
@@ -13007,7 +13060,13 @@ function handleTools(functionCalls) {
           "SILENT"
         );
         showLessonCompleteModal();
-        ensureEnding1HangUpWatch();
+        // Part 2 ending: auto-disconnect immediately after completion (no free-talk).
+        // Part 1 ending: watch for finale completion before hang-up.
+        if (usesPart2Architecture()) {
+          scheduleEndCallAfterEnding();
+        } else {
+          ensureEnding1HangUpWatch();
+        }
         return;
       }
       configureGeminiClient(client);

@@ -1,11 +1,12 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260910-ch6-mcq-show-2";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260910-ch6-mcq-show-2";
-import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260910-ch6-mcq-show-2";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260916-part2-full";
+import { PART2_ELICIT_JA } from "./lessons/aquarium-part2.js?v=20260916-part2-full";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260916-part2-full";
+import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-full";
 import {
   buildPartReporting,
   normalizeIdList,
   PROGRESS_CONTRACT_VERSION,
-} from "./progress-contract.js?v=20260910-ch6-mcq-show-2";
+} from "./progress-contract.js?v=20260916-part2-full";
 
 const LEVEL_META = {
   beginner: { id: "beginner", headerLabel: "ビギナー", firestoreField: "beginnerProgress" },
@@ -38,8 +39,18 @@ export function daily1OpenSpeak(name = getLearnerJaName()) {
   return `Oh by the way, do you have a favourite animal? そういえば、${name}は すきな どうぶつとか いるの？`;
 }
 
+/** Part 2 daily1 opens with food question instead of animal. */
+export function daily1OpenSpeakPart2(name = getLearnerJaName()) {
+  return `Oh by the way, ${name}, what did you eat today? そういえば、${name}は きょう なにを たべたの？`;
+}
+
 export function daily1BackToTankSpeak() {
   return "Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！";
+}
+
+/** Part 2 uses "aquarium" instead of "tank" in bridge. */
+export function daily1BackToAquariumSpeak() {
+  return "Nice! Now let's get back to your aquarium! いいね！じゃあ すいぞくかんの はなしに もどろう！";
 }
 
 /** Closing Daily English turn: react to their last words, then the exact bridge. */
@@ -116,6 +127,22 @@ export function usesBeginnerPart1Architecture(
   levelId = ACTIVE_LEVEL_ID
 ) {
   return getLesson(lessonId, levelId)?.architecture === "beginner-part1-v1";
+}
+
+export function usesBeginnerPart2Architecture(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  return getLesson(lessonId, levelId)?.architecture === "beginner-part2-v1";
+}
+
+/** Returns true for any beginner architecture (Part 1 or Part 2). */
+export function usesBeginnerArchitecture(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  const arch = getLesson(lessonId, levelId)?.architecture;
+  return arch === "beginner-part1-v1" || arch === "beginner-part2-v1";
 }
 
 function storageKey(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
@@ -1192,6 +1219,81 @@ function ending1Rule() {
   ].join(" ");
 }
 
+/** Part 2 daily1 rule — food question instead of animal. */
+function daily1RulePart2() {
+  return [
+    "DAILY ENGLISH ONLY — sudden everyday chat away from the aquarium. NO intro line.",
+    "FIRST line EXACTLY: Oh by the way, [name], what did you eat today? そういえば、[name]さんは きょう なにを たべたの？ (child's name + さん in Japanese).",
+    "FORBIDDEN openers: Let's practice today's English / きょうの えいごを れんしゅうしよう.",
+    "Talk like a friendly real teacher — NOT a quiz bot. After the food question: at least 4 chat rallies.",
+    "EACH TURN: (1) react specifically to WHAT THEY JUST SAID (name their words), (2) ONE follow-up about THAT same topic, (3) WAIT.",
+    "Stay on their topic for 1–2 turns before changing topic. Soft bridge when you switch (e.g. Nice! By the way…).",
+    "FORBIDDEN: starting every turn with the same echo (Curry! / かれー！) after you already reacted that way.",
+    "FORBIDDEN: asking something they already answered; abrupt random jumps with no link to their last line.",
+    "If they only say うん/yes: warm ack + ONE gentle follow-up on the SAME topic — do NOT leap to a brand-new topic yet.",
+    "FORBIDDEN forever: Are you tired? / つかれた？",
+    "FORBIDDEN: stopping after Nice / That's right / そうだね with no next question before 4 rallies.",
+    "FORBIDDEN: back to the aquarium before 4 rallies.",
+    "After 4+ rallies: react to their last words, then EXACTLY: Nice! Now let's get back to your aquarium! いいね！じゃあ すいぞくかんの はなしに もどろう！ " +
+      "Finish speaking that full turn before tools. Then call complete_segment(daily1). " +
+      "FORBIDDEN: complete_segment(daily1) before 4 rallies or before the bridge line. Next is Chapter 5 fish count.",
+    "Never go silent after praise — always lead to the next question or the back-to-aquarium bridge.",
+  ].join(" ");
+}
+
+/** Part 2 ending — THREE fixed turns only, NO free-talk, auto-disconnect. */
+function ending1RulePart2() {
+  return [
+    "ENDING PART 2 — THREE FIXED TURNS ONLY, then auto-disconnect. NO free-talk.",
+    "Turn A (speak once, do NOT wait for response): " +
+      "Perfect! You remembered a lot about your aquarium! / ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ " +
+      "You remembered the decorations and the fish too! / かざりも おさかなも おもいだせたね！",
+    "Turn B (immediately after Turn A): " +
+      "Your teacher might ask you some of the same questions next time! / つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
+      "You'll be ready! / これで ばっちりだね！",
+    "Turn C (final, then disconnect): " +
+      "If you play Minecraft again, try using today's English too! See you next time! / つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！また ね！ " +
+      "→ call complete_segment(ending1) immediately after Turn C.",
+    "FORBIDDEN: free-talk / 終わりにする button / asking questions / waiting for child response / additional conversation.",
+    "Auto-disconnect happens after Turn C completes.",
+  ].join(" ");
+}
+
+/** Part 2 Chapter 5 rule — mixed format with free ask then MCQ. */
+function ch5RulePart2() {
+  return [
+    "CHAPTER 5 PART 2 — MIXED format: FREE ASK first, then MCQ beats.",
+    "Beat A1 (NO BUTTONS): Speak EXACTLY: Do you remember how many fish were in your tank? " +
+      "すいそうに おさかなが なんびき いたか おぼえてる？ Then WAIT for their answer.",
+    "Record their answer as fishCount (1, 2, 3, 4, 5, etc.). Accept numbers in Japanese or English. " +
+      "「よんひき」「4匹」「four」→ fishCount = 4. Call record_memory(fishCount, N).",
+    "If they don't remember: That's okay! About how many do you think there were? " +
+      "だいじょうぶ！だいたい なんびき くらいだったと おもう？",
+    "Beat A2 (MCQ — after fishCount recorded): Show 4 choices with their number. " +
+      "e.g. fishCount=4 → \"You had four fish! 「おさかなが 4ひき いる」の えいごを 選んでね！\" " +
+      "Choices: There are four fish. / There are three fish. / There are five fish. / There is four fish. " +
+      "GRAMMAR: fishCount=1 → correct is \"There is one fish.\" (singular). fishCount>1 → \"There are [N] fish.\" (plural).",
+    "Beat A3 (MCQ): How about three fish? 「おさかなが 3びき いる」の えいごを 選んでね！ → There are three fish.",
+    "Beat A4 (MCQ): How about five fish? 「おさかなが 5ひき いる」の えいごを 選んでね！ → There are five fish.",
+    "After five fish correct: complete_segment(ch5) → Chapter 6.",
+    "FORBIDDEN: inventing fish counts / skipping the free ask / MCQ before fishCount is recorded.",
+  ].join(" ");
+}
+
+/** Part 2 Chapter 6 rule — teacher questions. */
+function ch6RulePart2() {
+  return [
+    "CHAPTER 6 PART 2 — Teacher questions as MCQ. Five beats.",
+    "Beat 1: Your teacher may ask this question! 「なにいろを えらびましたか？」は どれ？ → What color did you choose?",
+    "Beat 2: How about this one? 「どの おさかなを えらびましたか？」は どれ？ → What fish did you choose?",
+    "Beat 3: Your teacher might ask about the number of fish! 「すいそうに おさかなが なんびき いますか？」は どれ？ → How many fish are in your tank?",
+    "Beat 4: How about this question? 「すいぞくかんの どんなところが すき？」は どれ？ → What do you like about your aquarium?",
+    "Beat 5: Last one! 「じぶんの すいぞくかんが すき？」は どれ？ → Do you like your aquarium?",
+    "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat.",
+    "After Do you like your aquarium? correct: complete_segment(ch6) → Final Challenge.",
+  ].join(" ");
+}
+
 /**
  * Small, phase-specific setup for the fresh Ending Phase 2 Live session.
  * Deliberately excludes lesson/chapter/final-quiz scripts and prompt history.
@@ -1221,7 +1323,7 @@ export function buildEndingFreeTalkInstructions(
 }
 
 /**
- * Small Daily English-only setup for the fresh post-Ch5 Live session.
+ * Small Daily English-only setup for the fresh post-Ch4/Ch5 Live session.
  * Excludes chapter/quiz/MCQ scaffolding that bloated replies (~14k → ~2.5k chars).
  */
 export function buildDaily1Instructions(
@@ -1231,27 +1333,42 @@ export function buildDaily1Instructions(
   const lesson = getLesson(state.lessonId);
   const instructionLevel = lesson.instructionLevel || levelId;
   const childName = getLearnerJaName();
+  const isPart2 = usesBeginnerPart2Architecture(state.lessonId, levelId);
+  
+  // Part 2 asks about food; Part 1 asks about animals
+  const openingLine = isPart2
+    ? daily1OpenSpeakPart2(childName)
+    : daily1OpenSpeak(childName);
+  const bridgeLine = isPart2
+    ? daily1BackToAquariumSpeak()
+    : daily1BackToTankSpeak();
+  const topicNote = isPart2
+    ? "After the food question: at least 4 natural chat rallies about food. EACH TURN: (1) react to THEIR latest words, (2) ask ONE follow-up on that same topic, (3) WAIT."
+    : "After the animal question: at least 4 natural chat rallies. EACH TURN: (1) react to THEIR latest words, (2) ask ONE follow-up on that same topic, (3) WAIT.";
+  const nextChapter = isPart2 ? "Chapter 5 fish count" : "Chapter 6";
+
   const color = String(state?.memories?.favoriteColor || "").trim();
   const colorBit = color
     ? `Favorite color already chosen (${color}) — never ask about color / すきな いろ.`
     : "Never ask What's your favorite color? / すきな いろは？";
   const raw = [
     "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
-    "DAILY ENGLISH ONLY — sudden friendly chat away from the tank. Keep every reply SHORT.",
-    `FIRST line EXACTLY (if not yet spoken): ${daily1OpenSpeak(childName)} Then WAIT.`,
+    isPart2
+      ? "DAILY ENGLISH ONLY — sudden friendly chat away from the aquarium. Keep every reply SHORT."
+      : "DAILY ENGLISH ONLY — sudden friendly chat away from the tank. Keep every reply SHORT.",
+    `FIRST line EXACTLY (if not yet spoken): ${openingLine} Then WAIT.`,
     "FORBIDDEN openers: Let's practice today's English / きょうの えいごを れんしゅうしよう.",
-    "After the animal question: at least 4 natural chat rallies. EACH TURN: (1) react to THEIR latest words, (2) ask ONE follow-up on that same topic, (3) WAIT.",
-    "Stay on their topic 1–2 turns. Soft-bridge if you change topics. Never re-ask answered facts. Never Do you like [the animal they just named]?",
+    topicNote,
+    "Stay on their topic 1–2 turns. Soft-bridge if you change topics. Never re-ask answered facts.",
     "Short answers (うん / かわいい / yes / cute): warm ack + ONE same-topic follow-up — do not jump topics.",
     "Every spoken turn: full English, then matching ひらがな with the SAME meaning. Never English-only.",
-    `FORBIDDEN: Are you tired? / つかれた？ / ${colorBit} / Chapter 6 sand / basement / tank MCQ before the bridge.`,
-    "After 4+ rallies, " +
-      daily1BridgeTurnInstruction() +
-      " Finish speaking that turn, then call complete_segment(daily1). Never complete early. Next is Chapter 6.",
+    `FORBIDDEN: Are you tired? / つかれた？ / ${colorBit}`,
+    `After 4+ rallies, react to their last words then speak EXACTLY: ${bridgeLine}` +
+      ` Finish speaking that turn, then call complete_segment(daily1). Never complete early. Next is ${nextChapter}.`,
     noSystemBackendRule(),
-    "Never invent tank facts. Known memories:",
+    isPart2 ? "Never invent aquarium facts. Known memories:" : "Never invent tank facts. Known memories:",
     memoryBlock(state.memories),
-    "Tools: record_memory for durable facts. complete_segment(daily1) only after the back-to-tank bridge. Do not mention tools, badges, UI, or timers.",
+    "Tools: record_memory for durable facts. complete_segment(daily1) only after the back-to-aquarium/tank bridge. Do not mention tools, badges, UI, or timers.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1358,14 +1475,17 @@ function ch1StartNudge() {
 
 function warmupRules(segment, lessonId) {
   if (segment?.type !== "warmup") return "";
-  const must =
-    lessonId === "part1"
-      ? "No fixed question list. After the greeting, follow what the child said with natural everyday questions (food, games, colors, etc. are optional — never force What's your favorite summer food?). Stay on their topic 1–2 turns. When they share news (cafe, school, game…): name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the tank in the same turn as reacting."
-      : "Do not rush into the aquarium. Chat like a real teacher first. Stay on their topic 1–2 turns before any homework bridge.";
-  const bridge =
-    lessonId === "part1"
-      ? "ONLY on a later turn — after enough chat — invite in ONE message: short reaction to their last line, THEN the tank invite with FULL English THEN matching ひらがな. Pattern: \"Okay! Oh! Today I want to make a fish tank. Will you help me make it? そっか！そうだ！きょうは らーにーせんせいの すいそうづくりを てつだってほしいんだ。いっしょに つくれる？\" Never start with bare Oh! Today with no reaction. Never Japanese-only invite. Never すいそうを てつだって. That invite turn must END with the help question — then STOP. FORBIDDEN same turn: Thank you, What do I need to make a tank, glass, sand, complete_segment(ch0). Wait for yes/ok. As soon as they agree on the NEXT turn, call complete_segment(ch0) BEFORE saying anything about glass or sand. While CURRENT SEGMENT is still warmup/ch0, do NOT teach glass, sand, or I need glass."
-      : "ONLY on a later, separate turn: \"Remember the Minecraft aquarium class? Shall we remember YOUR tank?\" Japanese (ひらがな only): 「このまえの まいんくらふとで つくった すいそう、おもいだそうか？」 Wait for yes/ok, then call complete_segment for warmup before recall questions.";
+  let must, bridge;
+  if (lessonId === "part1") {
+    must = "No fixed question list. After the greeting, follow what the child said with natural everyday questions (food, games, colors, etc. are optional — never force What's your favorite summer food?). Stay on their topic 1–2 turns. When they share news (cafe, school, game…): name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the tank in the same turn as reacting.";
+    bridge = "ONLY on a later turn — after enough chat — invite in ONE message: short reaction to their last line, THEN the tank invite with FULL English THEN matching ひらがな. Pattern: \"Okay! Oh! Today I want to make a fish tank. Will you help me make it? そっか！そうだ！きょうは らーにーせんせいの すいそうづくりを てつだってほしいんだ。いっしょに つくれる？\" Never start with bare Oh! Today with no reaction. Never Japanese-only invite. Never すいそうを てつだって. That invite turn must END with the help question — then STOP. FORBIDDEN same turn: Thank you, What do I need to make a tank, glass, sand, complete_segment(ch0). Wait for yes/ok. As soon as they agree on the NEXT turn, call complete_segment(ch0) BEFORE saying anything about glass or sand. While CURRENT SEGMENT is still warmup/ch0, do NOT teach glass, sand, or I need glass.";
+  } else if (lessonId === "part2") {
+    must = "No fixed question list. After the greeting, follow what the child said with natural everyday questions. Stay on their topic 1–2 turns. When they share news: name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the aquarium in the same turn as reacting.";
+    bridge = "ONLY on a later turn — after enough chat — invite in ONE message: short reaction to their last line, THEN the aquarium recall invite with FULL English THEN matching ひらがな. Pattern: \"Okay! Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! そっか！そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！\" Never start with bare Oh! with no reaction. Never Japanese-only invite. That invite turn must END with the remember question — then STOP. FORBIDDEN same turn: complete_segment(ch0). Wait for yes/ok. As soon as they agree on the NEXT turn, call complete_segment(ch0) BEFORE teaching any phrases.";
+  } else {
+    must = "Do not rush into the aquarium. Chat like a real teacher first. Stay on their topic 1–2 turns before any homework bridge.";
+    bridge = "ONLY on a later, separate turn: \"Remember the Minecraft aquarium class? Shall we remember YOUR tank?\" Japanese (ひらがな only): 「このまえの まいんくらふとで つくった すいそう、おもいだそうか？」 Wait for yes/ok, then call complete_segment for warmup before recall questions.";
+  }
   return [
     "WARMUP / CHAPTER 0 — natural conversation rules:",
     "Talk like a friendly real teacher who is genuinely interested — NOT a quiz bot reading a script.",
@@ -1407,6 +1527,8 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
   const lesson = getLesson(state.lessonId);
   const segment = getCurrentSegment(state);
   const usesTemplate = usesBeginnerPart1Architecture(state.lessonId, levelId);
+  const usesPart2 = usesBeginnerPart2Architecture(state.lessonId, levelId);
+  const usesAnyBeginner = usesTemplate || usesPart2;
   const instructionLevel = lesson.instructionLevel || levelId;
   const targets = (segment.targets || [])
     .map((t) => t.phrase)
@@ -1415,20 +1537,23 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     .map((it) => it.promptJa || it.promptEn || it.answer)
     .join("; ");
   const onQuiz = segment?.type === "quiz";
-  const onEndingFreeTalk = segment?.id === "ending1";
+  // Part 2 ending has no free-talk — handle differently
+  const onEndingFreeTalk = segment?.id === "ending1" && usesTemplate;
+  const onEndingPart2 = segment?.id === "ending1" && usesPart2;
 
   const raw = [
     "You are ラーニー先生 (Learny), a warm Japanese-English homework tutor for children — like a real human teacher on a video call, not a chatbot script.",
     "This is HOMEWORK between real Minecraft classes — not live co-play. Do not ask them to share a screen or play Minecraft now.",
     conversationQualityRule(),
-    usesTemplate ? japaneseElicitBracketRule(instructionLevel, segment) : "",
+    usesAnyBeginner ? japaneseElicitBracketRule(instructionLevel, segment) : "",
     noSystemBackendRule(),
     lesson.weekNote,
     lesson.stopRule,
-    onEndingFreeTalk ? "" : scaffoldingLine(instructionLevel),
+    (onEndingFreeTalk || onEndingPart2) ? "" : scaffoldingLine(instructionLevel),
     quizSpeakException(segment),
-    onEndingFreeTalk ? "" : leadTheTurnRule(instructionLevel),
-    warmupRules(segment, usesTemplate ? "part1" : state.lessonId),
+    (onEndingFreeTalk || onEndingPart2) ? "" : leadTheTurnRule(instructionLevel),
+    warmupRules(segment, usesTemplate ? "part1" : usesPart2 ? "part2" : state.lessonId),
+    // Part 1 chapter rules
     segment.id === "ch1" && usesTemplate ? ch1StoryRule() : "",
     segment.id === "ch2" && usesTemplate ? ch2ChoiceRule() : "",
     segment.id === "ch3" && usesTemplate ? ch3StoryRule() : "",
@@ -1439,6 +1564,11 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     segment.id === "ch6" && usesTemplate ? ch6StoryRule() : "",
     segment.id === "final1" && usesTemplate ? final1Rule() : "",
     segment.id === "ending1" && usesTemplate ? ending1Rule() : "",
+    // Part 2 chapter rules
+    segment.id === "daily1" && usesPart2 ? daily1RulePart2() : "",
+    segment.id === "ch5" && usesPart2 ? ch5RulePart2() : "",
+    segment.id === "ch6" && usesPart2 ? ch6RulePart2() : "",
+    segment.id === "ending1" && usesPart2 ? ending1RulePart2() : "",
     onEndingFreeTalk
       ? ""
       : "If they forget: " +
