@@ -43,7 +43,7 @@ import {
 } from "./lesson-engine.js?v=20260921-admin-part-split";
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
-import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260921-ending-autostart";
+import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260921-part2-intro-freetalk";
 import { QuestSfx } from "./quest-sfx.js";
 import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260921-admin-part-split";
 import {
@@ -74,8 +74,8 @@ import {
   ENDING1_FINALE_SPEAK,
   ENDING1_INTRO_SPEAK,
   isEnding1FinaleTranscript,
-} from "./ending-audio-config.js?v=20260921-ending-autostart";
-import { ENDING_AUDIO_MANIFEST } from "../audio/ending/manifest.js?v=20260921-ending-autostart";
+} from "./ending-audio-config.js?v=20260921-part2-intro-freetalk";
+import { ENDING_AUDIO_MANIFEST } from "../audio/ending/manifest.js?v=20260921-part2-intro-freetalk";
 import { EndingFreeTalkTurnQueue } from "./ending-freetalk-queue.js?v=20260909-ending-prewarm-2";
 import { ch4MakeTellSpeak } from "./ch4-audio-config.js?v=20260910-ch4-static-1";
 import { CH4_AUDIO_MANIFEST } from "../audio/ch4/manifest.js?v=20260910-ch4-static-1";
@@ -1354,7 +1354,7 @@ function clearEnding1IntroQuietTimer() {
   }
 }
 
-/** Part 2 intro is four EN+JP lines. "Done" is the closing You'll be ready / ばっちり — not the first おもいだせたね. */
+/** Part 2 intro ends on the free-chat invite, not the earlier You'll be ready / ばっちり line. */
 function part2EndingIntroTailHeard() {
   return Boolean(isEnding1Part2() && ending1Beat.introHeardFishQ);
 }
@@ -1550,7 +1550,7 @@ function assistantSaidPart2EndingIntro(text = lastAssistantText()) {
   const t = String(text || "");
   // ONLY the closing line. Mid-script 「おもいだせたね」 must not mark intro complete
   // (that unlocked free-talk / seal logic while Learny was still speaking).
-  return /you'll be ready|ばっちり/i.test(t);
+  return /chat freely|自由に会話|じゆうに\s*かいわ/i.test(t);
 }
 
 function part2EndingIntroHeardInChat() {
@@ -2966,6 +2966,8 @@ function resetFinal1Quiz() {
   final1SeededItemId = "";
   final1SpeakKickAt = 0;
   final1MismatchRepairAt = 0;
+  final1PraiseIndex = -1;
+  final1LastPraise = null;
 }
 
 function shuffleIndices(n) {
@@ -3213,12 +3215,39 @@ function spokenFinal1Cue(item) {
     .trim();
 }
 
-function final1QuestionScript(item, { opening = false, last = false } = {}) {
+const FINAL1_PRAISE_PATTERNS = [
+  { en: "Great job!", ja: "すごいね！" },
+  { en: "Nice one!", ja: "いいね！" },
+  { en: "Yes!", ja: "そうだね！" },
+  { en: "Amazing!", ja: "やるじゃん！" },
+  { en: "Well done!", ja: "よくできたね！" },
+  { en: "That's right!", ja: "そのとおり！" },
+  { en: "Excellent!", ja: "ばっちり！" },
+  { en: "Wonderful!", ja: "すてき！" },
+];
+
+let final1PraiseIndex = -1;
+let final1LastPraise = null;
+
+function pickFinal1Praise() {
+  if (FINAL1_PRAISE_PATTERNS.length < 2) return FINAL1_PRAISE_PATTERNS[0];
+  let next = Math.floor(Math.random() * FINAL1_PRAISE_PATTERNS.length);
+  if (next === final1PraiseIndex) {
+    next = (next + 1) % FINAL1_PRAISE_PATTERNS.length;
+  }
+  final1PraiseIndex = next;
+  return FINAL1_PRAISE_PATTERNS[next];
+}
+
+function final1QuestionScript(item, { opening = false, last = false, praise = null } = {}) {
   const cue = String(item?.promptHira || item?.promptJa || "").trim();
   if (!cue) return "";
   if (opening) return `${final1OpenSpeak()} ${cue}`;
-  if (last) return `Yes! This is the last question! さいごの もんだいだよ！ ${cue}`;
-  return `You got it! せいかい！ ${cue}`;
+  const line = praise || final1LastPraise || pickFinal1Praise();
+  if (last) {
+    return `${line.en} This is the last question! ${line.ja} さいごの もんだいだよ！ ${cue}`;
+  }
+  return `${line.en} ${line.ja} ${cue}`;
 }
 
 function final1AudibleScript(item, opts = {}) {
@@ -3371,13 +3400,18 @@ function forceFinal1NextCueSpeak(reason = "next-cue") {
     return false;
   }
   const remaining = final1RemainingCount();
-  const script = final1QuestionScript(item, { last: remaining === 1 });
-  const audible = final1AudibleScript(item, { last: remaining === 1 });
+  const praise =
+    replay && final1LastPraise && itemId === final1SeededItemId
+      ? final1LastPraise
+      : pickFinal1Praise();
+  final1LastPraise = praise;
+  const script = final1QuestionScript(item, { last: remaining === 1, praise });
+  const audible = final1AudibleScript(item, { last: remaining === 1, praise });
   final1SpeakKickAt = Date.now();
   seedFinal1QuestionBubble(script, itemId);
   const outbound =
     "[FINAL1] NEXT CUE. Speak exactly the text between <exact> tags as your complete audible turn, once. " +
-    "This is the ONLY question. Do not repeat the previous question. Do not add a second question. Then WAIT for the 4-button tap.\n" +
+    "This is the ONLY question. Do not add You got it. Do not repeat the previous question. Do not add a second question. Then WAIT for the 4-button tap.\n" +
     `<exact>${audible}</exact>`;
   try {
     audioPlayer?.interrupt?.();
@@ -11900,7 +11934,7 @@ function trackEnding1IntroSttProgress(chunk) {
   if (
     isEnding1Part2() &&
     ending1Beat.introFirstAudioAt &&
-    /you'll be ready|ばっちり/i.test(t)
+    /chat freely|自由に会話|じゆうに\s*かいわ/i.test(t)
   ) {
     if (!ending1Beat.introHeardFishQAt) ending1Beat.introHeardFishQAt = Date.now();
     ending1Beat.introHeardFishQ = true;

@@ -27,7 +27,8 @@ const voiceTab = readFileSync(
 
 assert.match(part2, /export const PART2_ENDING_INTRO_SPEAK/);
 assert.match(part2, /export const PART2_ENDING_FINALE_SPEAK/);
-assert.match(part2, /You'll be ready!/);
+assert.match(part2, /Now, let's chat freely with Teacher Learny!/);
+assert.match(part2, /それじゃあラーニー先生と自由に会話してみよう！/);
 assert.doesNotMatch(part2, /THREE FIXED TURNS|noFreeTalk:\s*true/);
 
 assert.match(engine, /same structure as Part 1/);
@@ -68,6 +69,6 @@ assert.doesNotMatch(
 
 assert.match(voice, /usesBeginnerHomeworkArchitecture\(state\)/);
 assert.match(voice, /maybeHealPart2EndingChapterBadge/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260921-ending-autostart/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260921-final1-praise-variety/);
 
 console.log("check-part2-ending-after-final1: ok");

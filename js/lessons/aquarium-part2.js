@@ -53,7 +53,8 @@ export const PART2_ENDING_INTRO_SPEAK =
   "You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ " +
   "Your teacher might ask you some of the same questions next time! " +
   "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
-  "You'll be ready! これで ばっちりだね！";
+  "You'll be ready! これで ばっちりだね！ " +
+  "Now, let's chat freely with Teacher Learny! それじゃあラーニー先生と自由に会話してみよう！";
 
 /** Ending finale — only after 終わりにする. */
 export const PART2_ENDING_FINALE_SPEAK =
@@ -786,6 +787,7 @@ export const AQUARIUM_PART2 = {
         "You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ " +
         "Your teacher might ask you some of the same questions next time! " +
         "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ You'll be ready! これで ばっちりだね！ " +
+        "Now, let's chat freely with Teacher Learny! それじゃあラーニー先生と自由に会話してみよう！ " +
         "Then FREE TALK: follow the child's topic; NEVER steer to ending; NEVER say goodbye until 終わりにする. " +
         "After 終わりにする ONLY — finale EXACT: If you play Minecraft again, try using today's English too! See you next time! " +
         "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！ then complete_segment(ending1). " +

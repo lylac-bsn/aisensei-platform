@@ -7,7 +7,7 @@ import {
   PART2_CH4_BEAT1_SPEAK,
   PART2_CH5_BEAT1_SPEAK,
   PART2_CH6_BEAT1_SPEAK,
-} from "./lessons/aquarium-part2.js?v=20260921-ending-autostart";
+} from "./lessons/aquarium-part2.js?v=20260921-part2-intro-freetalk";
 import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260921-ending-autostart";
 import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {
@@ -1482,7 +1482,7 @@ function daily1RulePart2() {
 function ending1RulePart2() {
   return [
     "ENDING PART 2 — same structure as Part 1. Client owns intro + finale; free talk in between.",
-    "Intro EXACT (ONE message, then WAIT): Perfect! You remembered a lot about your aquarium! + decorations/fish + teacher might ask same questions + You'll be ready!",
+    "Intro EXACT (ONE message, then WAIT): Perfect! You remembered a lot about your aquarium! + decorations/fish + teacher might ask same questions + You'll be ready! + Now, let's chat freely with Teacher Learny!",
     "Then FREE TALK: react to the child, one bilingual follow-up; never steer toward ending; never say goodbye.",
     "ONLY after client says free talk is over / 終わりにする: finale EXACT If you play Minecraft again… See you next time! → complete_segment(ending1).",
     "Freetalk badge (client-counted): English ×3 → gold, ×2 → silver, ×1 → bronze.",

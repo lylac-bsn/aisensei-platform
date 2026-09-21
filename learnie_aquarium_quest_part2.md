@@ -805,6 +805,8 @@ Your teacher might ask you some of the same questions next time!
 つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！
 You'll be ready!
 これで ばっちりだね！
+Now, let's chat freely with Teacher Learny!
+それじゃあラーニー先生と自由に会話してみよう！
 ```
 
 → **WAIT** → **フリートーク**（子どもの話題についていく。終わりに誘導しない）  

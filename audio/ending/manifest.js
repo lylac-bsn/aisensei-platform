@@ -19,8 +19,8 @@ export const ENDING_AUDIO_MANIFEST = Object.freeze({
     "source": "beginner:part1.ending1.turnC"
   },
   "beginner-part2-intro": {
-    "path": "/audio/ending/7520c66ce5a78cebe37f.wav",
-    "text": "Perfect! You remembered a lot about your aquarium! ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ Your teacher might ask you some of the same questions next time! つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ You'll be ready! これで ばっちりだね！",
+    "path": "/audio/ending/part2-intro-freetalk.wav",
+    "text": "Perfect! You remembered a lot about your aquarium! ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ Your teacher might ask you some of the same questions next time! つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ You'll be ready! これで ばっちりだね！ Now, let's chat freely with Teacher Learny! それじゃあラーニー先生と自由に会話してみよう！",
     "source": "beginner:part2.ending1.intro"
   },
   "beginner-part2-finale": {

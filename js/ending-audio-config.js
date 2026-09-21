@@ -15,7 +15,8 @@ export const PART2_ENDING_INTRO_SPEAK =
   "You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ " +
   "Your teacher might ask you some of the same questions next time! " +
   "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
-  "You'll be ready! これで ばっちりだね！";
+  "You'll be ready! これで ばっちりだね！ " +
+  "Now, let's chat freely with Teacher Learny! それじゃあラーニー先生と自由に会話してみよう！";
 
 /** Part 2 ending finale — only after 終わりにする. */
 export const PART2_ENDING_FINALE_SPEAK =
