@@ -290,6 +290,114 @@ function mergeBestFirstTryMaps(incoming = {}, existing = {}) {
   return out;
 }
 
+/** True when a part snapshot has any learner progress worth preserving. */
+export function partHasProgress(part) {
+  if (!part || typeof part !== "object") return false;
+  return (
+    Boolean(part.complete) ||
+    (Array.isArray(part.completedSegmentIds) &&
+      part.completedSegmentIds.length > 0) ||
+    (Array.isArray(part.mcqLog) && part.mcqLog.length > 0) ||
+    Object.keys(part.chapterPlayCounts || {}).length > 0 ||
+    Object.keys(part.mcqBadgeFirstTry || {}).length > 0 ||
+    Object.keys(part.mcqBadgeFirstTryBest || {}).length > 0 ||
+    (Array.isArray(part.phrasesSpoken) && part.phrasesSpoken.length > 0) ||
+    Number(part.endingFreetalkEnglishCount) > 0 ||
+    Number(part.segmentIndex) > 0
+  );
+}
+
+function mergeMcqLogs(localLog, cloudLog) {
+  const seen = new Set();
+  const out = [];
+  for (const event of [
+    ...(Array.isArray(cloudLog) ? cloudLog : []),
+    ...(Array.isArray(localLog) ? localLog : []),
+  ]) {
+    if (!event || typeof event !== "object") continue;
+    const key = [
+      event.segmentId,
+      event.beatId,
+      event.playId,
+      event.at,
+      event.correct,
+      event.choice || "",
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(event);
+  }
+  return out.slice(-2500);
+}
+
+/**
+ * Resolve one part for Firestore sync.
+ * Missing localStorage key → keep cloud (never wipe Part 2 from a Part-1-only device).
+ * Present key (including intentional reset to empty) → local wins as base, with sticky merges.
+ */
+export function resolvePartForSync(lessonId, levelId, cloudPart) {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(storageKey(lessonId, levelId));
+  } catch {
+    raw = null;
+  }
+  const cloud = sanitizeLessonState(cloudPart || {}, lessonId);
+  if (raw == null) return cloud;
+  let local;
+  try {
+    local = sanitizeLessonState(JSON.parse(raw), lessonId);
+  } catch {
+    return cloud;
+  }
+  if (!partHasProgress(cloud)) return local;
+  if (!partHasProgress(local)) return local;
+  return {
+    ...local,
+    complete: Boolean(local.complete || cloud.complete),
+    completedSegmentIds: normalizeIdList([
+      ...(cloud.completedSegmentIds || []),
+      ...(local.completedSegmentIds || []),
+    ]),
+    phrasesSpoken: [
+      ...new Set([
+        ...(Array.isArray(cloud.phrasesSpoken) ? cloud.phrasesSpoken : []),
+        ...(Array.isArray(local.phrasesSpoken) ? local.phrasesSpoken : []),
+      ]),
+    ].slice(-80),
+    chapterPlayCounts: mergeMaxCountMap(
+      local.chapterPlayCounts,
+      cloud.chapterPlayCounts
+    ),
+    mcqBadgePlay: mergeMaxCountMap(local.mcqBadgePlay, cloud.mcqBadgePlay),
+    mcqBadgeFirstTry: mergeFirstTryMaps(
+      local.mcqBadgeFirstTry,
+      cloud.mcqBadgeFirstTry
+    ),
+    mcqBadgeFirstTryBest: mergeBestFirstTryMaps(
+      local.mcqBadgeFirstTryBest,
+      cloud.mcqBadgeFirstTryBest
+    ),
+    mcqLog: mergeMcqLogs(local.mcqLog, cloud.mcqLog),
+    endingFreetalkEnglishCount: Math.max(
+      Number(local.endingFreetalkEnglishCount) || 0,
+      Number(cloud.endingFreetalkEnglishCount) || 0
+    ),
+    endingFreetalkFinalEnglishCount: Math.max(
+      Number(local.endingFreetalkFinalEnglishCount) || 0,
+      Number(cloud.endingFreetalkFinalEnglishCount) || 0
+    ),
+    endingFreetalkFinalRunEnglishCount: Math.max(
+      Number(local.endingFreetalkFinalRunEnglishCount) || 0,
+      Number(cloud.endingFreetalkFinalRunEnglishCount) || 0
+    ),
+    endingFreetalkEnglishByPlay: mergeMaxCountMap(
+      local.endingFreetalkEnglishByPlay,
+      cloud.endingFreetalkEnglishByPlay
+    ),
+  };
+}
+
 function looksLikeLessonWipe(incoming, existing) {
   const incomingEmpty =
     (incoming.completedSegmentIds || []).length === 0 &&
@@ -481,16 +589,18 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerArchitecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260920-part2-ch0-badge")
+  import("./badge-engine.js?v=20260921-admin-part-split")
     .then((m) => {
-      const { newlyEarned } = m.evaluateAndAwardBadges();
+      const { newlyEarned } = m.evaluateAndAwardBadges(lessonId, levelId);
       if (newlyEarned?.length) {
         try {
           window.dispatchEvent(
-            new CustomEvent("learny-badges-earned", { detail: { newlyEarned } })
+            new CustomEvent("learny-badges-earned", {
+              detail: { newlyEarned, lessonId, levelId },
+            })
           );
           window.parent?.postMessage?.(
-            { type: "gc_badges_earned", newlyEarned },
+            { type: "gc_badges_earned", newlyEarned, lessonId, levelId },
             "*"
           );
         } catch {
@@ -824,16 +934,21 @@ export function getBadgeCatalog() {
   return mapBadgeCatalog(allLessons().flatMap((lesson) => lesson.badges || []));
 }
 
-export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID) {
-  const part1 = loadLessonStateFor("part1", levelId);
-  const part2 = loadLessonStateFor("part2", levelId);
+export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID, cloudLevel = null) {
+  const cloud =
+    cloudLevel && typeof cloudLevel === "object" ? cloudLevel : {};
+  const part1 = resolvePartForSync("part1", levelId, cloud.part1);
+  const part2 = resolvePartForSync("part2", levelId, cloud.part2);
   const claimed = loadEarnedLessonBadges();
   const pending = loadPendingLessonBadges();
   return {
     progressContractVersion: PROGRESS_CONTRACT_VERSION,
     part1,
     part2,
-    part1Complete: Boolean(part1.complete),
+    part1Complete: Boolean(
+      part1.complete || cloud.part1Complete || isPart1Complete(levelId)
+    ),
+    part2Complete: Boolean(part2.complete || cloud.part2Complete),
     claimedLessonBadgeIds: claimed,
     pendingLessonBadgeIds: pending,
     // Backward-compatible alias. It intentionally contains claimed ids only.

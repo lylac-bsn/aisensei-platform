@@ -8,6 +8,7 @@ import {
   getActiveLessonId,
   getLesson,
   loadLessonState,
+  loadLessonStateFor,
   loadEarnedLessonBadges,
   loadPendingLessonBadges,
   loadBadgeRevocations,
@@ -15,7 +16,7 @@ import {
   saveBadgeRevocations,
   saveLessonState,
   usesBeginnerArchitecture,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./lesson-engine.js?v=20260921-admin-part-split";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",
@@ -251,13 +252,33 @@ export function syncBadgeAwards(desiredIds) {
   return { newlyEarned: newlyPending, newlyPending };
 }
 
-/** Evaluate current lesson state and award. */
-export function evaluateAndAwardBadges() {
-  if (!isBadgeEnabledScope()) return { newlyEarned: [], desired: [] };
-  const state = loadLessonState();
-  const lesson = getLesson(getActiveLessonId(), getActiveLevelId());
+/** Evaluate lesson state and award. Defaults to the active part. */
+export function evaluateAndAwardBadges(
+  lessonId = getActiveLessonId(),
+  levelId = getActiveLevelId()
+) {
+  if (!isBadgeEnabledScope(levelId, lessonId)) {
+    return { newlyEarned: [], desired: [] };
+  }
+  const state = loadLessonStateFor(lessonId, levelId);
+  const lesson = getLesson(lessonId, levelId);
   const desired = evaluateLessonBadges(state, lesson);
   const { newlyEarned } = syncBadgeAwards(desired);
+  return { newlyEarned, desired };
+}
+
+/** Re-score Part 1 and Part 2 so admin/sync see both prefixes. */
+export function evaluateAndAwardBadgesForAllParts(
+  levelId = getActiveLevelId()
+) {
+  const newlyEarned = [];
+  const desired = [];
+  for (const lessonId of ["part1", "part2"]) {
+    if (!isBadgeEnabledScope(levelId, lessonId)) continue;
+    const result = evaluateAndAwardBadges(lessonId, levelId);
+    newlyEarned.push(...(result.newlyEarned || []));
+    desired.push(...(result.desired || []));
+  }
   return { newlyEarned, desired };
 }
 
@@ -349,7 +370,7 @@ export function recordEndingFreetalkEnglish(text) {
       (Number(state.endingFreetalkEnglishByPlay?.[playId]) || 0) + 1,
   };
   saveLessonState(state);
-  const { newlyEarned } = evaluateAndAwardBadges();
+  const { newlyEarned } = evaluateAndAwardBadges(state.lessonId);
   return {
     counted: true,
     count: state.endingFreetalkEnglishCount,

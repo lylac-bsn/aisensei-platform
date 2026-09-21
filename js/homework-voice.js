@@ -40,12 +40,12 @@ import {
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
   usesBeginnerPart2Architecture,
-} from "./lesson-engine.js?v=20260921-ending-autostart";
+} from "./lesson-engine.js?v=20260921-admin-part-split";
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
 import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260921-ending-autostart";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260920-part2-ch0-badge";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260921-admin-part-split";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -59,7 +59,7 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./mcq-engine.js?v=20260921-admin-part-split";
 import {
   MCQ_AUDIO_COLORS,
   MCQ_AUDIO_FISH_COUNTS,

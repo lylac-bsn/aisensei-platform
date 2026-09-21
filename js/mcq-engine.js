@@ -3,12 +3,12 @@
  * Stats persist in lesson state for admin analysis.
  */
 
-import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
+import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260921-admin-part-split";
 import {
   isBadgeEnabledScope,
   maybeRecordBadgeFirstTry,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260920-part2-ch0-badge";
+} from "./badge-engine.js?v=20260921-admin-part-split";
 
 /** @typedef {{
  *   id: string,
@@ -243,7 +243,7 @@ export function recordMcqAttempt({
     entry.firstTry = firstTryResult.updated;
     state.mcqLog[state.mcqLog.length - 1].firstTry = firstTryResult.updated;
     saveLessonState(state);
-    newlyEarned = evaluateAndAwardBadges().newlyEarned || [];
+    newlyEarned = evaluateAndAwardBadges(state.lessonId).newlyEarned || [];
     if (newlyEarned.length) {
       try {
         window.dispatchEvent(

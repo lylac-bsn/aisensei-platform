@@ -12,12 +12,12 @@ import {
   loadBadgeRevocations,
   saveEarnedLessonBadges,
   savePendingLessonBadges,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./lesson-engine.js?v=20260921-admin-part-split";
 import {
   normalizeIdList,
   resolveClaimedBadgeIds,
   resolvePendingBadgeIds,
-} from "./progress-contract.js?v=20260910-ch6-mcq-show-2";
+} from "./progress-contract.js?v=20260921-admin-part-split";
 
 let syncTimer = null;
 let syncContext = null;
@@ -95,30 +95,32 @@ export async function syncProgressToFirestore(db, userId) {
     // Do not treat them as still-revoked or sync will delete them before claim.
     const protectedIds = new Set([...localBadges, ...localPending]);
     const stillRevoked = revoked.filter((id) => !protectedIds.has(id));
+    const field = getActiveLevelInfo().firestoreField;
     const mergedBadges = mergeBadgeLists(
       localBadges,
-      resolveClaimedBadgeIds(
-        cloudData,
-        getActiveLevelInfo().firestoreField
-      ),
+      resolveClaimedBadgeIds(cloudData, field),
       stillRevoked
     );
     saveEarnedLessonBadges(mergedBadges);
     const mergedPending = mergeBadgeLists(
       localPending,
-      resolvePendingBadgeIds(
-        cloudData,
-        getActiveLevelInfo().firestoreField
-      ),
+      resolvePendingBadgeIds(cloudData, field),
       stillRevoked
     ).filter((id) => !mergedBadges.includes(id));
     savePendingLessonBadges(mergedPending);
 
-    const snapshot = buildProgressSnapshot();
+    // Merge cloud part1/part2 so a Part-1-only device never blanks Part 2 in admin.
+    const cloudLevel =
+      cloudData[field] && typeof cloudData[field] === "object"
+        ? cloudData[field]
+        : {};
+    const snapshot = buildProgressSnapshot(
+      getActiveLevelInfo().id,
+      cloudLevel
+    );
     snapshot.lessonBadges = mergedBadges;
     snapshot.claimedLessonBadgeIds = mergedBadges;
     snapshot.pendingLessonBadgeIds = mergedPending;
-    const field = getActiveLevelInfo().firestoreField;
     await updateDoc(userRef, {
       [field]: snapshot,
       claimedLessonBadgeIds: mergedBadges,
@@ -164,6 +166,20 @@ export function scheduleProgressSync(db, userId) {
   }, 1500);
 }
 
+function badgePrefixOf(badgeId) {
+  const m = String(badgeId || "").match(
+    /^(.*?)_(chapter|freetalk|accuracy)_(bronze|silver|gold)$/
+  );
+  return m ? m[1] : "";
+}
+
+function levelFieldForBadge(badgeId) {
+  const prefix = badgePrefixOf(badgeId);
+  if (prefix.startsWith("intermediate_")) return "intermediateProgress";
+  if (prefix.startsWith("advanced_")) return "advancedProgress";
+  return "beginnerProgress";
+}
+
 export async function adminGrantBadge(db, userId, badgeId) {
   if (!db || !userId || !badgeId) return false;
   const userRef = doc(db, "users", userId);
@@ -175,9 +191,22 @@ export async function adminGrantBadge(db, userId, badgeId) {
   const revocations = normalizeBadgeList(data.badgeRevocations).filter(
     (id) => id !== badgeId
   );
+  const field = levelFieldForBadge(badgeId);
+  const level = data[field] && typeof data[field] === "object" ? data[field] : {};
+  const claimed = new Set(
+    normalizeBadgeList(level.claimedLessonBadgeIds || level.lessonBadges)
+  );
+  claimed.add(badgeId);
+  const pending = normalizeBadgeList(level.pendingLessonBadgeIds).filter(
+    (id) => id !== badgeId
+  );
   await updateDoc(userRef, {
     lessonBadges: [...badges],
+    claimedLessonBadgeIds: [...badges],
     badgeRevocations: revocations,
+    [`${field}.claimedLessonBadgeIds`]: [...claimed],
+    [`${field}.lessonBadges`]: [...claimed],
+    [`${field}.pendingLessonBadgeIds`]: pending,
     progressUpdatedAt: serverTimestamp(),
   });
   return true;
@@ -189,12 +218,26 @@ export async function adminRevokeBadge(db, userId, badgeId) {
   const snap = await getDoc(userRef);
   if (!snap.exists()) return false;
   const data = snap.data();
-  const badges = normalizeBadgeList(data.lessonBadges).filter((id) => id !== badgeId);
+  const badges = normalizeBadgeList(data.lessonBadges).filter(
+    (id) => id !== badgeId
+  );
   const revocations = new Set(normalizeBadgeList(data.badgeRevocations));
   revocations.add(badgeId);
+  const field = levelFieldForBadge(badgeId);
+  const level = data[field] && typeof data[field] === "object" ? data[field] : {};
+  const claimed = normalizeBadgeList(
+    level.claimedLessonBadgeIds || level.lessonBadges
+  ).filter((id) => id !== badgeId);
+  const pending = normalizeBadgeList(level.pendingLessonBadgeIds).filter(
+    (id) => id !== badgeId
+  );
   await updateDoc(userRef, {
     lessonBadges: badges,
+    claimedLessonBadgeIds: badges,
     badgeRevocations: [...revocations],
+    [`${field}.claimedLessonBadgeIds`]: claimed,
+    [`${field}.lessonBadges`]: claimed,
+    [`${field}.pendingLessonBadgeIds`]: pending,
     progressUpdatedAt: serverTimestamp(),
   });
   return true;

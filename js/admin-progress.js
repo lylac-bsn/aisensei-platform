@@ -3,7 +3,7 @@
  */
 import { lessonFor } from "./lessons/lesson-catalog.js";
 import { allLessons } from "./lessons/lesson-catalog.js";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260910-ch6-mcq-show-2";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260921-admin-part-split";
 import { totalPokeCount } from "./activity-log.js";
 import {
   currentFreetalkStats,
@@ -11,14 +11,14 @@ import {
   resolveClaimedBadgeIds,
   resolvePendingBadgeIds,
   summarizeLifetimeMcq,
-} from "./progress-contract.js?v=20260910-ch6-mcq-show-2";
+} from "./progress-contract.js?v=20260921-admin-part-split";
 import {
   computeAccuracyTier,
   highestTierByFamily,
   FAMILY_LABELS_JA,
   BADGE_FAMILIES,
   familySlotImage,
-} from "./badge-engine.js?v=20260919-part2-badges";
+} from "./badge-engine.js?v=20260921-admin-part-split";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
@@ -347,6 +347,15 @@ function renderChapterPlayCounts(part, lesson) {
 function renderHomeworkParts(meta, raw, user) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
+  const partHasAnyProgress = (part) =>
+    Boolean(
+      part?.complete ||
+        (Array.isArray(part?.completedSegmentIds) &&
+          part.completedSegmentIds.length) ||
+        (Array.isArray(part?.mcqLog) && part.mcqLog.length) ||
+        Object.keys(part?.chapterPlayCounts || {}).length ||
+        Number(part?.segmentIndex) > 0
+    );
   const row = (label, part, lesson, partKey) => {
     const segCount = (lesson?.segments || []).length || "—";
     const done = part.complete
@@ -366,7 +375,11 @@ function renderHomeworkParts(meta, raw, user) {
   return `<details class="progress-level-block">
     <summary class="progress-level-header">
       <h4>${escapeHtml(meta.label)}</h4>
-      <span class="progress-level-meta">${raw?.part1Complete ? "Part1完了" : "Part1進行中"}</span>
+      <span class="progress-level-meta">${escapeHtml(
+        `${raw?.part1Complete || p1.complete ? "Part1完了" : "Part1進行中"} · ${
+          p2.complete ? "Part2完了" : partHasAnyProgress(p2) ? "Part2進行中" : "Part2未開始"
+        }`
+      )}</span>
     </summary>
     <div class="progress-level-content">
       ${row("Part 1", p1, lessonFor(meta.id, "part1"), "part1")}
@@ -697,12 +710,16 @@ function activityTypeMeta(type) {
 function segmentLabelForEvent(ev) {
   const segmentId = String(ev?.segmentId || "");
   if (!segmentId) return "";
-  const lesson = lessonFor(
-    ev?.level || "beginner",
-    ev?.lessonId || "part1"
-  );
+  const lessonId = ev?.lessonId === "part2" || ev?.lessonId === "part1"
+    ? ev.lessonId
+    : null;
+  const lesson = lessonFor(ev?.level || "beginner", lessonId || "part1");
   const segment = (lesson?.segments || []).find((item) => item.id === segmentId);
-  return segment?.title || segment?.titleEn || segmentId;
+  const title = segment?.title || segment?.titleEn || segmentId;
+  if (lessonId === "part2") return `Part2 · ${title}`;
+  if (lessonId === "part1") return `Part1 · ${title}`;
+  // Missing lessonId: do not assume Part 1 titles for shared segment ids.
+  return segmentId;
 }
 
 function renderActivityDetail(ev) {

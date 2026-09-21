@@ -11,7 +11,7 @@ import {
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js?v=20260918-part-persist";
+} from "./lesson-engine.js?v=20260921-admin-part-split";
 import {
   BADGE_FAMILIES,
   FAMILY_LABELS_JA,
@@ -23,7 +23,8 @@ import {
   BADGE_IMAGES,
   segmentNeedsAccuracyReplay,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260920-part2-ch0-badge";
+  evaluateAndAwardBadgesForAllParts,
+} from "./badge-engine.js?v=20260921-admin-part-split";
 import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
@@ -698,9 +699,8 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
   refreshDashboardChrome();
   if (useBadgeShelf()) {
-    // Re-score from sticky best / mcqLog so a clean later play awards gold
-    // even if the previous session missed the ceremony.
-    const { newlyEarned } = evaluateAndAwardBadges();
+    // Re-score Part 1 and Part 2 so sticky best / mcqLog awards both prefixes.
+    const { newlyEarned } = evaluateAndAwardBadgesForAllParts();
     queueBadgeReceipts([
       ...loadPendingLessonBadges(),
       ...(newlyEarned || []),
