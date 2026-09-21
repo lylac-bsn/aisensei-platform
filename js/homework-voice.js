@@ -1051,6 +1051,11 @@ let final1Quiz = {
 };
 let final1OpenForceAt = 0;
 let final1QuestionAudioReady = false;
+let final1DisplayLocked = false;
+let final1SeededScript = "";
+let final1SeededItemId = "";
+let final1SpeakKickAt = 0;
+let final1MismatchRepairAt = 0;
 let bannerSegmentId = "";
 
 /** Ending = 2 spoken turns (intro combined, then finale after fish answer). */
@@ -2956,6 +2961,11 @@ function resetFinal1Quiz() {
   };
   final1OpenForceAt = 0;
   final1QuestionAudioReady = false;
+  final1DisplayLocked = false;
+  final1SeededScript = "";
+  final1SeededItemId = "";
+  final1SpeakKickAt = 0;
+  final1MismatchRepairAt = 0;
 }
 
 function shuffleIndices(n) {
@@ -3012,7 +3022,7 @@ function isFinal1QuizFinished() {
 
 function normalizeFinal1MatchText(text) {
   return String(text || "")
-    .replace(/[「」'"！!？?\s]/g, "")
+    .replace(/[「」'"！!？?\s・･]/g, "")
     .replace(/ガラス/g, "がらす")
     .replace(/砂/g, "すな")
     .replace(/魚/g, "さかな")
@@ -3140,6 +3150,12 @@ function findFinal1QueuePosFromAssistant(assistant) {
 }
 
 function getDisplayedFinal1Item() {
+  // The on-screen question is the queue cursor. Matching Live's last sentence
+  // showed a new prompt while Learny was still saying the previous one.
+  if (final1DisplayLocked) {
+    const item = getCurrentFinal1Item();
+    return item ? { item, queuePos: final1Quiz.cursor, inQueue: true } : null;
+  }
   const spoken = resolveFinal1ItemFromAssistant(lastAssistantText(), {
     allowAnswered: true,
   });
@@ -3189,6 +3205,95 @@ function final1OpenWithFirstQuestionSpeak() {
   return first ? `${final1OpenSpeak()} ${first}` : final1OpenSpeak();
 }
 
+/** Audible form of a final cue. Screen text stays promptHira. */
+function spokenFinal1Cue(item) {
+  return String(item?.promptHira || item?.promptJa || "")
+    .replace(/さんご/g, "さ・ん・ご")
+    .replace(/こんぶ/g, "こ・ん・ぶ")
+    .trim();
+}
+
+function final1QuestionScript(item, { opening = false, last = false } = {}) {
+  const cue = String(item?.promptHira || item?.promptJa || "").trim();
+  if (!cue) return "";
+  if (opening) return `${final1OpenSpeak()} ${cue}`;
+  if (last) return `Yes! This is the last question! さいごの もんだいだよ！ ${cue}`;
+  return `You got it! せいかい！ ${cue}`;
+}
+
+function final1AudibleScript(item, opts = {}) {
+  const shown = final1QuestionScript(item, opts);
+  const spokenCue = spokenFinal1Cue(item);
+  const shownCue = String(item?.promptHira || item?.promptJa || "").trim();
+  if (!shown || !spokenCue || spokenCue === shownCue) return shown;
+  return shown.replace(shownCue, spokenCue);
+}
+
+function seedFinal1QuestionBubble(script, itemId) {
+  const text = String(script || "").trim();
+  if (!text) return;
+  final1DisplayLocked = true;
+  final1SeededScript = text;
+  final1SeededItemId = String(itemId || "");
+  assistantTurnTranscript = text;
+  assistantTranscriptOpen = true;
+  const norm = (value) => normalizeFinal1MatchText(value);
+  const last = chatMessages[chatMessages.length - 1];
+  const sameAsLast =
+    last?.type === "assistant" && norm(last.text) === norm(text);
+  const previousQuestion = [...chatMessages]
+    .reverse()
+    .find((message) => message.type === "assistant" && message.final1Seeded);
+  const repeatAfterAnswer =
+    last?.type === "user" &&
+    previousQuestion &&
+    norm(previousQuestion.text) === norm(text);
+  if (sameAsLast || repeatAfterAnswer) {
+    if (sameAsLast) {
+      last.text = text;
+      last.final1Seeded = true;
+    }
+  } else {
+    chatMessages.push({
+      type: "assistant",
+      text,
+      final1Seeded: true,
+      sttEnterPending: true,
+    });
+    lastAssistantBubbleAt = Date.now();
+  }
+  scheduleRenderChat();
+  updateLearnyThinkingUI();
+  refreshChoiceBarIfNeeded();
+}
+
+function ensureFinal1BubbleExact() {
+  if (!final1DisplayLocked || !final1SeededScript) return;
+  const last = chatMessages[chatMessages.length - 1];
+  if (last?.type === "assistant" && last.final1Seeded && last.text !== final1SeededScript) {
+    last.text = final1SeededScript;
+    scheduleRenderChat();
+  }
+}
+
+function final1LiveMatchesCurrentCue(text) {
+  const item = getCurrentFinal1Item();
+  const core = normalizeFinal1MatchText(
+    final1PromptCore(item?.promptHira || item?.promptJa || "")
+  );
+  if (!core) return true;
+  return normalizeFinal1MatchText(text).includes(core);
+}
+
+/** True when Live has started a different final-challenge phrase, not just the praise lead. */
+function final1SttConflictsWithCurrentCue(text) {
+  const t = String(text || "");
+  if (!t.trim() || final1LiveMatchesCurrentCue(t)) return false;
+  return /えいごで|英語で|おさかな|さんご|こんぶ|がらす|すな|すいそう|かっこいい|うみに|えらぶ|ほしい|すき/.test(
+    t
+  );
+}
+
 /**
  * Final challenge open is a long fixed bilingual line + first cue. Same failure
  * mode as Quiz1/Ch4: withBeginnerSpeakRule ("One short turn") cuts mid-line and
@@ -3201,20 +3306,41 @@ function forceFinal1OpenWithFirstQuestion(reason = "final1-open") {
     return false;
   }
   if (final1Quiz.answered > 0) return false;
-  if (assistantAskedFinal1QuizQuestion(lastAssistantText())) return false;
-  if (final1OpenForceAt && Date.now() - final1OpenForceAt < 10000) return false;
+  const item = getCurrentFinal1Item();
+  const itemId = final1ItemKey(item);
+  if (
+    itemId &&
+    final1SeededItemId === itemId &&
+    final1SpeakKickAt &&
+    Date.now() - final1SpeakKickAt < 10000 &&
+    reason !== "ui-replay"
+  ) {
+    return false;
+  }
+  if (assistantAskedFinal1QuizQuestion(lastAssistantText()) && final1DisplayLocked) {
+    return false;
+  }
+  if (final1OpenForceAt && Date.now() - final1OpenForceAt < 10000 && reason !== "ui-replay") {
+    return false;
+  }
   final1OpenForceAt = Date.now();
+  final1SpeakKickAt = Date.now();
   initFinal1QuizIfNeeded();
-  const script = final1OpenWithFirstQuestionSpeak();
-  if (!script) return false;
+  const current = getCurrentFinal1Item();
+  const script = final1QuestionScript(current, { opening: true });
+  const audible = final1AudibleScript(current, { opening: true });
+  if (!script || !audible) return false;
+  seedFinal1QuestionBubble(script, final1ItemKey(current));
   const outbound =
     "[FINAL1] FINAL CHALLENGE EXACT OPENING. " +
     "Speak exactly the text between <exact> tags as your complete audible turn, once. " +
     "Do not praise or acknowledge the previous chapter (My tank is ready / Great job). " +
     "Do not ask Are you ready? / じゅんびは できてる？. Do not split open + first cue into two turns. " +
+    "Do not ask any other final-challenge phrase. " +
     "Stop after えいごで？ and wait for the child.\n" +
-    `<exact>${script}</exact>`;
+    `<exact>${audible}</exact>`;
   try {
+    audioPlayer?.interrupt?.();
     closeOpenAudioTurn();
   } catch {
     // ignore — do not interrupt mid-playback; exact open replaces the turn
@@ -3229,18 +3355,36 @@ function forceFinal1OpenWithFirstQuestion(reason = "final1-open") {
 function forceFinal1NextCueSpeak(reason = "next-cue") {
   if (!client?.connected || actionState !== "active") return false;
   if (getCurrentSegment()?.id !== "final1") return false;
-  const cue = currentFinal1Prompt();
-  if (!cue) return false;
+  const item = getCurrentFinal1Item();
+  const cue = String(item?.promptHira || item?.promptJa || "").trim();
+  if (!item || !cue) return false;
+  if (final1ItemAlreadyAnswered(item)) return false;
+  const itemId = final1ItemKey(item);
+  const replay = reason === "ui-replay" || reason === "wrong-retry" || reason === "sango-fish-swap";
+  if (
+    itemId &&
+    final1SeededItemId === itemId &&
+    final1SpeakKickAt &&
+    Date.now() - final1SpeakKickAt < 8000 &&
+    !replay
+  ) {
+    return false;
+  }
   const remaining = final1RemainingCount();
-  const lead =
-    remaining === 1
-      ? "Yes! This is the last question! さいごの もんだいだよ！ "
-      : "You got it! せいかい！ ";
-  const script = `${lead}${cue}`;
+  const script = final1QuestionScript(item, { last: remaining === 1 });
+  const audible = final1AudibleScript(item, { last: remaining === 1 });
+  final1SpeakKickAt = Date.now();
+  seedFinal1QuestionBubble(script, itemId);
   const outbound =
     "[FINAL1] NEXT CUE. Speak exactly the text between <exact> tags as your complete audible turn, once. " +
-    "Do not add a second question. Then WAIT for the 4-button tap.\n" +
-    `<exact>${script}</exact>`;
+    "This is the ONLY question. Do not repeat the previous question. Do not add a second question. Then WAIT for the 4-button tap.\n" +
+    `<exact>${audible}</exact>`;
+  try {
+    audioPlayer?.interrupt?.();
+    closeOpenAudioTurn();
+  } catch {
+    // ignore
+  }
   dbg("force final1 next cue", { reason, cue: cue.slice(0, 32), remaining });
   return sendClientText(withFinal1ExactSpeakRule(outbound), { force: true });
 }
@@ -3388,6 +3532,7 @@ function final1AssistantPraiseOnly(text = "") {
 
 function maybeFinal1PraiseOnlyNudge() {
   if (getCurrentSegment()?.id !== "final1") return;
+  if (final1DisplayLocked) return;
   const assistant = lastAssistantText();
   if (!final1AssistantPraiseOnly(assistant)) return;
   const user = lastPendingUserText || recentUserMessages(1)[0] || "";
@@ -3418,8 +3563,17 @@ function maybeFinal1CoachNudge() {
 
   // Finished quiz must advance even if Learny invented another はえいごで？ cue.
   if (isFinal1QuizFinished()) {
+    final1DisplayLocked = false;
     const doneQuote = String(user || lastPendingUserText || "final challenge done").trim();
     if (maybeCompleteFinal1FromClient(doneQuote)) return;
+  }
+
+  if (
+    final1DisplayLocked &&
+    getCurrentFinal1Item() &&
+    final1LiveMatchesCurrentCue(final1SeededScript)
+  ) {
+    return;
   }
 
   let next = currentFinal1Prompt();
@@ -3679,8 +3833,8 @@ function handleFinal1ChoiceClick(label) {
     return;
   }
 
-  const coach = buildFinal1OutboundCoach(label);
-  dispatchChildTurn(label, coach || buildMcqWrongRetryCoach(), {
+  const coach = buildMcqWrongRetryCoach();
+  dispatchChildTurn(label, coach, {
     mode: "final1",
   });
 
@@ -6284,6 +6438,7 @@ function runPostTurnCoachNudges() {
   maybeSystemBackendLeakNudge();
   maybeElicitEigoSkipNudge();
   maybeQuiz1ExactSpeakNudge();
+  maybeSangoFishSwapNudge();
   maybePart2Ch1Beat1ExactSpeakNudge();
   maybePart2HandoffOpeningExactSpeakNudge();
   maybeWarmupHomeworkLeakNudge();
@@ -7006,6 +7161,35 @@ function maybeQuiz1ExactSpeakNudge() {
     forceQuiz1ExactSpeak("mangled-repair", { item: cur });
     dbg("quiz1 exact speak repair", key);
   }, "quiz1-exact");
+}
+
+let sangoFishSwapForceAt = 0;
+
+/** Re-speak when Live substitutes おさかな for the coral cue さんご. */
+function maybeSangoFishSwapNudge() {
+  const heard = String(lastAssistantText() || "").replace(/\s/g, "");
+  if (!/おさかながすき|おさかながすき！/.test(heard)) return;
+  if (/さ・ん・ご|さんご/.test(heard)) return;
+  if (sangoFishSwapForceAt && Date.now() - sangoFishSwapForceAt < 12000) return;
+  const seg = getCurrentSegment();
+  if (!seg) return;
+  const expectsCoral = /さんご/.test(getActiveMcqQuestionScript(seg));
+  if (!expectsCoral) return;
+  sangoFishSwapForceAt = Date.now();
+  whenAssistantIdle(() => {
+    if (getCurrentSegment()?.id !== seg.id) return;
+    if (!/さんご/.test(getActiveMcqQuestionScript())) return;
+    try {
+      audioPlayer?.interrupt?.();
+      closeOpenAudioTurn();
+    } catch {
+      // ignore
+    }
+    if (seg.id === "final1") forceFinal1NextCueSpeak("sango-fish-swap");
+    else if (seg.id === "quiz1") forceQuiz1ExactSpeak("sango-fish-swap");
+    else forceMcqQuestionExactReplay("sango-fish-swap");
+    dbg("sango fish-swap repair", seg.id);
+  }, "sango-fish-swap");
 }
 
 /** Part 2 Ch1 Beat 1 must match learnie_aquarium_quest_part2.md word-for-word. */
@@ -7973,7 +8157,7 @@ function withSegmentSpeakRule(outbound, segmentId = getCurrentSegment()?.id) {
  * let Live drop the 「cue」 (kids heard くいずたいむ！は英語で？).
  */
 function withQuizExactSpeakRule(outbound) {
-  const body = String(outbound || "").trim();
+  const body = lockSangoExactSpeak(String(outbound || "").trim());
   if (!body) return body;
   if (/^\[QUIZ\]/i.test(body)) return body;
   return (
@@ -8034,9 +8218,29 @@ function withCh4ExactSpeakRule(outbound) {
   );
 }
 
+/**
+ * Live often speaks このおさかながすき for the coral cue 「このさんごがすき」.
+ * Mora-separate さんご in the audible script and forbid the fish substitution.
+ */
+function lockSangoExactSpeak(body) {
+  const raw = String(body || "");
+  if (!/さんご/.test(raw)) return raw;
+  const spoken = raw.replace(/さんご/g, "さ・ん・ご");
+  const guard =
+    " PRONUNCIATION LOCK: さ・ん・ご is coral (sa-n-go). Speak さ・ん・ご. " +
+    "FORBIDDEN: おさかな / このおさかながすき / saying fish instead of coral. ";
+  if (/^\[(FINAL1|QUIZ|MCQ|CH4)\]/i.test(spoken)) {
+    return spoken.replace(
+      /^\[(FINAL1|QUIZ|MCQ|CH4)\]/i,
+      (tag) => `${tag}${guard}`
+    );
+  }
+  return `${guard}${spoken}`;
+}
+
 /** Final challenge open — same exact-speak guard as Ch4 / Quiz1. */
 function withFinal1ExactSpeakRule(outbound) {
-  const body = String(outbound || "").trim();
+  const body = lockSangoExactSpeak(String(outbound || "").trim());
   if (!body) return body;
   if (/^\[FINAL1\]/i.test(body)) return body;
   return (
@@ -8554,15 +8758,20 @@ function buildMcqSpeakCoach(beat) {
     ? " Inside 「」 pronounce これ・を・えらぶ (kore wo erabu) mora by mora. " +
       "FORBIDDEN: ここに えらぶ / ここにえらぶ / ここにをえらぶ — that is a different wrong phrase."
     : "";
+  const sangoGuard = /さんご/.test(ja)
+    ? " Pronounce さ・ん・ご (coral, sa-n-go). FORBIDDEN: おさかな / このおさかながすき. "
+    : "";
+  const jaSpeak = ja.replace(/さんご/g, "さ・ん・ご");
   if (isVoiceOnlyLesson()) {
     return (
       "Speak EXACTLY once: " +
       en +
       " then <exact>" +
-      ja +
+      jaSpeak +
       "</exact>." +
       eigoGuard +
       koreWoGuard +
+      sangoGuard +
       " Then " +
       intermediateAnswerWaitHint() +
       " Do not reveal the answer. Do not list multiple-choice options aloud."
@@ -8573,10 +8782,11 @@ function buildMcqSpeakCoach(beat) {
     "Speak EXACTLY once: " +
     en +
     " then <exact>" +
-    ja +
+    jaSpeak +
     "</exact>." +
     eigoGuard +
     koreWoGuard +
+    sangoGuard +
     " Then WAIT for a 4-button tap (" +
     choices +
     "). Do not reveal the English answer phrase. Do not skip えいごを."
@@ -9131,7 +9341,7 @@ function getActiveMcqQuestionScript(segment = getCurrentSegment()) {
 
 /** Part 2 / story MCQ: bilingual exact speak (never Japanese-only quiz rule). */
 function withPart2McqExactSpeakRule(outbound) {
-  const body = String(outbound || "").trim();
+  const body = lockSangoExactSpeak(String(outbound || "").trim());
   if (!body) return body;
   const koreWoGuard = /これ\s*を\s*えらぶ/.test(body)
     ? " Inside 「」 say これ・を・えらぶ (kore wo). FORBIDDEN: ここに えらぶ / ここにえらぶ. "
@@ -10120,6 +10330,30 @@ function applyAssistantTranscriptChunk(chunk, { finished = false } = {}) {
     (ch4MakeTellDisplayLocked || ch4MakeTellStaticPending)
   ) {
     ensureCh4MakeTellBubbleExact();
+    scheduleRenderChat();
+    updateLearnyThinkingUI();
+    return true;
+  }
+
+  // Final challenge display is the queued question. Live STT must not replace it
+  // with a different phrase or a second copy of the previous question.
+  if (getCurrentSegment()?.id === "final1" && final1DisplayLocked) {
+    ensureFinal1BubbleExact();
+    if (c && final1SttConflictsWithCurrentCue(c)) {
+      const now = Date.now();
+      if (!final1MismatchRepairAt || now - final1MismatchRepairAt > 12000) {
+        final1MismatchRepairAt = now;
+        dbg("final1 spoken cue mismatch", c.slice(0, 48));
+        try {
+          audioPlayer?.interrupt?.();
+          closeOpenAudioTurn();
+        } catch {
+          // ignore
+        }
+        final1SpeakKickAt = 0;
+        forceFinal1NextCueSpeak("sango-fish-swap");
+      }
+    }
     scheduleRenderChat();
     updateLearnyThinkingUI();
     return true;
@@ -11945,6 +12179,10 @@ function addMessage(text, type, mode = "new") {
   const storedType = fromMic ? "user" : type;
   if (storedType === "assistant" && isMetaAssistantLeak(t)) {
     dbg("drop meta assistant leak", t.slice(0, 64));
+    return;
+  }
+  if (storedType === "assistant" && final1DisplayLocked && getCurrentSegment()?.id === "final1") {
+    ensureFinal1BubbleExact();
     return;
   }
   if (emptyState) emptyState.style.display = "none";
