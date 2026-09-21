@@ -25,7 +25,10 @@ assert.match(voice, /withSegmentSpeakRule/);
 assert.match(voice, /const daily1Phase = segmentId === "daily1"/);
 assert.match(voice, /segId === "daily1" \? 160/);
 assert.match(voice, /isDaily1ShortAck[\s\S]*かわいい/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
+assert.match(voice, /function daily1BridgeTurnHasExtraQuestion/);
+assert.match(voice, /function daily1BridgeAwaitingChildReply/);
+assert.match(voice, /daily1 bridge awaiting child reply; hold Chapter 5/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260921-ending-autostart/);
 
 const lesson = getActiveLesson();
 const idx = lesson.segments.findIndex((segment) => segment.id === "daily1");

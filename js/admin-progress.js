@@ -18,7 +18,7 @@ import {
   FAMILY_LABELS_JA,
   BADGE_FAMILIES,
   familySlotImage,
-} from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./badge-engine.js?v=20260919-part2-badges";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },

@@ -23,7 +23,12 @@ assert.match(engine, /during warmup\/chat NEVER append homework/);
 assert.match(voice, /function assistantWarmupHomeworkLeak/);
 assert.match(voice, /function maybeWarmupHomeworkLeakNudge/);
 assert.match(voice, /maybeWarmupHomeworkLeakNudge\(\)/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
+assert.match(voice, /usesBeginnerHomeworkArchitecture\(\)/);
+assert.match(
+  voice,
+  /Do you remember the aquarium you made in Minecraft\? Let's remember it together!/
+);
+assert.match(voiceTab, /homework-voice\.js\?v=/);
 
 const lesson = getActiveLesson();
 const warmupIdx = lesson.segments.findIndex(

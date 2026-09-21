@@ -11,15 +11,18 @@
 
 ## 画面・入力のルール（実装どおり）
 
-| **項目** | **内容**                                         |
-| ------ | ---------------------------------------------- |
-| メイン入力  | **4択ボタン**（テキスト／マイクは補助）                         |
-| マイク    | **デフォルト OFF（ミュート）**                            |
-| 4択の並び  | **毎回ランダム**（正解が常に左上にならない）                       |
-| 不正解    | `おしい！もういちど！` — **正解は言わない**。同じビートの4択を再表示        |
-| バッジ    | Part 2 では付与オフ（表示は 0/0）                         |
-| 章のつなぎ  | 「つぎの章へ…」ローディング。**Learny が次章の発話を始めるまで 4択は出さない** |
-| 自由会話中  | **4択を隠す**。MCQ に戻ったら **また表示**                   |
+
+| **項目** | **内容**                                           |
+| ------ | ------------------------------------------------ |
+| メイン入力  | **4択ボタン**（テキスト／マイクは補助）                           |
+| マイク    | **デフォルト OFF（ミュート）**                              |
+| 4択の並び  | **毎回ランダム**（正解が常に左上にならない）                         |
+| 不正解    | ランダムなソフトリトライ（例: `Nice try!` / `So close!` / `Oops!` / `ざんねん！` / `ちがうみたい！`）— **同じ文を毎回繰り返さない**。**正解は言わない**。同じビートの4択を再表示 |
+| バッジ    | チャプター／フリートーク／いっぱつせいかい。**Endingの英語返答：3回=ゴールド / 2回=シルバー / 1回=ブロンズ** |
+| 章のつなぎ  | 「つぎの章へ…」ローディング。**Learny が次章の発話を始めるまで 4択は出さない**   |
+| 自由会話中  | **4択を隠す**。MCQ に戻ったら **また表示**                     |
+
+
 
 | **区間**          | **4択ボタン**          |
 | --------------- | ------------------ |
@@ -30,10 +33,11 @@
 | Mini quiz 1     | **あり**             |
 | Chapter 4       | **あり**             |
 | DAILY ENGLISH   | **なし（自由会話）**       |
-| Chapter 5       | **最初のみなし → その後あり** |
+| Chapter 5       | **A1は数字のみなし / A2以降あり** |
 | Chapter 6       | **あり**             |
 | Final Challenge | **あり**             |
-| Ending          | **なし（会話ビート）**      |
+| Ending          | **なし（3ターン・各ターン後に待つ→最終返答後に自動切断）** |
+
 
 - **正解** → 次のビート（章の最後なら次の章へ）
 - 回答ログ（正解/不正解・選択肢・回数）は管理画面の学習進捗に集計
@@ -45,44 +49,28 @@
 ### Learny
 
 1. `Hello! How are you today?`
-   `こんにちは！きょうは どうですか？`
-
+  `こんにちは！きょうは どうですか？`
    ※ How are you を同じターンで繰り返さない
-
-
 2. （気分の返事のあと — **この質問固定**）
-
-   `That's great! What did you do today?`
+  `That's great! What did you do today?`
    `よかった！きょうは なにを したの？`
-
    ※気分の答えに `Thank you` / `ありがとう` は使わない
    ※別の日常質問に差し替えない
-
-
 3. 子どもが具体的な話をしたら、その話に触れてから質問する。
-
-   例：
-
+  例：
    `Minecraft! That sounds fun! What did you do?`
    `まいんくらふと！たのしそう！なにを したの？`
-
    ※同じ質問を繰り返さない
-
-
 4. `no` / `nothing` / `とくにない` のとき：
-
-   `Okay!` / `そっか！だいじょうぶ！`
-
+  `Okay!` / `そっか！だいじょうぶ！`
    → 質問は1つだけ追加してよい。
-
-
-5. 3ターン前後の会話のあと：
-
-   `Okay! Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together!`
-   `そっか！そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！`
-
-
-6. 子どもが yes / うん / おぼえてる
+5. 3ターン前後の会話のあと（**子どもの直前の言葉に短い reaction をつけてから**）:
+  例：`Grape cake! Yum!` / `グレープケーキ！おいしそう！`
+  そのあと固定スクリプト:
+  `Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together!`
+   `そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！`
+   ※ `Oh!` / `Okay!` だけでは reaction にならない。子どもの内容（grape など）に触れてから招待する。
+6. 子どもの返事は **なんでもOK**（yes / うん / おぼえてる / no / ok / なにでも）
 
 → **Chapter 1 へ**
 
@@ -92,7 +80,7 @@
 
 ## Beat 1 — I put kelp here.
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ** / reaction なし）
 
 ```
 Let's remember how you decorated your tank!
@@ -113,7 +101,7 @@ Let's remember how you decorated your tank!
 
 ## Beat 2 — I put coral here.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about coral?
@@ -133,11 +121,12 @@ How about coral?
 
 ## Beat 3 — I choose this one.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You had different decorations!
-「これを えらぶ」の えいごを 選んでね！
+「これ を えらぶ」の えいごを 選んでね！
+※ 音声は これ・を（kore wo）。「ここに えらぶ」は禁止。
 ```
 
 **4択：**
@@ -153,7 +142,7 @@ You had different decorations!
 
 ## Beat 4 — I like this coral.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You found coral you liked!
@@ -173,7 +162,7 @@ You found coral you liked!
 
 ## Beat 5 — It looks cool!
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 Your tank looked great!
@@ -189,11 +178,14 @@ Your tank looked great!
 
 → **正解：It looks cool!**
 → **Chapter 2 へ**
-**不正解時共通：**
+**不正解時共通：**（毎回ちがう言い方にする — 固定の Almost! だけを繰り返さない）
 
 ```
-Almost! Try again!
-おしい！もういちど！
+Nice try! Not quite — try again! / おしい！ちがうよ。もういちど！
+So close! One more try! / おしい！もう すこし！
+Hmm, not that one. / ん〜、ちがうみたい。
+Oops! Try a different one! / おっと！べつの のを！
+That's okay! Try once more! / だいじょうぶ！もういちど！
 ```
 
 ※答えは言わない
@@ -204,7 +196,7 @@ Almost! Try again!
 
 ## Beat 1 — Let's go to the ocean!
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ** / reaction なし）
 
 ```
 Do you remember going to find fish?
@@ -224,7 +216,7 @@ Do you remember going to find fish?
 
 ## Beat 2 — I found a fish!
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You found a fish!
@@ -244,7 +236,7 @@ You found a fish!
 
 ## Beat 3 — I found a blue fish!
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You found a blue fish!
@@ -264,7 +256,7 @@ You found a blue fish!
 
 ## Beat 4 — I want this fish.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You found a fish you wanted!
@@ -284,7 +276,7 @@ You found a fish you wanted!
 
 ## Beat 5 — I choose this fish.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You decided which fish you wanted!
@@ -307,7 +299,7 @@ You decided which fish you wanted!
 
 ## Beat 1 — I caught a fish!
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ** / reaction なし）
 
 ```
 You caught the fish with a bucket!
@@ -327,7 +319,7 @@ You caught the fish with a bucket!
 
 ## Beat 2 — I have a fish!
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 Now you have the fish!
@@ -350,9 +342,11 @@ Now you have the fish!
 
 Learny は**にほんご ひらがなのみ**。
 英語の選択肢は読み上げない。
-並びはランダム。
+固定順（ランダムにしない）。
 
 ### Q1
+
+**Learny:**（クイズ開始 — **スクリプトのみ**）
 
 ```
 くいずたいむ！「ここに さんごを おいた」は えいごで？
@@ -371,6 +365,8 @@ Learny は**にほんご ひらがなのみ**。
 
 ### Q2
 
+**Learny:**（正解のあと = **reaction + 正解英語を一度** + 下のスクリプト）
+
 ```
 じゃあ つぎは「この おさかなが ほしい」は えいごで？
 ```
@@ -387,6 +383,8 @@ Learny は**にほんご ひらがなのみ**。
 ---
 
 ### Q3
+
+**Learny:**（正解のあと = **reaction + 正解英語を一度** + 下のスクリプト）
 
 ```
 じゃあ つぎは「おさかなを つかまえた！」は えいごで？
@@ -408,7 +406,7 @@ Learny は**にほんご ひらがなのみ**。
 
 ## Beat 1 — I put the fish in the tank.
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ** / reaction なし）
 
 ```
 You caught the fish. What did you do next?
@@ -428,7 +426,7 @@ You caught the fish. What did you do next?
 
 ## Beat 2 — I put it in here.
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about "ここに いれた"?
@@ -448,7 +446,7 @@ How about "ここに いれた"?
 
 ## Beat 3 — Look! There's a fish!
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You looked in the tank and saw a fish!
@@ -515,42 +513,35 @@ Nice! Now let's get back to your aquarium!
 
 ---
 
-# CHAPTER 5 — 魚は何匹いた？（混合）
+# CHAPTER 5 — 魚は何匹いた？（数タップ → MCQ）
 
-※このChapterのみ、**自由回答 → 回答を4択に反映**する。
+※このChapterのみ、**選んだ数字を次の4択に反映**する。
 
-## Beat A1 — 魚の数を思い出す（ボタンなし）
+## Beat A1 — 魚の数を選ぶ（1〜10・ボタン）
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ**）
 
 ```
 Do you remember how many fish were in your tank?
 すいそうに おさかなが なんびき いたか おぼえてる？
 ```
 
-→ 子どもの回答を `fishCount` として記録
+→ 画面に **1〜10** の数字ボタン（**選択肢のプリメイド音声なし**）
 
 例：
 
-**Child：** `4`
+**Child：** `4` をタップ
 
 → `fishCount = 4`
-「よんひき」「4匹」なども4として認識してよい。
-覚えていない場合：
-
-```
-That's okay! About how many do you think there were?
-だいじょうぶ！だいたい なんびき くらいだったと おもう？
-```
-
-※ここでは4択を表示しない
 
 ---
 
 ## Beat A2 — その数字でフレーズを作る（4択）
 
+※1〜10のフレーズはプリメイド音声あり（動的に差し替え）
+
 例：`fishCount = 4`
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 You had four fish!
@@ -593,7 +584,7 @@ There is one fish.
 
 ## Beat A3 — There are three fish.（4択）
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about three fish?
@@ -613,7 +604,7 @@ How about three fish?
 
 ## Beat A4 — There are five fish.（4択）
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about five fish?
@@ -636,7 +627,7 @@ How about five fish?
 
 ## Beat 1 — What color did you choose?
 
-**Learny:**
+**Learny:**（チャプター開始 — **スクリプトのみ** / reaction なし）
 
 ```
 Your teacher may ask this question!
@@ -656,7 +647,7 @@ Your teacher may ask this question!
 
 ## Beat 2 — What fish did you choose?
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about this one?
@@ -676,7 +667,7 @@ How about this one?
 
 ## Beat 3 — How many fish are in your tank?
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 Your teacher might ask about the number of fish!
@@ -696,7 +687,7 @@ Your teacher might ask about the number of fish!
 
 ## Beat 4 — What do you like about your aquarium?
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 How about this question?
@@ -716,7 +707,7 @@ How about this question?
 
 ## Beat 5 — Do you like your aquarium?
 
-**Learny:**
+**Learny:**（正解のあと = **reaction +** 下のスクリプト）
 
 ```
 Last one!
@@ -744,7 +735,7 @@ Final challenge time! Let's go!
 さいごの ちゃれんじだよ！れっつごー！
 ```
 
-→ すぐ第1問へ
+→ すぐ第1問へ（同じターン）
 
 **禁止：**
 
@@ -755,11 +746,12 @@ Are you ready?
 
 各問は「〜は えいごで？」＋画面4択。
 
+
 | **日本語キュー**      | **正解**                      |
 | --------------- | --------------------------- |
 | ここに こんぶを おいた    | I put kelp here.            |
 | ここに さんごを おいた    | I put coral here.           |
-| これを えらぶ         | I choose this one.          |
+| これ を えらぶ         | I choose this one.          |
 | この さんごが すき      | I like this coral.          |
 | かっこいい！          | It looks cool!              |
 | うみに いこう！        | Let's go to the ocean!      |
@@ -775,13 +767,14 @@ Are you ready?
 | おさかなが 3びき いる    | There are three fish.       |
 | おさかなが 5ひき いる    | There are five fish.        |
 
-**ランダム5〜6問。**
 
-不正解：
+**上のリストからランダムに 5〜6問。**
+
+不正解：（毎回ちがう言い方 — 固定の Almost! / おしい！もういちど！だけを繰り返さない）
 
 ```
-Almost! Try again!
-おしい！もういちど！
+Nice try! / So close! / Oops! / Good try! / That's okay!
+おしい！ちがうよ！ / ざんねん！ / ちがうみたい！ / おっと！ / だいじょうぶ！
 ```
 
 正解は言わない。
@@ -796,40 +789,37 @@ Almost! Try again!
 
 ---
 
-# ENDING — 水族館を思い出せた！（ボタンなし）
+# ENDING — 水族館を思い出せた！（Part 1 と同じ構造）
 
-**話しは3ターンだけ。**
+**構造：** イントロ（固定）→ **フリートーク** → 「終わりにする」→ フィナーレ（固定）→ 自動切断  
+**フリートークバッジ：** このEndingで英語で答えた回数 → 3回=ゴールド / 2回=シルバー / 1回=ブロンズ
 
-### ターンA
+### ターンA / イントロ（反応なし・固定スクリプト・1メッセージ）
 
 ```
 Perfect! You remembered a lot about your aquarium!
 ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！
 You remembered the decorations and the fish too!
 かざりも おさかなも おもいだせたね！
-```
-
----
-
-### ターンB
-
-```
 Your teacher might ask you some of the same questions next time!
 つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！
 You'll be ready!
 これで ばっちりだね！
 ```
 
+→ **WAIT** → **フリートーク**（子どもの話題についていく。終わりに誘導しない）  
+→ 画面の **「終わりにする」** ボタンでのみフィナーレへ
+
 ---
 
-### ターンC
+### ターンC / フィナーレ（「終わりにする」のあとだけ）
 
 ```
 If you play Minecraft again, try using today's English too! See you next time!
-つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！また ね！
+つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！
 ```
 
-→ **終わったら自動切断**
+→ **自動切断**
 
 ---
 
@@ -845,9 +835,8 @@ If you play Minecraft again, try using today's English too! See you next time!
 
 Chapter 5では追加で：
 
-- `fishCount`
-- 魚の数の自由回答
-- その回答を使った4択の正誤
+- `fishCount`（A1の1〜10タップ）
+- その数字を使った A2 4択の正誤
 
 集計：
 
@@ -856,3 +845,4 @@ Chapter 5では追加で：
 - 総回答数
 - 再挑戦回数
 - アクティビティタイムラインに「4択正解」「4択不正解」
+

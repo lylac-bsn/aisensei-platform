@@ -4,7 +4,7 @@
 export const PART2_ELICIT_JA = {
   ch1PutKelp: "「ここに こんぶを おいた」の えいごを 選んでね！",
   ch1PutCoral: "「ここに さんごを おいた」の えいごを 選んでね！",
-  ch1ChooseThis: "「これを えらぶ」の えいごを 選んでね！",
+  ch1ChooseThis: "「これ を えらぶ」の えいごを 選んでね！",
   ch1LikeCoral: "「この さんごが すき」の えいごを 選んでね！",
   ch1LooksCool: "「かっこいい！」の えいごを 選んでね！",
   ch2GoOcean: "「うみに いこう！」の えいごを 選んでね！",
@@ -17,10 +17,63 @@ export const PART2_ELICIT_JA = {
   ch4PutInTank: "「おさかなを すいそうに いれた」の えいごを 選んでね！",
   ch4PutItHere: "「ここに いれた」の えいごを 選んでね！",
   ch4LookFish: "「みて！おさかなが いる！」の えいごを 選んでね！",
-  ch5FishCount: "「おさかなが [N]ひき いる」の えいごを 選んでね！",
+  ch5FishCountAsk: "すいそうに おさかなが なんびき いたか おぼえてる？",
+  ch5FishCount: "「おさかなが [fishCount]ひき いる」の えいごを 選んでね！",
   ch5ThreeFish: "「おさかなが 3びき いる」の えいごを 選んでね！",
   ch5FiveFish: "「おさかなが 5ひき いる」の えいごを 選んでね！",
 };
+
+/** Chapter 1 Beat 1 — word-for-word from learnie_aquarium_quest_part2.md */
+export const PART2_CH1_BEAT1_SPEAK =
+  "Let's remember how you decorated your tank! " + PART2_ELICIT_JA.ch1PutKelp;
+
+/** Chapter 2 Beat 1 — word-for-word from learnie_aquarium_quest_part2.md */
+export const PART2_CH2_BEAT1_SPEAK =
+  "Do you remember going to find fish? " + PART2_ELICIT_JA.ch2GoOcean;
+
+/** Chapter 3 Beat 1 — word-for-word from learnie_aquarium_quest_part2.md */
+export const PART2_CH3_BEAT1_SPEAK =
+  "You caught the fish with a bucket! " + PART2_ELICIT_JA.ch3CaughtFish;
+
+/** Chapter 4 Beat 1 — word-for-word from learnie_aquarium_quest_part2.md */
+export const PART2_CH4_BEAT1_SPEAK =
+  "You caught the fish. What did you do next? " + PART2_ELICIT_JA.ch4PutInTank;
+
+/** Chapter 5 Beat A1 — fish-count number picker (1–10). */
+export const PART2_CH5_BEAT1_SPEAK =
+  "Do you remember how many fish were in your tank? " + PART2_ELICIT_JA.ch5FishCountAsk;
+
+/** Chapter 6 Beat 1 — teacher-question recognition (は どれ？) */
+export const PART2_CH6_BEAT1_SPEAK =
+  "Your teacher may ask this question! 「なにいろを えらびましたか？」は どれ？";
+
+/** Ending intro — one combined Turn A (then free talk until 終わりにする). */
+export const PART2_ENDING_INTRO_SPEAK =
+  "Perfect! You remembered a lot about your aquarium! ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ " +
+  "You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ " +
+  "Your teacher might ask you some of the same questions next time! " +
+  "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
+  "You'll be ready! これで ばっちりだね！";
+
+/** Ending finale — only after 終わりにする. */
+export const PART2_ENDING_FINALE_SPEAK =
+  "If you play Minecraft again, try using today's English too! See you next time! " +
+  "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！";
+
+/** @deprecated Use PART2_ENDING_INTRO_SPEAK */
+export const PART2_ENDING_TURN_A_SPEAK = PART2_ENDING_INTRO_SPEAK;
+/** @deprecated Intro now includes former Turn B */
+export const PART2_ENDING_TURN_B_SPEAK = "";
+/** @deprecated Use PART2_ENDING_FINALE_SPEAK */
+export const PART2_ENDING_TURN_C_SPEAK = PART2_ENDING_FINALE_SPEAK;
+
+/** Join mcq beat EN lead + Japanese elicit exactly (no paraphrase). */
+export function part2McqBeatSpeak(beat) {
+  const en = String(beat?.learnyEn || "").trim();
+  const ja = String(beat?.learnyJa || "").trim();
+  if (en && ja) return `${en} ${ja}`;
+  return en || ja || "";
+}
 
 export const AQUARIUM_PART2 = {
   id: "part2",
@@ -34,7 +87,80 @@ export const AQUARIUM_PART2 = {
   weekNote: "Week 3 homework — review decorations → find fish → catch fish → put fish in tank.",
   stopRule:
     "This lesson INCLUDES fish. Decorations + fish are part of Part 2.",
-  badges: [],
+  badges: [
+    {
+      id: "p2_chapter_bronze",
+      family: "chapter",
+      tier: "bronze",
+      label: "チャプター ブロンズ",
+      desc: "Chapter 0 をクリア",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p2_chapter_silver",
+      family: "chapter",
+      tier: "silver",
+      label: "チャプター シルバー",
+      desc: "ミニクイズ1までクリア",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p2_chapter_gold",
+      family: "chapter",
+      tier: "gold",
+      label: "チャプター ゴールド",
+      desc: "Part 2 をさいごまでクリア",
+      image: "images/completion-badge-gold.png",
+    },
+    {
+      id: "p2_freetalk_bronze",
+      family: "freetalk",
+      tier: "bronze",
+      label: "フリートーク ブロンズ",
+      desc: "おしまいで英語を1文はなした",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p2_freetalk_silver",
+      family: "freetalk",
+      tier: "silver",
+      label: "フリートーク シルバー",
+      desc: "おしまいで英語を2文はなした",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p2_freetalk_gold",
+      family: "freetalk",
+      tier: "gold",
+      label: "フリートーク ゴールド",
+      desc: "おしまいで英語を3文はなした",
+      image: "images/completion-badge-gold.png",
+    },
+    {
+      id: "p2_accuracy_bronze",
+      family: "accuracy",
+      tier: "bronze",
+      label: "いっぱつせいかい ブロンズ",
+      desc: "4択をさいしょの1かいで正解できた数が50%より上",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p2_accuracy_silver",
+      family: "accuracy",
+      tier: "silver",
+      label: "いっぱつせいかい シルバー",
+      desc: "4択をさいしょの1かいで正解できた数が75%より上",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p2_accuracy_gold",
+      family: "accuracy",
+      tier: "gold",
+      label: "いっぱつせいかい ゴールド",
+      desc: "4択をぜんぶさいしょの1かいで正解できた",
+      image: "images/completion-badge-gold.png",
+    },
+  ],
   memories: ["fishCount"],
   segments: [
     {
@@ -49,12 +175,15 @@ export const AQUARIUM_PART2 = {
         "What time is it?",
       ],
       coach:
-        "Natural human chat, not a quiz and not a robot. Opening ONCE: Hello! How are you today? こんにちは！きょうは どうですか？ — never say How are you twice. " +
-        "ONE question per turn — always WAIT. After mood (good/fine/ok): That's great! What did you do today? よかった！きょうは なにを したの？ — NOT Thank you. " +
-        "After 3+ real chat exchanges, ONE invite turn: warm short reaction to their last line + Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! — " +
-        "e.g. Okay! Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! " +
-        "そっか！そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！ " +
-        "After the invite, ANY child reply (yes/no/ok/anything) → call complete_segment(ch0) immediately.",
+        "CHAPTER 0 — prioritize natural everyday chat over reading a rigid script. Direct them gently to the ending invite after ~3 exchanges. " +
+        "Flow: (1) Opening ONCE: Hello! How are you today? こんにちは！きょうは どうですか？ — never How are you twice. WAIT. " +
+        "(2) After mood: reaction + What did you do today? よかった！きょうは なにを したの？ — NOT Thank you; do not swap for lunch/hungry. " +
+        "(3) After they share something: reaction to THEIR words + ONE different follow-up — never repeat the same question. " +
+        "If no/nothing/とくにない: Okay! / そっか！ + at most ONE different question. " +
+        "(4) After ~3 chat turns, ending invite: short reaction that NAMES their last words, THEN EXACTLY: Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! " +
+        "そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！ " +
+        "FORBIDDEN: bare Oh!/Okay!/そっか with no reaction (e.g. after grape → react to grape cake first). " +
+        "(5) ANY child reply after that invite (yes/no/ok/anything) → call complete_segment(ch0) immediately → Chapter 1.",
       completeWithoutEnglish: true,
     },
     {
@@ -114,11 +243,16 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "CHAPTER 1 — use on-screen 4-choice buttons. One beat at a time. " +
-        "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
-        "For phrase elicits use Japanese cue inside 「」 — do NOT say the English answer aloud. " +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
-        "After It looks cool! correct: complete_segment(ch1) → Chapter 2.",
+        "CHAPTER 1 — on-screen 4-choice. ONE beat per turn. FORBIDDEN: reveal the English answer aloud. " +
+        `Beat 1 (opening, no praise prefix) EXACT: ${PART2_CH1_BEAT1_SPEAK} Then WAIT. ` +
+        `Beat 2 after correct: short reaction + EXACT How about coral? ${PART2_ELICIT_JA.ch1PutCoral} Then WAIT. ` +
+        `Beat 3 after correct: short reaction + EXACT You had different decorations! ${PART2_ELICIT_JA.ch1ChooseThis} Then WAIT. ` +
+        "Beat 3 CRITICAL AUDIO: inside 「」 say これ・を・えらぶ (kore wo). FORBIDDEN: ここに えらぶ / ここにえらぶ. " +
+        `Beat 4 after correct: short reaction + EXACT You found coral you liked! ${PART2_ELICIT_JA.ch1LikeCoral} Then WAIT. ` +
+        `Beat 5 after correct: short reaction + EXACT Your tank looked great! ${PART2_ELICIT_JA.ch1LooksCool} Then WAIT. ` +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After It looks cool! is correct: complete_segment(ch1) immediately → Chapter 2. " +
+        "FORBIDDEN: complete_segment before Beat 5; jump to うみに いこう / fish before all 5 beats.",
     },
     {
       id: "ch2",
@@ -177,11 +311,15 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "CHAPTER 2 — use on-screen 4-choice buttons. One beat at a time. " +
-        "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
-        "For phrase elicits use Japanese cue inside 「」 — do NOT say the English answer aloud. " +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
-        "After I choose this fish. correct: complete_segment(ch2) → Chapter 3.",
+        "CHAPTER 2 — on-screen 4-choice. ONE beat per turn. FORBIDDEN: reveal the English answer aloud. " +
+        `Beat 1 (opening, no praise prefix) EXACT: ${PART2_CH2_BEAT1_SPEAK} Then WAIT. ` +
+        `Beat 2 after correct: short reaction + EXACT You found a fish! ${PART2_ELICIT_JA.ch2FoundFish} Then WAIT. ` +
+        `Beat 3 after correct: short reaction + EXACT You found a blue fish! ${PART2_ELICIT_JA.ch2BlueFish} Then WAIT. ` +
+        `Beat 4 after correct: short reaction + EXACT You found a fish you wanted! ${PART2_ELICIT_JA.ch2WantFish} Then WAIT. ` +
+        `Beat 5 after correct: short reaction + EXACT You decided which fish you wanted! ${PART2_ELICIT_JA.ch2ChooseFish} Then WAIT. ` +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After I choose this fish. is correct: complete_segment(ch2) immediately → Chapter 3. " +
+        "FORBIDDEN: complete_segment before Beat 5; jump to catch/bucket / Chapter 3 before all 5 beats.",
     },
     {
       id: "ch3",
@@ -213,11 +351,12 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "CHAPTER 3 — use on-screen 4-choice buttons. Two beats only. " +
-        "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
-        "For phrase elicits use Japanese cue inside 「」 — do NOT say the English answer aloud. " +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
-        "After I have a fish! correct: complete_segment(ch3) → Mini quiz 1.",
+        "CHAPTER 3 — on-screen 4-choice. TWO beats only. FORBIDDEN: reveal the English answer aloud. " +
+        `Beat 1 (opening, no praise prefix) EXACT: ${PART2_CH3_BEAT1_SPEAK} Then WAIT. ` +
+        `Beat 2 after correct: short reaction + EXACT Now you have the fish! ${PART2_ELICIT_JA.ch3HaveFish} Then WAIT. ` +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After I have a fish! is correct: complete_segment(ch3) immediately → Mini quiz 1. " +
+        "FORBIDDEN: complete_segment before Beat 2; jump to Mini quiz / put fish in tank before both catch beats.",
     },
     {
       id: "quiz1",
@@ -255,14 +394,14 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "MINI QUIZ 1 — 4-choice MCQ buttons. Speak FULL Japanese ひらがな only (no English-first beginner pattern). " +
-        "FIXED order, one item per turn — use each item's speak line EXACTLY word-by-word: " +
-        "(1) くいずたいむ！「ここに さんごを おいた」は えいごで？ " +
-        "(2) じゃあ つぎは「この おさかなが ほしい」は えいごで？ " +
-        "(3) じゃあ つぎは「おさかなを つかまえた！」は えいごで？ " +
-        "WAIT for a 4-button tap. Wrong: soft おしい！もういちど — do NOT reveal the answer. " +
-        "After a correct tap: ONE short varied praise + echo the CORRECT English once, then the NEXT speak line. " +
-        "After all 3 correct: complete_segment(quiz1) → Chapter 4.",
+        "MINI QUIZ 1 — 4-choice MCQ. Speak FULL Japanese ひらがな only (no English-first; do NOT read English choices aloud). " +
+        "FIXED order, exactly 3 items — use each speak line EXACTLY word-by-word: " +
+        "(1 opening, no praise) くいずたいむ！「ここに さんごを おいた」は えいごで？ → I put coral here. " +
+        "(2 after correct = reaction + echo correct English +) じゃあ つぎは「この おさかなが ほしい」は えいごで？ → I want this fish. " +
+        "(3 after correct = reaction + echo correct English +) じゃあ つぎは「おさかなを つかまえた！」は えいごで？ → I caught a fish! " +
+        "Item 1 MUST start with くいずたいむ — FORBIDDEN starting with じゃあ つぎは or skipping to item 2/3. " +
+        "WAIT for a 4-button tap. Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer; repeat the SAME speak line. " +
+        "After all 3 correct: complete_segment(quiz1) immediately → Chapter 4.",
     },
     {
       id: "ch4",
@@ -303,11 +442,13 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "CHAPTER 4 — use on-screen 4-choice buttons. Three beats. " +
-        "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
-        "For phrase elicits use Japanese cue inside 「」 — do NOT say the English answer aloud. " +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
-        "After Look! There's a fish! correct: complete_segment(ch4) → DAILY ENGLISH.",
+        "CHAPTER 4 — on-screen 4-choice. THREE beats. FORBIDDEN: reveal the English answer aloud. " +
+        `Beat 1 (opening, no praise prefix) EXACT: ${PART2_CH4_BEAT1_SPEAK} Then WAIT. ` +
+        `Beat 2 after correct: short reaction + EXACT How about "ここに いれた"? ${PART2_ELICIT_JA.ch4PutItHere} Then WAIT. ` +
+        `Beat 3 after correct: short reaction + EXACT You looked in the tank and saw a fish! ${PART2_ELICIT_JA.ch4LookFish} Then WAIT. ` +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After Look! There's a fish! is correct: complete_segment(ch4) immediately → DAILY ENGLISH. " +
+        "FORBIDDEN: complete_segment before Beat 3; jump to Daily English / fish count before all 3 beats.",
     },
     {
       id: "daily1",
@@ -322,21 +463,23 @@ export const AQUARIUM_PART2 = {
       ],
       completeWithoutEnglish: true,
       coach:
+        "PURPOSE: natural free-talk — make English learning FUN. React playfully; genuine conversation, NOT a quiz. " +
         "Start EXACTLY: Oh by the way, [name], what did you eat today? そういえば、[name]さんは きょう なにを たべたの？ " +
-        "FORBIDDEN: Let's practice today's English. At least 4 NATURAL chat rallies. " +
-        "Each turn: react to their exact words (vary the reaction), stay on their topic 1–2 turns, ask ONE follow-up about THAT, then WAIT. " +
+        "FORBIDDEN: Let's practice today's English. " +
+        "Then chat naturally for at least 4 rallies: fun reaction to their exact words + ONE follow-up about THAT topic, WAIT. " +
         "FORBIDDEN: re-asking facts they already answered; abrupt topic jumps with no bridge. " +
-        "Then ONE turn: FIRST short specific reaction naming their last words, " +
+        "When 4+ rallies reached: FIRST short specific reaction naming their last words, " +
         "THEN EXACTLY: Nice! Now let's get back to your aquarium! いいね！じゃあ すいぞくかんの はなしに もどろう！ " +
-        "Finish speaking before complete_segment(daily1). " +
-        "FORBIDDEN: Are you tired? / つかれた？ / favorite color.",
+        "FORBIDDEN on that turn: any new everyday question (Was it…? / だった？) — reaction + bridge ONLY. " +
+        "Finish speaking that line, then complete_segment(daily1) → Chapter 5. " +
+        "FORBIDDEN: Are you tired? / つかれた？ / favorite color; complete_segment before 4 rallies or before the bridge.",
     },
     {
       id: "ch5",
       type: "mixed",
       title: "魚は何匹いた？",
       titleEn: "How many fish?",
-      goal: "魚の数を聞いて、動的MCQ → There are [N] fish → 固定 three/five fish ビート。",
+      goal: "1〜10の数を選ぶ → There are [N] fish → three/five fish。",
       memoryKey: "fishCount",
       askFishCount: true,
       targets: [
@@ -346,10 +489,28 @@ export const AQUARIUM_PART2 = {
       ],
       mcqBeats: [
         {
+          id: "ask_fish_count",
+          learnyEn: "Do you remember how many fish were in your tank?",
+          learnyJa: PART2_ELICIT_JA.ch5FishCountAsk,
+          // Runtime picker 1–10 (not listed here so extract-mcq won't make option audio).
+          fishCountPicker: true,
+          choices: [],
+          answer: "1",
+          acceptAnyOf: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+          patterns: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+          memoryKey: "fishCount",
+          memoryFromChoice: true,
+        },
+        {
           id: "fish_count_dynamic",
           learnyEn: "You had [fishCount] fish!",
-          learnyJa: "「おさかなが [fishCount]ひき いる」の えいごを 選んでね！",
-          choices: ["There are [fishCount] fish.", "There are [fishCountMinus1] fish.", "There are [fishCountPlus1] fish.", "There is [fishCount] fish."],
+          learnyJa: PART2_ELICIT_JA.ch5FishCount,
+          choices: [
+            "There are [fishCount] fish.",
+            "There are [fishCountMinus1] fish.",
+            "There are [fishCountPlus1] fish.",
+            "There is [fishCount] fish.",
+          ],
           answer: "There are [fishCount] fish.",
           patterns: ["there are", "fish"],
           dynamicFishCount: true,
@@ -362,6 +523,7 @@ export const AQUARIUM_PART2 = {
           choices: ["There are three fish.", "There is three fish.", "I have three glass.", "I found three fish."],
           answer: "There are three fish.",
           patterns: ["there are three fish", "three fish"],
+          afterFreeAsk: true,
         },
         {
           id: "five_fish",
@@ -370,21 +532,21 @@ export const AQUARIUM_PART2 = {
           choices: ["There are five fish.", "There is five fish.", "I have five glass.", "I found five sand."],
           answer: "There are five fish.",
           patterns: ["there are five fish", "five fish"],
+          afterFreeAsk: true,
           completeSegmentOnCorrect: true,
         },
       ],
       coach:
-        "CHAPTER 5 — MIXED format with FREE ASK then MCQ. " +
-        "Beat A1 (NO BUTTONS): Speak EXACTLY: Do you remember how many fish were in your tank? " +
-        "すいそうに おさかなが なんびき いたか おぼえてる？ Then WAIT. " +
-        "Record their answer as fishCount (1, 2, 3, 4, 5, etc.). Accept numbers in any form. " +
-        "If they don't remember: That's okay! About how many do you think there were? " +
-        "だいじょうぶ！だいたい なんびき くらいだったと おもう？ " +
-        "After they give a number → record_memory(fishCount, N) → Beat A2 dynamic MCQ: " +
-        "Show 4 choices with their number (e.g., There are four fish.). " +
-        "If fishCount=1: correct is 'There is one fish.' — use singular. " +
-        "After correct → Beat A3: How about three fish? → Then Beat A4: How about five fish? " +
-        "After five fish correct: complete_segment(ch5) → Chapter 6.",
+        "CHAPTER 5 — number picker then MCQ. " +
+        `Beat A1 (10 number buttons 1–10, NO option audio): Speak EXACTLY: ${PART2_CH5_BEAT1_SPEAK} Then WAIT for a number tap. ` +
+        "When they tap N → record_memory(fishCount, N) → Beat A2. " +
+        "Beat A2 (dynamic MCQ using their N; option audio OK for 1–10): short reaction + EXACT You had [N] fish! " +
+        "「おさかなが [N]ひき いる」の えいごを 選んでね！ (1→There is one fish.; else There are [N] fish.). " +
+        "Beat A3 after correct: short reaction + EXACT How about three fish? " +
+        `${PART2_ELICIT_JA.ch5ThreeFish} → There are three fish. ` +
+        "Beat A4 after correct: short reaction + EXACT How about five fish? " +
+        `${PART2_ELICIT_JA.ch5FiveFish} → There are five fish. → complete_segment(ch5) → Chapter 6. ` +
+        "FORBIDDEN: inventing a count; skip A1; unlocking A2 before a number tap.",
     },
     {
       id: "ch6",
@@ -443,11 +605,16 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "CHAPTER 6 — Teacher questions as MCQ. Five beats. " +
-        "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
-        "These are QUESTION recognition beats — the child picks which English question matches the Japanese meaning. " +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
-        "After Do you like your aquarium? correct: complete_segment(ch6) → Final Challenge.",
+        "CHAPTER 6 — Teacher QUESTION recognition MCQ (child picks which English question matches the Japanese). Five beats. " +
+        "FORBIDDEN: reveal the English answer aloud; の えいごを 選んでね (use は どれ？). " +
+        `Beat 1 (opening, no praise prefix) EXACT: ${PART2_CH6_BEAT1_SPEAK} → What color did you choose? Then WAIT. ` +
+        "Beat 2 after correct: short reaction + EXACT How about this one? 「どの おさかなを えらびましたか？」は どれ？ → What fish did you choose? Then WAIT. " +
+        "Beat 3 after correct: short reaction + EXACT Your teacher might ask about the number of fish! 「すいそうに おさかなが なんびき いますか？」は どれ？ → How many fish are in your tank? Then WAIT. " +
+        "Beat 4 after correct: short reaction + EXACT How about this question? 「すいぞくかんの どんなところが すき？」は どれ？ → What do you like about your aquarium? Then WAIT. " +
+        "Beat 5 after correct: short reaction + EXACT Last one! 「じぶんの すいぞくかんが すき？」は どれ？ → Do you like your aquarium? Then WAIT. " +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After Do you like your aquarium? is correct: complete_segment(ch6) immediately → Final Challenge. " +
+        "FORBIDDEN: complete_segment before Beat 5; jump to Final Challenge early; complete_segment(final1) or Ending before Final Challenge questions.",
     },
     {
       id: "final1",
@@ -475,8 +642,8 @@ export const AQUARIUM_PART2 = {
         },
         {
           id: "choose-this",
-          promptJa: "これを えらぶ！は英語で？",
-          promptHira: "これを えらぶ！は えいごで？",
+          promptJa: "これ を えらぶ！は英語で？",
+          promptHira: "これ を えらぶ！は えいごで？",
           answer: "I choose this one.",
           patterns: ["i choose this one", "choose this one"],
           choices: ["I choose this one.", "I put this one.", "I found this one.", "I need this one."],
@@ -595,32 +762,35 @@ export const AQUARIUM_PART2 = {
         },
       ],
       coach:
-        "Open: Final challenge time! Let's go! さいごの ちゃれんじだよ！れっつごー！ then IMMEDIATELY the first 〜は えいごで？ item (ひらがな only). " +
-        "FORBIDDEN: Are you ready? / じゅんびは できてる？. Then ONE random item per turn from the list. " +
-        "Beginner: on-screen 4 choices, child taps the English answer. After ALL queued items answered → complete_segment(final1). " +
-        "Say さいごの もんだい！ only when exactly ONE item remains. FORBIDDEN: inventing questions, bare は英語で？ without the listed cue phrase.",
+        "Open EXACTLY: Final challenge time! Let's go! さいごの ちゃれんじだよ！れっつごー！ " +
+        "then IMMEDIATELY the first 〜は えいごで？ item (ひらがな only) in the SAME turn. " +
+        "FORBIDDEN: Are you ready? / じゅんびは できてる？. " +
+        "Client picks RANDOM 5〜6 questions from the Part 2 list — ask ONE listed item per turn (exact cue + は えいごで？). " +
+        "Beginner: on-screen 4 choices; child taps the English answer. Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
+        "After correct: brief praise + next cue in the SAME turn. Say さいごの もんだい！ only when exactly ONE item remains. " +
+        "After ALL queued items answered → complete_segment(final1) → Ending. " +
+        "FORBIDDEN: inventing questions; bare は英語で？; Part 1 glass/sand cues.",
     },
     {
       id: "ending1",
       type: "ending",
       title: "水族館を思い出せた！",
       titleEn: "Remembered your aquarium",
-      goal: "ターンA → ターンB → ターンC → 自動切断。フリートークなし。",
+      goal: "イントロ→フリートーク→「終わりにする」でフィナーレ→切断。英語返答回数でフリートークバッジ。",
       completeWithoutEnglish: true,
       autoDisconnect: true,
-      noFreeTalk: true,
       coach:
-        "ENDING — Part 2 has THREE FIXED TURNS only, then auto-disconnect. NO free-talk. " +
-        "Turn A: Perfect! You remembered a lot about your aquarium! / " +
+        "ENDING — same structure as Part 1: client intro → free talk → 終わりにする → client finale. " +
+        "Turn A / intro EXACT (ONE message, then WAIT): Perfect! You remembered a lot about your aquarium! " +
         "ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ " +
-        "You remembered the decorations and the fish too! / かざりも おさかなも おもいだせたね！ " +
-        "Turn B: Your teacher might ask you some of the same questions next time! / " +
-        "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
-        "You'll be ready! / これで ばっちりだね！ " +
-        "Turn C: If you play Minecraft again, try using today's English too! See you next time! / " +
-        "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！また ね！ " +
-        "After Turn C: call complete_segment(ending1) → auto-disconnect immediately. " +
-        "FORBIDDEN: free-talk / 終わりにする button / asking about fish count / additional questions.",
+        "You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ " +
+        "Your teacher might ask you some of the same questions next time! " +
+        "つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ You'll be ready! これで ばっちりだね！ " +
+        "Then FREE TALK: follow the child's topic; NEVER steer to ending; NEVER say goodbye until 終わりにする. " +
+        "After 終わりにする ONLY — finale EXACT: If you play Minecraft again, try using today's English too! See you next time! " +
+        "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！ then complete_segment(ending1). " +
+        "Freetalk badge: English reply ×3 gold / ×2 silver / ×1 bronze. " +
+        "FORBIDDEN: Part 1 fish-tank ending lines; inventing How many; goodbye before 終わりにする.",
     },
   ],
 };

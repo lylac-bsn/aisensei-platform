@@ -28,6 +28,9 @@ assert.match(voice, /markChapterTransitionSpeaking\(\);/);
 assert.match(voice, /seedHandoffOpeningBubble/);
 
 assert.match(engine, /PART1_ELICIT_JA\.ch6PutSand/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260921-ending-autostart/);
+assert.match(voice, /fishCountPicker/);
+assert.match(voice, /part2Ch5OnFishCountPicker/);
+assert.match(voice, /lesson-choice-grid--fish-count/);
 
 console.log("Ch5/Ch6 handoff + Beat1 MCQ regression checks passed.");

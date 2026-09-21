@@ -5,14 +5,13 @@ import {
   loadLessonStateFor,
   resetLesson,
   jumpToSegment,
-  isPart1Complete,
   loadEarnedLessonBadges,
   loadPendingLessonBadges,
   claimPendingLessonBadges,
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./lesson-engine.js?v=20260918-part-persist";
 import {
   BADGE_FAMILIES,
   FAMILY_LABELS_JA,
@@ -24,7 +23,7 @@ import {
   BADGE_IMAGES,
   segmentNeedsAccuracyReplay,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./badge-engine.js?v=20260920-part2-ch0-badge";
 import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
@@ -196,7 +195,43 @@ export function phrasesForChildDisplay(lessonState = {}, { reconcileSearchPlace 
   return result;
 }
 
-let activeLessonId = "part1";
+function activeLessonStorageKey(level = getActiveLevelId()) {
+  return `gc_hw_${level}_active_lesson`;
+}
+
+/** Prefer ?lesson= in the URL, then last selected Part for this level. */
+export function readStoredActiveHomeworkLesson(level = getActiveLevelId()) {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get("lesson");
+    if (fromUrl === "part1" || fromUrl === "part2") return fromUrl;
+    const stored = localStorage.getItem(activeLessonStorageKey(level));
+    if (stored === "part1" || stored === "part2") return stored;
+  } catch {
+    // ignore
+  }
+  return "part1";
+}
+
+function persistActiveHomeworkLesson(lessonId, level = getActiveLevelId()) {
+  const id = lessonId === "part2" ? "part2" : "part1";
+  try {
+    localStorage.setItem(activeLessonStorageKey(level), id);
+  } catch {
+    // ignore
+  }
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("lesson") !== id) {
+      url.searchParams.set("lesson", id);
+      window.history.replaceState({}, "", url);
+    }
+  } catch {
+    // ignore
+  }
+  return id;
+}
+
+let activeLessonId = readStoredActiveHomeworkLesson();
 const badgeSfx = new QuestSfx(0.36);
 let badgeCeremonyQueue = [];
 let badgeCeremonyRunning = false;
@@ -204,7 +239,8 @@ const pendingReceiptBadgeIds = new Set();
 const receivedBadgeIdsThisSession = new Set();
 
 function useBadgeShelf() {
-  return getLesson(activeLessonId)?.architecture === "beginner-part1-v1";
+  const arch = getLesson(activeLessonId)?.architecture;
+  return arch === "beginner-part1-v1" || arch === "beginner-part2-v1";
 }
 
 function activeBadgePrefix() {
@@ -301,9 +337,13 @@ function showLearnyConfirm({
 }
 
 export function setActiveHomeworkLesson(lessonId) {
-  activeLessonId = lessonId === "part2" ? "part2" : "part1";
+  activeLessonId = persistActiveHomeworkLesson(lessonId);
   refreshDashboardChrome();
   if (useBadgeShelf()) queueBadgeReceipts(loadPendingLessonBadges());
+}
+
+export function getActiveHomeworkLesson() {
+  return activeLessonId === "part2" ? "part2" : "part1";
 }
 
 function levelId() {

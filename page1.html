@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
     <script>window.GC_LEVEL = 'beginner';</script>
-    <link rel="stylesheet" href="css/style.css?v=20260909-badge-title">
+    <link rel="stylesheet" href="css/style.css?v=20260918-part2-click">
     <link rel="icon" href="images/tab-logo.png" type="image/png">
 </head>
 <body class="page-dashboard">
@@ -33,7 +33,7 @@
                         </span>
                         <div class="header-tab-switcher" role="tablist" aria-label="宿題パート">
                             <button id="tab-part1" class="tab-btn active" role="tab" aria-selected="true" aria-controls="iframe-part1">Part 1</button>
-                            <button id="tab-part2" class="tab-btn" role="tab" aria-selected="false" aria-controls="iframe-part2" disabled aria-disabled="true" title="準備中">Part 2（準備中）</button>
+                            <button id="tab-part2" class="tab-btn" role="tab" aria-selected="false" aria-controls="iframe-part2" title="Part 2（3週目の復習）">Part 2</button>
                         </div>
                     </div>
                 </div>
@@ -133,7 +133,7 @@
                                         <div class="instructions-panel instructions-panel--popover" id="instructions-server1">
                         <h2>使い方</h2>
                         <ol class="instructions-list">
-                            <li>上のタブで <strong>Part 1</strong>（2週目の宿題）か <strong>Part 2</strong>（4週目の宿題）を選ぶよ。Part 2 は Part 1 が終わってからひらける。</li>
+                            <li>上のタブで <strong>Part 1</strong>（2週目の宿題）か <strong>Part 2</strong>（3週目の復習）を選ぶよ。</li>
                             <li>ラーニー先生の画面<strong>右上</strong>の<strong>はじめる</strong>を押して電話しよう！</li>
                             <li>先生の質問にこたえて、英語をいっしょに言ってみよう。わすれていてもだいじょうぶ。</li>
                             <li>終わりたいときは<strong>おわる</strong>で電話を切れる。途中から再開できるよ。</li>
@@ -167,14 +167,20 @@
     </div>
 
     <!-- Page-specific script (Firebase v11 modular SDK loaded via page1.js) -->
-    <script type="module" src="js/page1.js?v=20260910-ch6-mcq-show-2"></script>
+    <script type="module" src="js/page1.js?v=20260919-part2-open"></script>
     <script type="module">
-        import { initPage1Dashboard, setActiveHomeworkLesson } from './js/page1-dashboard.js?v=20260910-ch6-mcq-show-2';
+        import {
+            initPage1Dashboard,
+            setActiveHomeworkLesson,
+            readStoredActiveHomeworkLesson,
+        } from './js/page1-dashboard.js?v=20260920-part2-ch0-badge';
 
         const tab1 = document.getElementById('tab-part1');
         const tab2 = document.getElementById('tab-part2');
         const iframe1 = document.getElementById('iframe-part1');
         const iframe2 = document.getElementById('iframe-part2');
+        const lessonTitlePart = document.querySelector('.student-lesson-title__part');
+        const lessonTitleText = document.querySelector('#student-lesson-title span:not(.student-lesson-title__part)');
 
         initPage1Dashboard({ isVoiceTab: true });
 
@@ -196,14 +202,20 @@
             tab2.setAttribute('aria-selected', !is1 ? 'true' : 'false');
             iframe1.style.display = is1 ? 'block' : 'none';
             iframe2.style.display = is1 ? 'none' : 'block';
+            if (lessonTitlePart) lessonTitlePart.textContent = is1 ? 'Part 1' : 'Part 2';
+            if (lessonTitleText) {
+                lessonTitleText.textContent = is1
+                    ? 'おさかなを迎えるじゅんびをしよう！'
+                    : '水族館を思い出そう！';
+            }
             setActiveHomeworkLesson(part);
         }
 
         tab1.addEventListener('click', () => switchTab('part1'));
-        tab2.addEventListener('click', () => {
-            if (tab2.disabled) return;
-            switchTab('part2');
-        });
+        tab2.addEventListener('click', () => switchTab('part2'));
+
+        const preferred = readStoredActiveHomeworkLesson();
+        switchTab(preferred === 'part2' ? 'part2' : 'part1');
     </script>
 
     <!-- Growbuddy Logo -->

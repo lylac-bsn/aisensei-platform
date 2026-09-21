@@ -14,6 +14,7 @@ import {
   savePendingLessonBadges,
   saveBadgeRevocations,
   saveLessonState,
+  usesBeginnerArchitecture,
 } from "./lesson-engine.js?v=20260910-ch6-mcq-show-2";
 
 export const BADGE_IMAGES = Object.freeze({
@@ -27,12 +28,12 @@ export const BADGE_FAMILIES = Object.freeze(["chapter", "freetalk", "accuracy"])
 
 export const TIER_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3 });
 
-/** Every lesson using the cloned Beginner Part 1 architecture supports badges. */
+/** Beginner Part 1 and Part 2 share the same badge shelf (chapter / freetalk / accuracy). */
 export function isBadgeEnabledScope(
   levelId = getActiveLevelId(),
   lessonId = getActiveLessonId()
 ) {
-  return getLesson(lessonId, levelId)?.architecture === "beginner-part1-v1";
+  return usesBeginnerArchitecture(lessonId, levelId);
 }
 
 export function badgeId(
@@ -183,9 +184,10 @@ export function segmentNeedsAccuracyReplay(
   { earnedAccuracyTier = null } = {}
 ) {
   const id = String(segmentId || "").trim();
+  const arch = lesson?.architecture;
   if (
     !id ||
-    lesson?.architecture !== "beginner-part1-v1" ||
+    (arch !== "beginner-part1-v1" && arch !== "beginner-part2-v1") ||
     earnedAccuracyTier === "gold" ||
     !(state?.completedSegmentIds || []).includes(id)
   ) {
@@ -209,7 +211,8 @@ export function tierIdsForFamily(family, tier, lesson) {
 }
 
 export function evaluateLessonBadges(state, lesson) {
-  if (lesson?.architecture !== "beginner-part1-v1") return [];
+  const arch = lesson?.architecture;
+  if (arch !== "beginner-part1-v1" && arch !== "beginner-part2-v1") return [];
   const ids = [];
   const chapter = computeChapterTier(state);
   ids.push(...tierIdsForFamily("chapter", chapter, lesson));

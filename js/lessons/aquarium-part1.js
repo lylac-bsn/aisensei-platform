@@ -185,7 +185,7 @@ export const AQUARIUM_PART1 = {
         "CHAPTER 1 — use on-screen 4-choice buttons. One beat at a time. " +
         "Ask the current mcq beat (EN then ひらがな), then WAIT for the button/tap. " +
         `For phrase elicits use Japanese cue: ${PART1_ELICIT_JA.needGlass} / ${PART1_ELICIT_JA.needSand} — do NOT say Can you say, I need glass/sand. ` +
-        "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat. " +
+        "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. If correct: praise, then next beat. " +
         "After I need sand correct: complete_segment(ch1) → Chapter 2. " +
         "FORBIDDEN: I put glass here.",
     },
@@ -248,7 +248,7 @@ export const AQUARIUM_PART1 = {
         `After they answer see: react briefly, then speak We found some sand! Can you say it in English? / ${PART1_ELICIT_JA.foundSand} ` +
         "FORBIDDEN after left/right: jump to We found some sand. FORBIDDEN after see: Keep looking / Take your time / ゆっくり探して. " +
         "(do NOT say Can you say, I found some sand). Show found-sand MCQ. Correct → complete_segment(ch2). " +
-        "Wrong MCQ: おしい！もういちど！ never reveal answer.",
+        "Wrong MCQ: rotate soft bilingual retries — NEVER always おしい！もういちど！; never reveal answer.",
     },
     {
       id: "ch3",
@@ -344,7 +344,7 @@ export const AQUARIUM_PART1 = {
         "(2) じゃあ つぎは 「すなを みつけた」は えいごで？ " +
         "(3) じゃあ つぎは 「がらすを つくった！」は えいごで？ " +
         "FORBIDDEN shortcuts: くいずたいむ！は英語で？ (missing cue), 英語 instead of えいご. " +
-        "WAIT for a 4-button tap. Wrong: soft おしい！もういちど — do NOT reveal the answer. " +
+        "WAIT for a 4-button tap. Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer. " +
         "After a correct tap: ONE short varied praise (rotate — never すごい every time) + echo the CORRECT English once, then the NEXT speak line (never repeat the same item). " +
         "FORBIDDEN: すなが ひつよう as a quiz item, inventing questions, English Which one means…, oral どっち 2-choice, walls/color. " +
         "After all 3 correct: complete_segment(quiz1) → Chapter 4 (What's your favorite color?).",
@@ -464,6 +464,7 @@ export const AQUARIUM_PART1 = {
         "FORBIDDEN: favorite color / すきな いろ — already chosen in Chapter 4 (favoriteColor). " +
         "Then ONE turn: FIRST short specific reaction naming their last words (NOT bare Nice), " +
         "THEN EXACTLY: Nice! Now let's get back to the tank! いいね！じゃあ すいそう つくりに もどろう！ " +
+        "FORBIDDEN on that turn: any new everyday question — reaction + bridge ONLY. " +
         "FORBIDDEN: bridge line alone with no reaction. Finish speaking before complete_segment(daily1). " +
         "FORBIDDEN: Are you tired? / つかれた？",
     },

@@ -243,6 +243,9 @@ header.app-header .header-center {
 
 header.app-header .header-center .header-status-row {
     justify-content: center;
+    /* header-center uses pointer-events:none so abs-centered welcome text
+       doesn't steal clicks from brand/actions — re-enable for the pills/tabs. */
+    pointer-events: auto;
 }
 
 header.app-header .header-brand,

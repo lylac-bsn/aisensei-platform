@@ -1,6 +1,14 @@
-import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260916-part2-full";
-import { PART2_ELICIT_JA } from "./lessons/aquarium-part2.js?v=20260916-part2-full";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260916-part2-full";
+import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
+import {
+  PART2_ELICIT_JA,
+  PART2_CH1_BEAT1_SPEAK,
+  PART2_CH2_BEAT1_SPEAK,
+  PART2_CH3_BEAT1_SPEAK,
+  PART2_CH4_BEAT1_SPEAK,
+  PART2_CH5_BEAT1_SPEAK,
+  PART2_CH6_BEAT1_SPEAK,
+} from "./lessons/aquarium-part2.js?v=20260921-ending-autostart";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260921-ending-autostart";
 import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {
   buildPartReporting,
@@ -57,17 +65,27 @@ export function daily1BackToAquariumSpeak() {
 export function daily1BridgeTurnInstruction(userText = "") {
   const t = String(userText || "").trim();
   const quote = t ? `"${t.slice(0, 40)}"` : "their last words";
+  const bridge = usesBeginnerPart2Architecture()
+    ? daily1BackToAquariumSpeak()
+    : daily1BackToTankSpeak();
+  const bridgeLabel = usesBeginnerPart2Architecture() ? "back-to-aquarium" : "back-to-tank";
   return (
     "ONE turn REQUIRED shape: (1) FIRST a short specific reaction that names what they just said (" +
     quote +
-    ") — e.g. Bamboo! / たけ！ / ふわふわ！ — NOT bare Nice alone; " +
+    ") — e.g. Curry! / かれー！ / Yummy! — NOT bare Nice alone; " +
     "(2) THEN in the SAME turn speak EXACTLY: " +
-    daily1BackToTankSpeak() +
-    " FORBIDDEN: starting with / only saying the back-to-tank line with no reaction to their last words."
+    bridge +
+    " FORBIDDEN: starting with / only saying the " +
+    bridgeLabel +
+    " line with no reaction to their last words. " +
+    "FORBIDDEN: any NEW everyday question (Was it…? / Do you…? / だった？) in this turn — reaction + bridge ONLY, then WAIT."
   );
 }
 
 export function final1OpenSpeak() {
+  if (usesBeginnerPart2Architecture()) {
+    return "Final challenge time! Let's go! さいごの ちゃれんじだよ！れっつごー！";
+  }
   return "Final challenge time! Let's go! さいごのチャレンジだよ！レッツゴー！";
 }
 
@@ -289,7 +307,7 @@ function looksLikeLessonWipe(incoming, existing) {
 export function saveLessonStateFor(state, lessonId, levelId = ACTIVE_LEVEL_ID) {
   const incoming = sanitizeLessonState(state, lessonId);
   let toSave = incoming;
-  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+  if (usesBeginnerArchitecture(lessonId, levelId)) {
     try {
       const raw = localStorage.getItem(storageKey(lessonId, levelId));
       if (raw) {
@@ -344,8 +362,10 @@ export function saveLessonState(state, lessonId = ACTIVE_LESSON_ID) {
 export function isPart1Complete(levelId = ACTIVE_LEVEL_ID) {
   try {
     if (localStorage.getItem(part1CompleteKey(levelId)) === "1") return true;
-    const s = JSON.parse(localStorage.getItem(storageKey("part1", levelId)) || "{}");
-    return Boolean(s.complete);
+    const s = loadLessonStateFor("part1", levelId);
+    if (s.complete) return true;
+    // Ending chapter finished (complete_segment(ending1) succeeded).
+    return s.completedSegmentIds.includes("ending1");
   } catch {
     return false;
   }
@@ -414,7 +434,7 @@ export function recordChapterPlay(segmentId, lessonId = ACTIVE_LESSON_ID, levelI
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
-  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+  if (usesBeginnerArchitecture(lessonId, levelId)) {
     state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
   }
   saveLessonStateFor(state, lessonId, levelId);
@@ -434,7 +454,7 @@ export function ensureEnteredChapterPlay(state, segmentId, lessonId = ACTIVE_LES
   const existing = Number(counts[id]) || 0;
   if (existing > 0) {
     if (
-      usesBeginnerPart1Architecture(lessonId, levelId) &&
+      usesBeginnerArchitecture(lessonId, levelId) &&
       !(Number(state.mcqBadgePlay?.[id]) > 0)
     ) {
       state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: existing };
@@ -443,7 +463,7 @@ export function ensureEnteredChapterPlay(state, segmentId, lessonId = ACTIVE_LES
   }
   counts[id] = 1;
   state.chapterPlayCounts = counts;
-  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+  if (usesBeginnerArchitecture(lessonId, levelId)) {
     state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: 1 };
   }
   return 1;
@@ -460,8 +480,8 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 }
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
-  if (!usesBeginnerPart1Architecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260910-ch6-mcq-show-2")
+  if (!usesBeginnerArchitecture(lessonId, levelId)) return;
+  import("./badge-engine.js?v=20260920-part2-ch0-badge")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges();
       if (newlyEarned?.length) {
@@ -509,7 +529,7 @@ export function jumpToSegment(segmentId, lessonId = ACTIVE_LESSON_ID, levelId = 
   const counts = { ...(state.chapterPlayCounts || {}) };
   counts[id] = (Number(counts[id]) || 0) + 1;
   state.chapterPlayCounts = counts;
-  if (usesBeginnerPart1Architecture(lessonId, levelId)) {
+  if (usesBeginnerArchitecture(lessonId, levelId)) {
     state.mcqBadgePlay = { ...(state.mcqBadgePlay || {}), [id]: counts[id] };
   }
   saveLessonStateFor(state, lessonId, levelId);
@@ -873,18 +893,29 @@ function japaneseOutputRule(levelId) {
 
 function scaffoldingLine(levelId) {
   if (levelId === "beginner") {
+    const part2 = usesBeginnerPart2Architecture(ACTIVE_LESSON_ID, ACTIVE_LEVEL_ID);
     return [
       japaneseOutputRule(levelId),
       "BEGINNER JAPANESE = SAME MEANING AS ENGLISH: Every English sentence needs a full ひらがな sentence that says the same thing — cover ALL of the English, not a one-word tag.",
       "Every Japanese idea also needs a full English sentence before it — never Japanese-only invites or questions after That's great! alone.",
       "FORBIDDEN after English: only いってみて / っていってみて / いいね / そうだね / ばっちり alone — that leaves the child with no translation.",
-      "Forbidden JP: わたしの すいそうを てつだってくれますか / すいそうを てつだう. Use すいそうづくりを てつだってほしい / いっしょに すいそうを つくれる？",
-      "Forbidden JP: みえて for transparent — say とうめいで かたい. Thank-you: ありがとう, not すごいね alone.",
+      part2
+        ? "PART 2 ONLY: recall their Minecraft aquarium. FORBIDDEN: What do I need to make a tank / とうめいで かたい / がらすが ひつよう / building a new tank from scratch."
+        : "Forbidden JP: わたしの すいそうを てつだってくれますか / すいそうを てつだう. Use すいそうづくりを てつだってほしい / いっしょに すいそうを つくれる？",
+      part2
+        ? "PART 2 MCQ SCRIPT BEATS (CRITICAL): After each child answer, ONE turn = short praise/reaction + the FULL next beat script " +
+          "(English lead + 「…」の えいごを 選んでね！) word-for-word. FORBIDDEN: praise-only turns; skipping the next script; Japanese-only when an English lead exists. " +
+          "The 「」 elicit IS the Japanese half — do NOT add a Japanese translation of the English lead. " +
+          "FORBIDDEN after the elicit: paraphrases like あなたのすいそうの / かざりつけ / おぼえてるかな / repeating the English lead."
+        : "",
+      part2 ? "" : "Forbidden JP: みえて for transparent — say とうめいで かたい. Thank-you: ありがとう, not すごいね alone.",
       "Never say English-only. Never stack two English questions before their Japanese. One English + one Japanese pair at a time.",
       "Every line must end with Japanese ひらがな after the English — including praise, hints, and questions.",
       "If they answer in Japanese, praise, then model a short English version and invite them to repeat — still EN then full-meaning ひらがな.",
       "Hints: 2-choice is OK after they are stuck.",
-    ].join(" ");
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
   if (levelId === "intermediate") {
     return [
@@ -908,10 +939,13 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID, segment = null) {
   // made Live append 「がらすが ひつよう」の えいごを 選んでね！ after Hello / How are you.
   if (
     segType === "warmup" ||
+    segType === "quiz" ||
     segId === "ch0" ||
     segId === "daily1" ||
-    segId === "ending1"
+    segId === "ending1" ||
+    segId === "quiz1"
   ) {
+    // Quiz uses 「cue」は えいごで？ — never seed 選んでね homework elicits here.
     return "";
   }
 
@@ -919,6 +953,46 @@ function japaneseElicitBracketRule(levelId = ACTIVE_LEVEL_ID, segment = null) {
     levelId === "intermediate"
       ? "を えいごで いってみて！"
       : "の えいごを 選んでね！";
+
+  // Part 2 beginner — decorate / fish review (never Part 1 glass/sand).
+  if (usesBeginnerPart2Architecture(ACTIVE_LESSON_ID, ACTIVE_LEVEL_ID)) {
+    const exampleBySegment = {
+      ch1: PART2_ELICIT_JA.ch1PutKelp,
+      ch2: PART2_ELICIT_JA.ch2GoOcean,
+      ch3: PART2_ELICIT_JA.ch3CaughtFish,
+      ch4: PART2_ELICIT_JA.ch4PutInTank,
+      ch5: PART2_ELICIT_JA.ch5ThreeFish,
+      ch6: "「なにいろを えらびましたか？」は どれ？",
+      quiz1: "「ここに さんごを おいた」は えいごで？",
+      final1: "ここに こんぶを おいた！は えいごで？",
+    };
+    const segmentElicits = {
+      ch1: `Part 2 Ch1 only: ${PART2_ELICIT_JA.ch1PutKelp} / ${PART2_ELICIT_JA.ch1PutCoral} / ${PART2_ELICIT_JA.ch1ChooseThis} / ${PART2_ELICIT_JA.ch1LikeCoral} / ${PART2_ELICIT_JA.ch1LooksCool}`,
+      ch2: `Part 2 Ch2 only: ${PART2_ELICIT_JA.ch2GoOcean} / ${PART2_ELICIT_JA.ch2FoundFish} / ${PART2_ELICIT_JA.ch2BlueFish} / ${PART2_ELICIT_JA.ch2WantFish} / ${PART2_ELICIT_JA.ch2ChooseFish}`,
+      ch3: `Part 2 Ch3 only: ${PART2_ELICIT_JA.ch3CaughtFish} / ${PART2_ELICIT_JA.ch3HaveFish}`,
+      ch4: `Part 2 Ch4 only: ${PART2_ELICIT_JA.ch4PutInTank} / ${PART2_ELICIT_JA.ch4PutItHere} / ${PART2_ELICIT_JA.ch4LookFish}`,
+      ch5: `Part 2 Ch5: number picker 1–10 then ${PART2_ELICIT_JA.ch5FishCount} / ${PART2_ELICIT_JA.ch5ThreeFish} / ${PART2_ELICIT_JA.ch5FiveFish}`,
+      ch6: "Part 2 Ch6: teacher-question recognition MCQ only — never glass/sand tank-build lines.",
+    };
+    const exampleCue =
+      exampleBySegment[segId] ||
+      (levelId === "intermediate"
+        ? "「ここに こんぶを おいた」を えいごで いってみて！"
+        : PART2_ELICIT_JA.ch1PutKelp);
+    return [
+      `JAPANESE PHRASE ELICITS (「…」${elicitCue}):`,
+      `Always wrap the Japanese phrase in 「」 then say ${elicitCue} — e.g. ${exampleCue}`,
+      "FORBIDDEN: Part 1 glass/sand lines (がらすが ひつよう / すなが ひつよう / What do I need to make a tank / とうめいで かたい).",
+      "FORBIDDEN old form: 〜って えいごで いってみて！ / って英語で言ってみて — use the form above instead.",
+      levelId === "intermediate"
+        ? "INTERMEDIATE: Never say 選んでね / tap / button / 4-choice. Child speaks the English."
+        : "CRITICAL AUDIO: Pronounce every mora of え・い・ご・を in の えいごを 選んでね！ Never shorten to の選んでね / のを選んでね. The Japanese word えいご is required.",
+      segmentElicits[segId] || "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
   const exampleBySegment = {
     ch1: PART1_ELICIT_JA.needGlass,
     ch2: PART1_ELICIT_JA.foundSand,
@@ -978,6 +1052,8 @@ function praiseVariationRule() {
     "PRAISE VARIATION (every session): Rotate congratulation words — never the same opener twice in a row.",
     "FORBIDDEN loops: すごい！ every correct answer; That's right! every turn; せいかい！ + すごい as a fixed pair; Nice! / Great! / そうだね on repeat.",
     "Good rotation (pick ONE short praise, then move on): Great job! / Nice one! / Yes! / Awesome! / You got it! / やったね！ / ばっちり！ / そのとおり！ / いいね！ / よくできた！",
+    "WRONG-ANSWER VARIATION: Rotate soft retries — Nice try! / So close! / Hmm not that one! / Oops! / Good try! / That's okay! / ざんねん！ / ちがうみたい！ / おっと！ / ちかいよ！ — " +
+      "NEVER always Almost! Try again! / おしい！もういちど！. Never reveal the correct English answer on a wrong tap.",
     "After praise: echo their correct English OR ask the next question — never stack two praise lines.",
   ].join(" ");
 }
@@ -989,7 +1065,7 @@ function conversationQualityRule() {
     "Listen and care. Your reaction must show you understood THEIR exact words — not a generic Nice! / That's great! every time.",
     "Vary your language. Do NOT reuse the same praise + question template every turn (bad loop: You X! What did you X? repeated).",
     "Be curious and specific: if they studied English → ask Was it fun? / Was it hard? / Do you like English? — pick ONE natural follow-up, not a quiz checklist.",
-    "If they say nothing / no / I don't know: warm Okay! / そっか！だいじょうぶ！ — then ONE DIFFERENT gentle question (e.g. only Did you play anything fun? — never list two options) OR (when warmup is ready) reaction + Oh! Today… invite. NEVER re-ask What did you do today? or the same follow-up they just answered. NEVER ask two questions in one turn.",
+    "If they say nothing / no / not really / I don't know: warm Okay! / そっか！だいじょうぶ！ — then ONE DIFFERENT gentle question (e.g. Do you like Minecraft? — never list two options) OR (when warmup is ready) reaction + the homework invite. NEVER re-ask What did you do today?, Did you play anything fun?, or the same follow-up they just answered. NEVER ask two questions in one turn.",
     "FORBIDDEN: repeating the same English or Japanese question after the child already answered (especially after no / nothing).",
     "Keep kid energy: short, warm, playful — still ONE question per turn, still wait.",
     "FORBIDDEN robotic habits: always starting with That's great!; echoing their sentence then asking the same verb back every time; sounding like a form / FAQ bot.",
@@ -1096,11 +1172,40 @@ function quiz1Rule() {
     "Item 1 EXACT: くいずたいむ！「がらすが ひつよう」は えいごで？ Correct: I need glass.",
     "Item 2 EXACT: じゃあ つぎは 「すなを みつけた」は えいごで？ Correct: I found some sand.",
     "Item 3 EXACT: じゃあ つぎは 「がらすを つくった！」は えいごで？ Correct: I made glass.",
-    "Wrong tap: soft おしい！もういちど — NEVER reveal the correct answer. Then repeat the SAME speak line and WAIT.",
-    "After a correct answer: ONE short varied praise (NOT すごい every time — rotate Great job / Nice one / やったね / ばっちり / Yes!) + echo ONLY the answer they just said correctly — then ask the NEXT item. NEVER praise the wrong phrase. NEVER repeat the same item.",
+    "Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer; then repeat the SAME speak line and WAIT.",
+    "After a correct answer: ONE short varied praise (NOT すごい every time — rotate Great job / Nice one / Amazing / やったね / ばっちり / Yes!) + echo ONLY the answer they just said correctly — then speak the NEXT item's EXACT speak line word-for-word in the SAME turn. NEVER praise the wrong phrase. NEVER skip ahead. NEVER repeat the same item.",
     "After all 3 correct: call complete_segment(quiz1) immediately. Then Chapter 4 starts (What's your favorite color?).",
     "FORBIDDEN on quiz1: What color do you like, dye, flowers, I put glass here, I'm building a tank, すなが ひつよう quiz item, oral どっち 2-choice.",
   ].join(" ");
+}
+
+/** Part 2 Mini quiz 1 — coral / want fish / caught fish (never Part 1 glass/sand). */
+function quiz1RulePart2() {
+  return [
+    "MINI QUIZ 1 PART 2 ONLY — exactly 3 items in FIXED order. Never invent questions. Never ask Part 1 glass/sand cues.",
+    "QUIZ SPEAKING (overrides beginner EN→JP): Speak the quiz in FULL Japanese ひらがな only. Do NOT say English first. Do NOT speak the English choices aloud — child taps a 4-button choice.",
+    "Speak EVERY mora of the cue inside 「」 aloud word-by-word — never shorten. " +
+      "FORBIDDEN: くいずたいむ！は英語で？ / くいずたいむ！はえいごで？ without the cue inside 「」; saying 英語 instead of えいご; の えいごを 選んでね on quiz turns.",
+    "Item 1 EXACT (must be first audible turn on quiz1): くいずたいむ！「ここに さんごを おいた」は えいごで？ Correct: I put coral here.",
+    "Item 2 EXACT: じゃあ つぎは「この おさかなが ほしい」は えいごで？ Correct: I want this fish.",
+    "Item 3 EXACT: じゃあ つぎは「おさかなを つかまえた！」は えいごで？ Correct: I caught a fish!",
+    "FORBIDDEN on item 1: starting with じゃあ つぎは / skipping to item 2 or 3 / Part 1 がらすが ひつよう.",
+    "Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer; then repeat the SAME speak line and WAIT.",
+    "After a correct answer: ONE short varied praise (Great! / Amazing! / Nice one! / やったね / ばっちり — rotate) + echo ONLY the answer they just said correctly — then speak the NEXT item's EXACT speak line word-for-word in the SAME turn. NEVER skip ahead. NEVER repeat the same item.",
+    "After all 3 correct: call complete_segment(quiz1) immediately. Then Chapter 4 (put fish in tank).",
+    "FORBIDDEN on quiz1: Part 1 glass/sand, walls, color/dye, oral どっち 2-choice.",
+  ].join(" ");
+}
+
+function quiz1StartNudgePart2() {
+  return (
+    "[Teacher note — do not read aloud] PART 2 MINI QUIZ 1 starts NOW. Speak FULL Japanese ひらがな only (NO English-first). " +
+    "Do NOT jump to Chapter 4 yet. Speak EXACTLY item 1 word-by-word (every mora inside 「」): " +
+    "くいずたいむ！「ここに さんごを おいた」は えいごで？ Then WAIT for a 4-button tap. " +
+    "FORBIDDEN: starting with じゃあ つぎは / item 2 「この おさかなが ほしい」 / item 3 / Part 1 がらすが ひつよう / 英語 instead of えいご. " +
+    "Do NOT speak the English choices aloud. Next after correct I put coral here: この おさかなが ほしい. Then おさかなを つかまえた. " +
+    "After all 3, complete_segment(quiz1) → Chapter 4."
+  );
 }
 
 function daily1Rule() {
@@ -1207,6 +1312,21 @@ function final1Rule() {
   ].join(" ");
 }
 
+/** Part 2 Final challenge — random 5–6 from the Part 2 phrase pool. */
+function final1RulePart2() {
+  return [
+    "FINAL CHALLENGE PART 2 ONLY — review phrases from Part 2 (decorations, fish, tank). Random 5–6 items from the client list.",
+    "FIRST turn EXACTLY (ONE message — no wait for yes): Final challenge time! Let's go! さいごの ちゃれんじだよ！れっつごー！ " +
+      "then IMMEDIATELY the first listed 〜は えいごで？ cue (ひらがな ONLY).",
+    "FORBIDDEN: Are you ready? / じゅんびは できてる？ / stopping after the opener before the first quiz item.",
+    "Ask ONE listed item per turn — EXACT cue + は えいごで？. Use ONLY the current listed prompt — never invent questions.",
+    "After correct: brief praise + NEXT listed cue in the SAME turn. FORBIDDEN: praise-only then a second message.",
+    "Say さいごの もんだい！ ONLY when exactly ONE item remains.",
+    "After the LAST item: brief praise, then complete_segment(final1) → Ending. FORBIDDEN: another quiz question.",
+    "FORBIDDEN: Part 1 glass/sand cues (がらすが ひつよう / すなを みつけた); story mode; bare は えいごで？.",
+  ].join(" ");
+}
+
 function ending1Rule() {
   return [
     "ENDING — three phases. Do NOT invent How many / なんびき.",
@@ -1219,78 +1339,70 @@ function ending1Rule() {
   ].join(" ");
 }
 
-/** Part 2 daily1 rule — food question instead of animal. */
+/** Part 2 daily1 rule — food free-talk; fun natural conversation. */
 function daily1RulePart2() {
   return [
-    "DAILY ENGLISH ONLY — sudden everyday chat away from the aquarium. NO intro line.",
+    "DAILY ENGLISH PURPOSE: a natural free-talk session — make English learning FUN. React playfully and have a genuine conversation. NOT a quiz.",
+    "DAILY ENGLISH ONLY — sudden everyday chat away from the aquarium. NO intro line like Let's practice.",
     "FIRST line EXACTLY: Oh by the way, [name], what did you eat today? そういえば、[name]さんは きょう なにを たべたの？ (child's name + さん in Japanese).",
     "FORBIDDEN openers: Let's practice today's English / きょうの えいごを れんしゅうしよう.",
-    "Talk like a friendly real teacher — NOT a quiz bot. After the food question: at least 4 chat rallies.",
-    "EACH TURN: (1) react specifically to WHAT THEY JUST SAID (name their words), (2) ONE follow-up about THAT same topic, (3) WAIT.",
+    "After the food question: chat naturally for at least 4 rallies. React funly to THEIR exact words, then ONE curious follow-up, then WAIT.",
+    "EACH TURN: (1) warm/fun specific reaction to WHAT THEY JUST SAID (name their words), (2) ONE follow-up about THAT same topic, (3) WAIT.",
     "Stay on their topic for 1–2 turns before changing topic. Soft bridge when you switch (e.g. Nice! By the way…).",
     "FORBIDDEN: starting every turn with the same echo (Curry! / かれー！) after you already reacted that way.",
     "FORBIDDEN: asking something they already answered; abrupt random jumps with no link to their last line.",
     "If they only say うん/yes: warm ack + ONE gentle follow-up on the SAME topic — do NOT leap to a brand-new topic yet.",
-    "FORBIDDEN forever: Are you tired? / つかれた？",
+    "FORBIDDEN forever: Are you tired? / つかれた？ / favorite color.",
     "FORBIDDEN: stopping after Nice / That's right / そうだね with no next question before 4 rallies.",
-    "FORBIDDEN: back to the aquarium before 4 rallies.",
-    "After 4+ rallies: react to their last words, then EXACTLY: Nice! Now let's get back to your aquarium! いいね！じゃあ すいぞくかんの はなしに もどろう！ " +
-      "Finish speaking that full turn before tools. Then call complete_segment(daily1). " +
-      "FORBIDDEN: complete_segment(daily1) before 4 rallies or before the bridge line. Next is Chapter 5 fish count.",
+    "FORBIDDEN: back to the aquarium before 4 child replies after the food opener.",
+    "When 4+ child replies are reached: react to their last words, then EXACTLY: Nice! Now let's get back to your aquarium! いいね！じゃあ すいぞくかんの はなしに もどろう！ " +
+      "Finish speaking that full turn before tools. Then call complete_segment(daily1) → Chapter 5. " +
+      "FORBIDDEN: complete_segment(daily1) before 4 child replies or before the bridge line. " +
+      "FORBIDDEN: saying the bridge right after the food opener with no child answer.",
     "Never go silent after praise — always lead to the next question or the back-to-aquarium bridge.",
   ].join(" ");
 }
 
-/** Part 2 ending — THREE fixed turns only, NO free-talk, auto-disconnect. */
+/** Part 2 ending — same structure as Part 1: intro → free talk → 終わりにする → finale. */
 function ending1RulePart2() {
   return [
-    "ENDING PART 2 — THREE FIXED TURNS ONLY, then auto-disconnect. NO free-talk.",
-    "Turn A (speak once, do NOT wait for response): " +
-      "Perfect! You remembered a lot about your aquarium! / ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ " +
-      "You remembered the decorations and the fish too! / かざりも おさかなも おもいだせたね！",
-    "Turn B (immediately after Turn A): " +
-      "Your teacher might ask you some of the same questions next time! / つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ " +
-      "You'll be ready! / これで ばっちりだね！",
-    "Turn C (final, then disconnect): " +
-      "If you play Minecraft again, try using today's English too! See you next time! / つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！また ね！ " +
-      "→ call complete_segment(ending1) immediately after Turn C.",
-    "FORBIDDEN: free-talk / 終わりにする button / asking questions / waiting for child response / additional conversation.",
-    "Auto-disconnect happens after Turn C completes.",
+    "ENDING PART 2 — same structure as Part 1. Client owns intro + finale; free talk in between.",
+    "Intro EXACT (ONE message, then WAIT): Perfect! You remembered a lot about your aquarium! + decorations/fish + teacher might ask same questions + You'll be ready!",
+    "Then FREE TALK: react to the child, one bilingual follow-up; never steer toward ending; never say goodbye.",
+    "ONLY after client says free talk is over / 終わりにする: finale EXACT If you play Minecraft again… See you next time! → complete_segment(ending1).",
+    "Freetalk badge (client-counted): English ×3 → gold, ×2 → silver, ×1 → bronze.",
+    "FORBIDDEN: Part 1 fish-tank ending lines; How many / なんびき; goodbye before 終わりにする.",
   ].join(" ");
 }
 
-/** Part 2 Chapter 5 rule — mixed format with free ask then MCQ. */
+/** Part 2 Chapter 5 rule — number picker then MCQ. */
 function ch5RulePart2() {
   return [
-    "CHAPTER 5 PART 2 — MIXED format: FREE ASK first, then MCQ beats.",
-    "Beat A1 (NO BUTTONS): Speak EXACTLY: Do you remember how many fish were in your tank? " +
-      "すいそうに おさかなが なんびき いたか おぼえてる？ Then WAIT for their answer.",
-    "Record their answer as fishCount (1, 2, 3, 4, 5, etc.). Accept numbers in Japanese or English. " +
-      "「よんひき」「4匹」「four」→ fishCount = 4. Call record_memory(fishCount, N).",
-    "If they don't remember: That's okay! About how many do you think there were? " +
-      "だいじょうぶ！だいたい なんびき くらいだったと おもう？",
-    "Beat A2 (MCQ — after fishCount recorded): Show 4 choices with their number. " +
-      "e.g. fishCount=4 → \"You had four fish! 「おさかなが 4ひき いる」の えいごを 選んでね！\" " +
-      "Choices: There are four fish. / There are three fish. / There are five fish. / There is four fish. " +
-      "GRAMMAR: fishCount=1 → correct is \"There is one fish.\" (singular). fishCount>1 → \"There are [N] fish.\" (plural).",
-    "Beat A3 (MCQ): How about three fish? 「おさかなが 3びき いる」の えいごを 選んでね！ → There are three fish.",
-    "Beat A4 (MCQ): How about five fish? 「おさかなが 5ひき いる」の えいごを 選んでね！ → There are five fish.",
-    "After five fish correct: complete_segment(ch5) → Chapter 6.",
-    "FORBIDDEN: inventing fish counts / skipping the free ask / MCQ before fishCount is recorded.",
+    "CHAPTER 5 PART 2 — number picker (1–10) then MCQ beats.",
+    `Beat A1 (10 number buttons, NO option audio): Speak EXACTLY: ${PART2_CH5_BEAT1_SPEAK} Then WAIT for a number tap.`,
+    "When they tap N (1–10) → record_memory(fishCount, N) → unlock Beat A2.",
+    "Beat A2 (MCQ after fishCount — dynamic choices; premade option audio for 1–10 OK): short reaction + EXACT " +
+      "You had [N] fish! 「おさかなが [N]ひき/びき いる」の えいごを 選んでね！ " +
+      "GRAMMAR: fishCount=1 → There is one fish. fishCount>1 → There are [N] fish.",
+    `Beat A3 = short reaction + EXACT: How about three fish? ${PART2_ELICIT_JA.ch5ThreeFish} → There are three fish.`,
+    `Beat A4 = short reaction + EXACT: How about five fish? ${PART2_ELICIT_JA.ch5FiveFish} → There are five fish. → complete_segment(ch5) → Chapter 6.`,
+    "FORBIDDEN: inventing fish counts / skipping A1 / unlocking A2 before a number tap / Part 1 tank-wall lines.",
   ].join(" ");
 }
 
 /** Part 2 Chapter 6 rule — teacher questions. */
 function ch6RulePart2() {
   return [
-    "CHAPTER 6 PART 2 — Teacher questions as MCQ. Five beats.",
-    "Beat 1: Your teacher may ask this question! 「なにいろを えらびましたか？」は どれ？ → What color did you choose?",
-    "Beat 2: How about this one? 「どの おさかなを えらびましたか？」は どれ？ → What fish did you choose?",
-    "Beat 3: Your teacher might ask about the number of fish! 「すいそうに おさかなが なんびき いますか？」は どれ？ → How many fish are in your tank?",
-    "Beat 4: How about this question? 「すいぞくかんの どんなところが すき？」は どれ？ → What do you like about your aquarium?",
-    "Beat 5: Last one! 「じぶんの すいぞくかんが すき？」は どれ？ → Do you like your aquarium?",
-    "If wrong: soft おしい！もういちど！ Do NOT reveal the answer. If correct: praise, then next beat.",
-    "After Do you like your aquarium? correct: complete_segment(ch6) → Final Challenge.",
+    "CHAPTER 6 PART 2 — Teacher QUESTION recognition MCQ. Five beats. Child picks which English question matches the Japanese (は どれ？ — NOT の えいごを 選んでね).",
+    `Beat 1 (opening ONLY — no reaction prefix) EXACT: ${PART2_CH6_BEAT1_SPEAK} → What color did you choose?`,
+    "Beat 2 = short reaction + EXACT: How about this one? 「どの おさかなを えらびましたか？」は どれ？ → What fish did you choose?",
+    "Beat 3 = short reaction + EXACT: Your teacher might ask about the number of fish! 「すいそうに おさかなが なんびき いますか？」は どれ？ → How many fish are in your tank?",
+    "Beat 4 = short reaction + EXACT: How about this question? 「すいぞくかんの どんなところが すき？」は どれ？ → What do you like about your aquarium?",
+    "Beat 5 = short reaction + EXACT: Last one! 「じぶんの すいぞくかんが すき？」は どれ？ → Do you like your aquarium? → complete_segment(ch6) → Final Challenge.",
+    "Every post-answer turn MUST be reaction + full next script in ONE message. FORBIDDEN: praise-only; skipping the script; paraphrasing.",
+    "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer.",
+    "CRITICAL: Do NOT call complete_segment(ch6) after Beat 1–4. Stay until Do you like your aquarium? is correct.",
+    "FORBIDDEN: jumping to Final Challenge early; complete_segment(final1)/Ending before Final Challenge; Part 1 sand/basement lines.",
   ].join(" ");
 }
 
@@ -1304,14 +1416,19 @@ export function buildEndingFreeTalkInstructions(
 ) {
   const lesson = getLesson(state.lessonId);
   const instructionLevel = lesson.instructionLevel || levelId;
+  const part2 = usesBeginnerPart2Architecture(state.lessonId, levelId);
   const raw = [
     "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
-    "ENDING PHASE 2 ONLY — genuine open-ended free talk. The client already played static Turn A and asked: What kind of fish should we catch? どんな おさかなを つかまえよう？ Stay silent until the child answers.",
+    part2
+      ? "ENDING PHASE 2 ONLY — genuine open-ended free talk. The client already played the aquarium-remembered intro (Perfect! … You'll be ready!). Stay silent until the child answers. Follow THEIR topic about the aquarium, Minecraft, fish, decorations, school — whatever they bring."
+      : "ENDING PHASE 2 ONLY — genuine open-ended free talk. The client already played static Turn A and asked: What kind of fish should we catch? どんな おさかなを つかまえよう？ Stay silent until the child answers.",
     "On every child turn: react specifically to their latest words first, then ask exactly ONE natural, friendly follow-up about that same topic. ONE complete turn only — English first, then matching ひらがな with the SAME meaning in the SAME turn (English-only is FORBIDDEN); never restart or repeat the English. Keep the conversation varied and non-repetitive; follow the child's topic with no scripted progression or turn limit.",
-    "The first child answer is authoritative even if it is short or Japanese (for example クラゲ). Never ignore it, replace it with an old answer, or ask the Turn A fish question again.",
+    part2
+      ? "The first child answer is authoritative even if it is short or Japanese. Never ignore it or restart the intro Perfect / You'll be ready script."
+      : "The first child answer is authoritative even if it is short or Japanese (for example クラゲ). Never ignore it, replace it with an old answer, or ask the Turn A fish question again.",
     "REQUIRED bilingual shape every turn: clear age-appropriate English, then helpful natural ひらがな that matches that English. Never scold pronunciation or grammar. Never reply in English only.",
     "Never steer, suggest, hint, or direct the child toward ending. Never mention an end button/control.",
-    "Only the explicit client action 終わりにする can start the client-owned static Turn C finale. Before that action, FORBIDDEN: goodbye, See you next time, Next Minecraft, How many / なんびき, complete_segment, lesson review, quiz, Final Challenge, or any previous chapter prompt.",
+    "Only the explicit client action 終わりにする can start the client-owned finale goodbye. Before that action, FORBIDDEN: goodbye, See you next time, Next Minecraft, How many / なんびき, complete_segment, lesson review, quiz, Final Challenge, or any previous chapter prompt.",
     noSystemBackendRule(),
     "Never invent facts about the child's tank. Use only what the child says now or these known memories:",
     memoryBlock(state.memories),
@@ -1385,16 +1502,21 @@ export function buildFinal1Instructions(
 ) {
   const lesson = getLesson(state.lessonId);
   const instructionLevel = lesson.instructionLevel || levelId;
+  const isPart2 = usesBeginnerPart2Architecture(state.lessonId, levelId);
   const raw = [
     "You are ラーニー先生 (Learny), a warm human Japanese-English teacher talking live with a child.",
-    "FINAL CHALLENGE ONLY — short review quiz. Keep every reply SHORT.",
+    isPart2
+      ? "FINAL CHALLENGE PART 2 ONLY — short review quiz from the Part 2 phrase list (5–6 random items). Keep every reply SHORT."
+      : "FINAL CHALLENGE ONLY — short review quiz. Keep every reply SHORT.",
     `FIRST turn EXACTLY (if not yet spoken): ${final1OpenSpeak()} then IMMEDIATELY the first 〜は えいごで？ cue the client lists. Then WAIT.`,
     "FORBIDDEN openers: Are you ready? / じゅんびは できてる？ / stopping after the opener before the first cue.",
-    "Each item: EXACT listed cue + は えいごで？ (ひらがな ONLY — no kanji / katakana). Examples: がらすが ひつよう！は えいごで？ / すなを みつけた！は えいごで？",
+    isPart2
+      ? "Each item: EXACT listed cue + は えいごで？ (ひらがな ONLY). Use ONLY the client-listed cue — never invent; never Part 1 glass/sand."
+      : "Each item: EXACT listed cue + は えいごで？ (ひらがな ONLY — no kanji / katakana). Examples: がらすが ひつよう！は えいごで？ / すなを みつけた！は えいごで？",
     "After a correct answer: ONE short message = brief praise + NEXT cue in the SAME turn. FORBIDDEN: praise-only / two messages / inventing cues / bare は えいごで？.",
     "Say This is the last question! / さいごの もんだい！ ONLY when exactly ONE item remains.",
     "After the LAST correct answer: brief praise, then call complete_segment(final1). FORBIDDEN: another quiz question.",
-    "Wrong tap: soft おしい！もういちど + re-ask the SAME cue. Never reveal the English answer.",
+    "Wrong tap: rotate a soft bilingual retry (Nice try / So close / Oops / ざんねん / ちがうみたい — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer; re-ask the SAME cue. Never reveal the English answer.",
     "Every spoken turn: English first, then matching ひらがな with the SAME meaning.",
     noSystemBackendRule(),
     "Never invent tank facts. Known memories:",
@@ -1421,6 +1543,13 @@ function final1StartNudge() {
 function ending1StartNudge() {
   return (
     "[Teacher note — do not read aloud] Stay SILENT. Client will send Ending Turn A. Do not speak Perfect / Hold on / what kind of fish until then."
+  );
+}
+
+function ending1StartNudgePart2() {
+  return (
+    "[Teacher note — do not read aloud] Stay SILENT. Client owns Part 2 Ending Turn A — " +
+    "do not speak Perfect / aquarium remembered until the client sends the exact script."
   );
 }
 
@@ -1473,6 +1602,77 @@ function ch1StartNudge() {
   );
 }
 
+/** Part 2 Chapter 1 opening — decorate/kelp, never Part 1 glass/tank Step 1. */
+function ch1StartNudgePart2() {
+  return (
+    "[Teacher note — do not read aloud] PART 2 CHAPTER 1 starts NOW. Warmup aquarium recall is DONE. " +
+    "Speak EXACTLY this ONE turn word-for-word — ENGLISH first, then the 「」ひらがな elicit (never Japanese-only), then WAIT for the 4-choice tap: " +
+    `${PART2_CH1_BEAT1_SPEAK} ` +
+    "FORBIDDEN: skipping the English; starting at 「; translating the English lead into Japanese; あなたのすいそうの; かざりつけ; おぼえてるかな; " +
+    "repeating any part of the line; What do I need to make a tank / transparent and hard / とうめいで かたい / " +
+    "がらすが ひつよう / I need glass / I need sand / Thank you tank Step 1 / Will you help me make it."
+  );
+}
+
+function ch1RulePart2() {
+  return [
+    "CHAPTER 1 PART 2 — decorate the tank with on-screen 4-choice MCQ. One beat at a time.",
+    `Beat 1 (opening ONLY — no reaction prefix) EXACT: ${PART2_CH1_BEAT1_SPEAK} → I put kelp here.`,
+    `Beat 2 = short reaction + EXACT: How about coral? ${PART2_ELICIT_JA.ch1PutCoral} → I put coral here.`,
+    `Beat 3 = short reaction + EXACT: You had different decorations! ${PART2_ELICIT_JA.ch1ChooseThis} → I choose this one.`,
+    "Beat 3 CRITICAL AUDIO: say これ・を・えらぶ inside 「」. FORBIDDEN: ここに えらぶ / ここにえらぶ.",
+    `Beat 4 = short reaction + EXACT: You found coral you liked! ${PART2_ELICIT_JA.ch1LikeCoral} → I like this coral.`,
+    `Beat 5 = short reaction + EXACT: Your tank looked great! ${PART2_ELICIT_JA.ch1LooksCool} → It looks cool! → complete_segment(ch1) → Chapter 2.`,
+    "Every post-answer turn MUST be reaction + full next script in ONE message. FORBIDDEN: praise-only; skipping the script; paraphrasing.",
+    "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer.",
+    "CRITICAL: Do NOT call complete_segment(ch1) after Beat 1–4. Stay on Chapter 1 until It looks cool! is correct.",
+    "FORBIDDEN: jumping to Chapter 2 / うみに いこう / fish search before all 5 decoration beats are done.",
+    "FORBIDDEN: Part 1 glass/sand/tank-build lines (What do I need to make a tank / とうめいで かたい / がらすが ひつよう).",
+  ].join(" ");
+}
+
+function ch2RulePart2() {
+  return [
+    "CHAPTER 2 PART 2 — find fish with on-screen 4-choice MCQ. One beat at a time.",
+    `Beat 1 (opening ONLY — no reaction prefix) EXACT: ${PART2_CH2_BEAT1_SPEAK} → Let's go to the ocean!`,
+    `Beat 2 = short reaction + EXACT: You found a fish! ${PART2_ELICIT_JA.ch2FoundFish} → I found a fish!`,
+    `Beat 3 = short reaction + EXACT: You found a blue fish! ${PART2_ELICIT_JA.ch2BlueFish} → I found a blue fish!`,
+    `Beat 4 = short reaction + EXACT: You found a fish you wanted! ${PART2_ELICIT_JA.ch2WantFish} → I want this fish.`,
+    `Beat 5 = short reaction + EXACT: You decided which fish you wanted! ${PART2_ELICIT_JA.ch2ChooseFish} → I choose this fish. → complete_segment(ch2) → Chapter 3.`,
+    "Every post-answer turn MUST be reaction + full next script in ONE message. FORBIDDEN: praise-only; skipping the script; paraphrasing.",
+    "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer.",
+    "CRITICAL: Do NOT call complete_segment(ch2) after Beat 1–4. Stay on Chapter 2 until I choose this fish. is correct.",
+    "FORBIDDEN: jumping to Chapter 3 / おさかなを つかまえた / bucket catch before all 5 find-fish beats are done.",
+    "FORBIDDEN: Part 1 sand/beach search lines (I found some sand / Keep looking).",
+  ].join(" ");
+}
+
+function ch3RulePart2() {
+  return [
+    "CHAPTER 3 PART 2 — catch fish with on-screen 4-choice MCQ. Two beats only.",
+    `Beat 1 (opening ONLY — no reaction prefix) EXACT: ${PART2_CH3_BEAT1_SPEAK} → I caught a fish!`,
+    `Beat 2 = short reaction + EXACT: Now you have the fish! ${PART2_ELICIT_JA.ch3HaveFish} → I have a fish! → complete_segment(ch3) → Mini quiz 1.`,
+    "Every post-answer turn MUST be reaction + full next script in ONE message. FORBIDDEN: praise-only; skipping the script; paraphrasing.",
+    "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer.",
+    "CRITICAL: Do NOT call complete_segment(ch3) after Beat 1. Stay on Chapter 3 until I have a fish! is correct.",
+    "FORBIDDEN: jumping to Mini quiz 1 / Chapter 4 put-in-tank before both catch beats are done.",
+  ].join(" ");
+}
+
+function ch4RulePart2() {
+  return [
+    "CHAPTER 4 PART 2 — put fish in tank with on-screen 4-choice MCQ. Three beats only.",
+    `Beat 1 (opening ONLY — no reaction prefix) EXACT: ${PART2_CH4_BEAT1_SPEAK} → I put the fish in the tank.`,
+    `Beat 2 = short reaction + EXACT: How about "ここに いれた"? ${PART2_ELICIT_JA.ch4PutItHere} → I put it in here.`,
+    `Beat 3 = short reaction + EXACT: You looked in the tank and saw a fish! ${PART2_ELICIT_JA.ch4LookFish} → Look! There's a fish! → complete_segment(ch4) → Daily English.`,
+    "Every post-answer turn MUST be reaction + full next script in ONE message. FORBIDDEN: praise-only; skipping the script; paraphrasing.",
+    "If wrong: rotate a soft bilingual retry (Nice try / So close / Hmm not that one / Oops / Good try / ざんねん / ちがうみたい / おっと — NEVER always Almost! Try again! / おしい！もういちど！). Do NOT reveal the answer.",
+    "CRITICAL: Do NOT call complete_segment(ch4) after Beat 1–2. Stay on Chapter 4 until Look! There's a fish! is correct.",
+    "FORBIDDEN: jumping to Daily English / fish count / What did you eat before all 3 put-in-tank beats are done.",
+    "FORBIDDEN: Part 1 color/dye / Let's make coloured glass / walls.",
+  ].join(" ");
+}
+
 function warmupRules(segment, lessonId) {
   if (segment?.type !== "warmup") return "";
   let must, bridge;
@@ -1480,8 +1680,16 @@ function warmupRules(segment, lessonId) {
     must = "No fixed question list. After the greeting, follow what the child said with natural everyday questions (food, games, colors, etc. are optional — never force What's your favorite summer food?). Stay on their topic 1–2 turns. When they share news (cafe, school, game…): name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the tank in the same turn as reacting.";
     bridge = "ONLY on a later turn — after enough chat — invite in ONE message: short reaction to their last line, THEN the tank invite with FULL English THEN matching ひらがな. Pattern: \"Okay! Oh! Today I want to make a fish tank. Will you help me make it? そっか！そうだ！きょうは らーにーせんせいの すいそうづくりを てつだってほしいんだ。いっしょに つくれる？\" Never start with bare Oh! Today with no reaction. Never Japanese-only invite. Never すいそうを てつだって. That invite turn must END with the help question — then STOP. FORBIDDEN same turn: Thank you, What do I need to make a tank, glass, sand, complete_segment(ch0). Wait for yes/ok. As soon as they agree on the NEXT turn, call complete_segment(ch0) BEFORE saying anything about glass or sand. While CURRENT SEGMENT is still warmup/ch0, do NOT teach glass, sand, or I need glass.";
   } else if (lessonId === "part2") {
-    must = "No fixed question list. After the greeting, follow what the child said with natural everyday questions. Stay on their topic 1–2 turns. When they share news: name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the aquarium in the same turn as reacting.";
-    bridge = "ONLY on a later turn — after enough chat — invite in ONE message: short reaction to their last line, THEN the aquarium recall invite with FULL English THEN matching ひらがな. Pattern: \"Okay! Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! そっか！そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！\" Never start with bare Oh! with no reaction. Never Japanese-only invite. That invite turn must END with the remember question — then STOP. FORBIDDEN same turn: complete_segment(ch0). Wait for yes/ok. As soon as they agree on the NEXT turn, call complete_segment(ch0) BEFORE teaching any phrases.";
+    must =
+      "Prioritize natural conversation over a rigid script list. After the greeting, follow what the child said with everyday questions. " +
+      "Stay on their topic 1–2 turns. When they share news: name it, ask ONE follow-up about THAT, WAIT. Do NOT jump to the aquarium mid-reaction.";
+    bridge =
+      "ONLY after ~3 chat exchanges — ending invite in ONE message: short reaction that NAMES their last words, THEN speak EXACTLY: " +
+      "\"Oh! Do you remember the aquarium you made in Minecraft? Let's remember it together! " +
+      "そうだ！このまえ まいんくらふとで つくった すいぞくかん、おぼえてる？いっしょに おもいだしてみよう！\" " +
+      "Example: Grape cake! Yum! グレープケーキ！おいしそう！ then the Oh! invite. " +
+      "FORBIDDEN: bare Oh!/Okay!/そっか with no reaction to what they said; Japanese-only invite. Then STOP and WAIT. " +
+      "FORBIDDEN same turn: complete_segment(ch0). On the NEXT turn, ANY child reply (yes/no/ok/anything) → call complete_segment(ch0) BEFORE teaching any phrases.";
   } else {
     must = "Do not rush into the aquarium. Chat like a real teacher first. Stay on their topic 1–2 turns before any homework bridge.";
     bridge = "ONLY on a later, separate turn: \"Remember the Minecraft aquarium class? Shall we remember YOUR tank?\" Japanese (ひらがな only): 「このまえの まいんくらふとで つくった すいそう、おもいだそうか？」 Wait for yes/ok, then call complete_segment for warmup before recall questions.";
@@ -1495,10 +1703,12 @@ function warmupRules(segment, lessonId) {
     "How are you answers: warm varied reaction (That's great! / Glad to hear it! / Hope you feel better! — rotate, don't always That's great!) + EXACTLY What did you do today? きょうは なにを したの？ — NOT Did you eat lunch yet?, NOT Are you hungry?, NOT Thank you / ありがとう (thank-you is only for help or gifts).",
     "CONTENT answers mid-chat (I studied / I went to the cafe / I played…): show real interest — name their words, add a tiny human comment (Was it fun? / Cool! / Sounds hard!), THEN ONE curious follow-up about THAT topic — then STOP and WAIT. FORBIDDEN mid-chat: hollow Oh! then fish-tank invite; robotic You X! What did you X? every turn.",
     "Follow their answer with ONE everyday follow-up question — then STOP and wait for the child. Never two chat questions in one turn.",
-    "If they answer no / nothing / とくにない: acknowledge (Okay! / そっか！) and change topic — NEVER repeat Did you do anything fun today? or the same question.",
-    "FORBIDDEN mid-chat: everyday follow-up question + fish tank invite in one bubble. Chat follow-ups and the final invite are different turns.",
-    "Over the warmup, 3–4 real Q&A exchanges before the tank invite. Do not invite right after their first activity answer. Do not read a question list.",
-    "INVITE TURN (after enough chat): warm short reaction to their last line + Oh! Today… tank help question in the SAME turn (e.g. Okay! Oh! Today I want…). Then WAIT.",
+    "If they answer no / nothing / とくにない / not really: acknowledge (Okay! / そっか！) and ask ONE DIFFERENT question OR (when ready) the homework invite — NEVER repeat Did you play anything fun? / Did you do anything fun today? / What did you do today? or any question they just answered.",
+    "FORBIDDEN mid-chat: everyday follow-up question + homework invite in one bubble. Chat follow-ups and the final invite are different turns.",
+    "Over the warmup, 3–4 real Q&A exchanges before the homework invite. Do not invite right after their first activity answer. Do not read a question list.",
+    lessonId === "part2"
+      ? "INVITE TURN (after ~3 chat exchanges): short reaction that NAMES their last words, THEN Oh! Do you remember the aquarium… (EN then ひらがな). FORBIDDEN: bare Oh! with no reaction. Then WAIT. ANY reply next → Chapter 1."
+      : "INVITE TURN (after enough chat): warm short reaction to their last line + Oh! Today… tank help question in the SAME turn (e.g. Okay! Oh! Today I want…). Then WAIT.",
     must,
     bridge,
   ].join(" ");
@@ -1563,8 +1773,14 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     segment.id === "daily1" && usesTemplate ? daily1Rule() : "",
     segment.id === "ch6" && usesTemplate ? ch6StoryRule() : "",
     segment.id === "final1" && usesTemplate ? final1Rule() : "",
+    segment.id === "final1" && usesPart2 ? final1RulePart2() : "",
     segment.id === "ending1" && usesTemplate ? ending1Rule() : "",
     // Part 2 chapter rules
+    segment.id === "ch1" && usesPart2 ? ch1RulePart2() : "",
+    segment.id === "ch2" && usesPart2 ? ch2RulePart2() : "",
+    segment.id === "ch3" && usesPart2 ? ch3RulePart2() : "",
+    segment.id === "ch4" && usesPart2 ? ch4RulePart2() : "",
+    segment.id === "quiz1" && usesPart2 ? quiz1RulePart2() : "",
     segment.id === "daily1" && usesPart2 ? daily1RulePart2() : "",
     segment.id === "ch5" && usesPart2 ? ch5RulePart2() : "",
     segment.id === "ch6" && usesPart2 ? ch6RulePart2() : "",
@@ -1626,6 +1842,9 @@ export function buildOpeningNudge(state = loadLessonState()) {
   if (usesTemplate && segment.id === "ch1") {
     return ch1StartNudge();
   }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "ch1") {
+    return ch1StartNudgePart2();
+  }
   if (usesTemplate && segment.id === "ch4") {
     return ch4StartNudge();
   }
@@ -1641,11 +1860,17 @@ export function buildOpeningNudge(state = loadLessonState()) {
   if (usesTemplate && segment.id === "quiz1") {
     return quiz1StartNudge();
   }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "quiz1") {
+    return quiz1StartNudgePart2();
+  }
   if (usesTemplate && segment.id === "final1") {
     return final1StartNudge();
   }
   if (usesTemplate && segment.id === "ending1") {
     return ending1StartNudge();
+  }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "ending1") {
+    return ending1StartNudgePart2();
   }
   return (
     `[Teacher note — do not read this aloud as a script.] Start this segment now: ${segment.title}. ${segment.coach} ` +
@@ -1661,6 +1886,9 @@ export function buildAdvanceNudge(state = loadLessonState()) {
   );
   if (usesTemplate && segment.id === "ch1") {
     return ch1StartNudge();
+  }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "ch1") {
+    return ch1StartNudgePart2();
   }
   if (usesTemplate && segment.id === "ch2") {
     return (
@@ -1681,6 +1909,9 @@ export function buildAdvanceNudge(state = loadLessonState()) {
   if (usesTemplate && segment.id === "quiz1") {
     return quiz1StartNudge();
   }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "quiz1") {
+    return quiz1StartNudgePart2();
+  }
   if (usesTemplate && segment.id === "ch4") {
     return ch4StartNudge();
   }
@@ -1698,6 +1929,9 @@ export function buildAdvanceNudge(state = loadLessonState()) {
   }
   if (usesTemplate && segment.id === "ending1") {
     return ending1StartNudge();
+  }
+  if (usesBeginnerPart2Architecture(state.lessonId, ACTIVE_LEVEL_ID) && segment.id === "ending1") {
+    return ending1StartNudgePart2();
   }
   return (
     `[Teacher note] The previous chapter is done. Move to: ${segment.title} (${segment.type}). ${segment.coach} ` +
@@ -1718,6 +1952,10 @@ export function buildHandoffOpeningNudge(
     state.lessonId,
     ACTIVE_LEVEL_ID
   );
+  const usesPart2 = usesBeginnerPart2Architecture(
+    state.lessonId,
+    ACTIVE_LEVEL_ID
+  );
   // Never re-ack the previous chapter's answer on a fixed hinge opening — that made
   // Live praise "I made yellow glass!" while the client already opened Chapter 5,
   // so STT merged praise into the wall-opening bubble.
@@ -1726,6 +1964,7 @@ export function buildHandoffOpeningNudge(
     segment?.id === "ch5" ||
     segment?.id === "ch4" ||
     segment?.id === "ch3" ||
+    segment?.id === "ch2" ||
     segment?.id === "ch1" ||
     segment?.id === "quiz1" ||
     segment?.id === "final1" ||
@@ -1737,6 +1976,50 @@ export function buildHandoffOpeningNudge(
   const quote = omitQuote ? "" : String(lastQuote || "").trim().slice(0, 60);
   const quoteBit = quote ? ` Child said "${quote}".` : "";
   const retryBit = reason === "stuck_retry" ? " Stuck-retry." : "";
+
+  if (usesPart2 && segment?.id === "ch1") {
+    return (
+      `[Coach]${retryBit} PART 2 ch1 Beat 1 ONLY. Speak EXACTLY word-for-word ONCE — ENGLISH first, then 「」ひらがな — then WAIT: ` +
+      `${PART2_CH1_BEAT1_SPEAK} ` +
+      "FORBIDDEN: Japanese-only; starting at 「; paraphrasing; repeating any part; translating the English lead; " +
+      "What do I need to make a tank / glass / sand / Thank you tank Step 1 / previous chapter."
+    );
+  }
+  if (usesPart2 && segment?.id === "ch2") {
+    return (
+      `[Coach]${retryBit} PART 2 ch2 Beat 1 ONLY. Speak EXACTLY word-for-word ONCE — ENGLISH first, then 「」 — then WAIT: ` +
+      `${PART2_CH2_BEAT1_SPEAK} ` +
+      "FORBIDDEN: Japanese-only; paraphrasing; adding the ocean! / Let's go to the ocean before the child taps; " +
+      "repeating the elicit; restarting the same line; previous chapter praise."
+    );
+  }
+  if (usesPart2 && segment?.id === "ch3") {
+    return (
+      `[Coach]${retryBit} PART 2 ch3 Beat 1 ONLY. Speak EXACTLY word-for-word ONCE then WAIT: ` +
+      `${PART2_CH3_BEAT1_SPEAK} ` +
+      "FORBIDDEN: paraphrasing; repeating the elicit; restarting the same line after finishing; previous chapter."
+    );
+  }
+  if (usesPart2 && segment?.id === "ch4") {
+    return (
+      `[Coach]${retryBit} PART 2 ch4 Beat 1 ONLY. Speak EXACTLY word-for-word ONCE then WAIT: ` +
+      `${PART2_CH4_BEAT1_SPEAK} ` +
+      "FORBIDDEN: paraphrasing; repeating the elicit; restarting the same line; previous chapter."
+    );
+  }
+  if (usesPart2 && segment?.id === "ch5") {
+    return (
+      `[Coach]${retryBit} PART 2 ch5 Beat A1 ONLY. Speak EXACTLY word-for-word ONCE then WAIT for a number button (1–10): ` +
+      `${PART2_CH5_BEAT1_SPEAK} ` +
+      "FORBIDDEN: inventing a count; skipping to There are N fish MCQ; previous chapter."
+    );
+  }
+  if (usesPart2 && segment?.id === "daily1") {
+    return (
+      `[Coach]${retryBit} PART 2 daily1 ONLY. Speak EXACTLY then WAIT: ${daily1OpenSpeakPart2()} ` +
+      "FORBIDDEN: Part 1 favourite animal opener / tank-build lines."
+    );
+  }
 
   const speakExact = {
     ch1:
@@ -1760,6 +2043,16 @@ export function buildHandoffOpeningNudge(
   };
 
   const line = speakExact[segment.id];
+  if (usesPart2 && segment.id === "quiz1") {
+    const q1 =
+      "くいずたいむ！「ここに さんごを おいた」は えいごで？";
+    return (
+      `[QUIZ]${retryBit} PART 2 MINI QUIZ 1 item 1 ONLY. Your entire audible turn MUST be exactly: ${q1} ` +
+      "Start with くいずたいむ — no praise, acknowledgement, readiness question, English, translation, or generic quiz opener before it. " +
+      "End after えいごで？ and WAIT. Speak this script once; do not split it into separate turns. " +
+      "FORBIDDEN: じゃあ つぎは / item 2 「この おさかなが ほしい」 / item 3 / Perfect / Great / previous chapter."
+    );
+  }
   if (usesTemplate && segment.id === "quiz1") {
     return (
       `[QUIZ]${retryBit} MINI QUIZ 1 item 1 ONLY. Your entire audible turn MUST be exactly: ${line} ` +
@@ -1785,6 +2078,12 @@ export function buildHandoffOpeningNudge(
   if (usesTemplate && segment.id === "ending1") {
     return (
       `[Coach]${retryBit} ending1 ONLY. Stay SILENT — client owns Turn A audio. Do not say Perfect / Hold on / what kind of fish.`
+    );
+  }
+  if (usesPart2 && segment.id === "ending1") {
+    return (
+      `[Coach]${retryBit} ending1 ONLY. Stay SILENT — client owns Part 2 Ending Turn A. ` +
+      "Do not say Perfect / aquarium remembered until the client sends the exact script."
     );
   }
   if (usesTemplate && line) {

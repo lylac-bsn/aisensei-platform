@@ -8,7 +8,7 @@ import {
   isBadgeEnabledScope,
   maybeRecordBadgeFirstTry,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260910-ch6-mcq-show-2";
+} from "./badge-engine.js?v=20260920-part2-ch0-badge";
 
 /** @typedef {{
  *   id: string,
