@@ -69,6 +69,6 @@ assert.doesNotMatch(
 
 assert.match(voice, /usesBeginnerHomeworkArchitecture\(state\)/);
 assert.match(voice, /maybeHealPart2EndingChapterBadge/);
-assert.match(voiceTab, /homework-voice\.js\?v=20260921-final1-praise-variety/);
+assert.match(voiceTab, /homework-voice\.js\?v=20260922-part2-intro-tts/);
 
 console.log("check-part2-ending-after-final1: ok");

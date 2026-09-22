@@ -7,7 +7,7 @@ import {
   PART2_CH4_BEAT1_SPEAK,
   PART2_CH5_BEAT1_SPEAK,
   PART2_CH6_BEAT1_SPEAK,
-} from "./lessons/aquarium-part2.js?v=20260921-part2-intro-freetalk";
+} from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
 import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260921-ending-autostart";
 import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {

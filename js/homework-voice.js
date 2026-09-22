@@ -43,7 +43,7 @@ import {
 } from "./lesson-engine.js?v=20260921-admin-part-split";
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
-import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260921-part2-intro-freetalk";
+import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
 import { QuestSfx } from "./quest-sfx.js";
 import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260921-admin-part-split";
 import {
@@ -74,8 +74,8 @@ import {
   ENDING1_FINALE_SPEAK,
   ENDING1_INTRO_SPEAK,
   isEnding1FinaleTranscript,
-} from "./ending-audio-config.js?v=20260921-part2-intro-freetalk";
-import { ENDING_AUDIO_MANIFEST } from "../audio/ending/manifest.js?v=20260921-part2-intro-freetalk";
+} from "./ending-audio-config.js?v=20260922-part2-intro-tts";
+import { ENDING_AUDIO_MANIFEST } from "../audio/ending/manifest.js?v=20260922-part2-intro-tts";
 import { EndingFreeTalkTurnQueue } from "./ending-freetalk-queue.js?v=20260909-ending-prewarm-2";
 import { ch4MakeTellSpeak } from "./ch4-audio-config.js?v=20260910-ch4-static-1";
 import { CH4_AUDIO_MANIFEST } from "../audio/ch4/manifest.js?v=20260910-ch4-static-1";

@@ -47,6 +47,10 @@ const PHRASE_TRANSLATIONS_JA = Object.freeze({
   mountains: "やま",
   left: "ひだり",
   right: "みぎ",
+  ok: "おっけー",
+  okay: "おっけー",
+  yes: "はい",
+  // Part 1
   "i need glass": "がらすが ひつよう",
   "i need sand": "すなが ひつよう",
   "i found some sand": "すなを みつけた",
@@ -64,6 +68,27 @@ const PHRASE_TRANSLATIONS_JA = Object.freeze({
   "i'm done": "できた",
   "i am done": "できた",
   "my tank is ready": "すいそうの じゅんびが できた",
+  // Part 2
+  "i put kelp here": "ここに こんぶを おいた",
+  "i put coral here": "ここに さんごを おいた",
+  "i choose this one": "これを えらぶ",
+  "i like this coral": "この さんごが すき",
+  "it looks cool": "かっこいい！",
+  "let's go to the ocean": "うみに いこう！",
+  "lets go to the ocean": "うみに いこう！",
+  "i found a fish": "おさかなを みつけた！",
+  "i found a blue fish": "あおい おさかなを みつけた！",
+  "i want this fish": "この おさかなが ほしい",
+  "i choose this fish": "この おさかなを えらぶ",
+  "i caught a fish": "おさかなを つかまえた！",
+  "i have a fish": "おさかなを もってる！",
+  "i put the fish in the tank": "おさかなを すいそうに いれた",
+  "i put it in here": "ここに いれた",
+  "look there's a fish": "みて！おさかなが いる！",
+  "there's a fish": "おさかなが いる！",
+  "there is a fish": "おさかなが いる！",
+  "there are three fish": "おさかなが 3びき いる",
+  "there are five fish": "おさかなが 5ひき いる",
 });
 
 const COLOR_TRANSLATIONS_JA = Object.freeze({
@@ -108,9 +133,10 @@ export function phraseTranslationJa(phrase) {
   const key = String(phrase || "")
     .trim()
     .toLowerCase()
-    .replace(/[’]/g, "'")
-    .replace(/[.!?。！？]+$/g, "")
-    .replace(/\s+/g, " ");
+    .replace(/[’']/g, "'")
+    .replace(/[.!?。！？]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (PHRASE_TRANSLATIONS_JA[key]) return PHRASE_TRANSLATIONS_JA[key];
 
   const colorGlass = key.match(/^i made (.+) glass$/);
@@ -118,9 +144,33 @@ export function phraseTranslationJa(phrase) {
     const color = COLOR_TRANSLATIONS_JA[colorGlass[1]] || colorGlass[1];
     return `${color}いろの がらすを つくった`;
   }
+
+  const colorFish = key.match(/^i found a (.+) fish$/);
+  if (colorFish) {
+    const color = COLOR_TRANSLATIONS_JA[colorFish[1]] || colorFish[1];
+    return `${color} おさかなを みつけた！`;
+  }
+
+  const countFish = key.match(/^there are (\w+) fish$/);
+  if (countFish) {
+    const n = countFish[1];
+    const countJa =
+      {
+        one: "1ぴき",
+        two: "2ひき",
+        three: "3びき",
+        four: "4ひき",
+        five: "5ひき",
+        six: "6ひき",
+        seven: "7ひき",
+        eight: "8ひき",
+        nine: "9ひき",
+        ten: "10ぴき",
+      }[n] || n;
+    return `おさかなが ${countJa} いる`;
+  }
   return "";
 }
-
 function canonicalSearchPlace(value) {
   const key = String(value || "")
     .trim()
