@@ -87,6 +87,7 @@ const PHRASE_TRANSLATIONS_JA = Object.freeze({
   "look there's a fish": "みて！おさかなが いる！",
   "there's a fish": "おさかなが いる！",
   "there is a fish": "おさかなが いる！",
+  "there is one fish": "おさかなが 1ぴき いる",
   "there are three fish": "おさかなが 3びき いる",
   "there are five fish": "おさかなが 5ひき いる",
 });
