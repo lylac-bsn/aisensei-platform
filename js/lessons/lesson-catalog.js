@@ -1,5 +1,6 @@
 import { AQUARIUM_PART1 } from "./aquarium-part1.js?v=20260921-retry-variety";
 import { AQUARIUM_PART2 } from "./aquarium-part2.js?v=20260922-part2-intro-tts";
+import { AQUARIUM_PART3 } from "./aquarium-presentation.js?v=20260924-part3";
 import { AQUARIUM_INTERMEDIATE_PART1 } from "./aquarium-intermediate-part1.js?v=20260910-ch6-mcq-show-2";
 import { AQUARIUM_INTERMEDIATE_PART2 } from "./aquarium-intermediate-part2.js?v=20260910-ch6-mcq-show-2";
 import { AQUARIUM_ADVANCED_PART1 } from "./aquarium-advanced-part1.js?v=20260910-ch6-mcq-show-2";
@@ -9,6 +10,7 @@ export const LESSON_CATALOG = Object.freeze({
   beginner: Object.freeze({
     part1: AQUARIUM_PART1,
     part2: AQUARIUM_PART2,
+    part3: AQUARIUM_PART3,
   }),
   intermediate: Object.freeze({
     part1: AQUARIUM_INTERMEDIATE_PART1,

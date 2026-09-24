@@ -1,9 +1,9 @@
 /**
  * Admin 「学習進捗」dashboard — chapter MCQ click stats, phrase checklist, poke counts.
  */
-import { lessonFor } from "./lessons/lesson-catalog.js";
-import { allLessons } from "./lessons/lesson-catalog.js";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260921-admin-part-split";
+import { lessonFor } from "./lessons/lesson-catalog.js?v=20260924-part3";
+import { allLessons } from "./lessons/lesson-catalog.js?v=20260924-part3";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260924-part3";
 import { totalPokeCount } from "./activity-log.js";
 import {
   currentFreetalkStats,
@@ -18,7 +18,7 @@ import {
   FAMILY_LABELS_JA,
   BADGE_FAMILIES,
   familySlotImage,
-} from "./badge-engine.js?v=20260921-admin-part-split";
+} from "./badge-engine.js?v=20260924-part3";
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
@@ -132,7 +132,9 @@ export function buildPhraseCatalog() {
   for (const lesson of allLessons()) {
     pushFrom(
       lesson,
-      `${lesson.levelId || "beginner"} · ${lesson.id === "part2" ? "Part 2" : "Part 1"}`
+      `${lesson.levelId || "beginner"} · ${
+        lesson.id === "part2" ? "Part 2" : lesson.id === "part3" ? "Part 3" : "Part 1"
+      }`
     );
   }
   return out;
@@ -144,7 +146,7 @@ function collectSpokenPhrases(user) {
   const spoken = [];
   for (const meta of LEVEL_META) {
     const field = user[meta.field] || {};
-    for (const part of [field.part1, field.part2]) {
+    for (const part of [field.part1, field.part2, field.part3]) {
       if (!Array.isArray(part?.phrasesSpoken)) continue;
       for (const p of part.phrasesSpoken) {
         const english = typeof p === "string" ? p : p?.english;
@@ -172,7 +174,7 @@ function summarizeUserMcqFromParts(user) {
     const field = user[meta.field];
     if (!field) continue;
     sawProgressDoc = true;
-    for (const part of [field.part1, field.part2]) {
+    for (const part of [field.part1, field.part2, field.part3]) {
       const totals = summarizeLifetimeMcq(part);
       correct += totals.correct;
       incorrect += totals.incorrect;
@@ -290,7 +292,8 @@ export function buildProgressSummary(users) {
       return Boolean(
         progress?.part1Complete ||
         progress?.part1?.complete ||
-        progress?.part2?.complete
+        progress?.part2?.complete ||
+        progress?.part3?.complete
       );
     });
   }).length;
@@ -347,6 +350,8 @@ function renderChapterPlayCounts(part, lesson) {
 function renderHomeworkParts(meta, raw, user) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
+  const p3 = raw?.part3 || null;
+  const part3Lesson = meta.id === "beginner" && p3 ? lessonFor(meta.id, "part3") : null;
   const partHasAnyProgress = (part) =>
     Boolean(
       part?.complete ||
@@ -369,7 +374,7 @@ function renderHomeworkParts(meta, raw, user) {
         mem ? ` · ${escapeHtml(mem)}` : ""
       }</p>
       ${renderChapterPlayCounts(part, lesson)}
-      ${renderLessonBadgeRow(user, meta, partKey)}
+      ${partKey ? renderLessonBadgeRow(user, meta, partKey) : ""}
     </div>`;
   };
   return `<details class="progress-level-block">
@@ -378,12 +383,15 @@ function renderHomeworkParts(meta, raw, user) {
       <span class="progress-level-meta">${escapeHtml(
         `${raw?.part1Complete || p1.complete ? "Part1完了" : "Part1進行中"} · ${
           p2.complete ? "Part2完了" : partHasAnyProgress(p2) ? "Part2進行中" : "Part2未開始"
+        }${
+          part3Lesson ? ` · ${p3.complete ? "Part3完了" : partHasAnyProgress(p3) ? "Part3進行中" : "Part3未開始"}` : ""
         }`
       )}</span>
     </summary>
     <div class="progress-level-content">
       ${row("Part 1", p1, lessonFor(meta.id, "part1"), "part1")}
       ${row("Part 2", p2, lessonFor(meta.id, "part2"), "part2")}
+      ${part3Lesson ? row("Part 3", p3, part3Lesson, null) : ""}
     </div>
   </details>`;
 }
@@ -710,12 +718,13 @@ function activityTypeMeta(type) {
 function segmentLabelForEvent(ev) {
   const segmentId = String(ev?.segmentId || "");
   if (!segmentId) return "";
-  const lessonId = ev?.lessonId === "part2" || ev?.lessonId === "part1"
+  const lessonId = ev?.lessonId === "part2" || ev?.lessonId === "part1" || ev?.lessonId === "part3"
     ? ev.lessonId
     : null;
   const lesson = lessonFor(ev?.level || "beginner", lessonId || "part1");
   const segment = (lesson?.segments || []).find((item) => item.id === segmentId);
   const title = segment?.title || segment?.titleEn || segmentId;
+  if (lessonId === "part3") return `Part3 · ${title}`;
   if (lessonId === "part2") return `Part2 · ${title}`;
   if (lessonId === "part1") return `Part1 · ${title}`;
   // Missing lessonId: do not assume Part 1 titles for shared segment ids.
@@ -866,7 +875,8 @@ export function renderProgressDashboard(users, searchQuery = "") {
             return Boolean(
               progress?.part1Complete ||
               progress?.part1?.complete ||
-              progress?.part2?.complete
+              progress?.part2?.complete ||
+              progress?.part3?.complete
             );
           });
           const statusClass = hasCompletedLesson

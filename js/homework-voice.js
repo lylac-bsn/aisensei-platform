@@ -40,12 +40,30 @@ import {
   final1OpenSpeak,
   usesBeginnerPart1Architecture,
   usesBeginnerPart2Architecture,
-} from "./lesson-engine.js?v=20260921-admin-part-split";
+  usesBeginnerPart3Architecture,
+  buildPart3LessonInstructions,
+  jumpToSegment,
+} from "./lesson-engine.js?v=20260924-part3";
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
 import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
+import {
+  PART3_GLASS_COLORS,
+  PART3_RETRY_SPEAK,
+  PART3_REACTIONS,
+  PART3_ENDING_TURNS,
+  resolvePart3Text,
+  resolvePart3Beat,
+  part3BeatSpeak,
+  part3EnglishName,
+} from "./lessons/aquarium-presentation.js?v=20260924-part3";
+import {
+  PART3_NAME_AUDIO_SAMPLE_RATE,
+  ensurePart3NameAudio,
+  getPart3NameAudio,
+} from "./part3-name-audio.js?v=20260924-part3";
 import { QuestSfx } from "./quest-sfx.js";
-import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260921-admin-part-split";
+import { recordEndingFreetalkEnglish } from "./badge-engine.js?v=20260924-part3";
 import {
   getCurrentMcqBeat,
   getSegmentMcqBeats,
@@ -59,7 +77,7 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260921-admin-part-split";
+} from "./mcq-engine.js?v=20260924-part3";
 import {
   MCQ_AUDIO_COLORS,
   MCQ_AUDIO_FISH_COUNTS,
@@ -73,8 +91,9 @@ import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260916-part2-au
 import {
   ENDING1_FINALE_SPEAK,
   ENDING1_INTRO_SPEAK,
+  PART3_RETRY_AUDIO_KEY,
   isEnding1FinaleTranscript,
-} from "./ending-audio-config.js?v=20260922-part2-intro-tts";
+} from "./ending-audio-config.js?v=20260924-part3";
 import { ENDING_AUDIO_MANIFEST } from "../audio/ending/manifest.js?v=20260922-part2-intro-tts";
 import { EndingFreeTalkTurnQueue } from "./ending-freetalk-queue.js?v=20260909-ending-prewarm-2";
 import { ch4MakeTellSpeak } from "./ch4-audio-config.js?v=20260910-ch4-static-1";
@@ -141,6 +160,13 @@ function usesPart2Architecture(state = loadLessonState()) {
 }
 
 /** Part 1 or Part 2 beginner homework (shared warmup/handoff gates). */
+function usesPart3Architecture(state = loadLessonState()) {
+  return usesBeginnerPart3Architecture(
+    state?.lessonId || getActiveLessonId(),
+    getActiveLevelId()
+  );
+}
+
 function usesBeginnerHomeworkArchitecture(state = loadLessonState()) {
   return usesTemplateArchitecture(state) || usesPart2Architecture(state);
 }
@@ -418,6 +444,42 @@ let mcqScriptRepairGeneration = 0;
 let lastMcqExactSpeakAt = 0;
 let lastMcqExactSpeakScript = "";
 let mcqTranscriptPraiseIdx = 0;
+/** Part 3 (presentation practice) runtime — visit-scoped, never persisted. */
+const PART3_HANDOFF_AFTER = new Set([
+  "p3ch0",
+  "p3ch1",
+  "p3ch2",
+  "p3ch3",
+  "p3ch4",
+  "p3ch5",
+  "p3quiz",
+  "p3ch6",
+  "p3ch7",
+  "p3final",
+]);
+const PART3_REQUIRED_MEMORIES = ["glassColor", "decoration1", "decoration2", "fishType", "presentationFish"];
+const PART3_PRESENTATION_MAX_TRIES = 3;
+const PART3_SPEECH_SETTLE_MS = 1500;
+const PART3_SPEECH_FAIL_GRACE_MS = 2500;
+const part3State = {
+  displayName: "",
+  segmentId: "",
+  otherColors: {},
+  wrongBeatKey: "",
+  wrongLabel: "",
+  lastScript: "",
+  lastOutbound: "",
+  speakToken: 0,
+  speakSentAt: 0,
+  tries: 0,
+  showFull: false,
+  transcript: "",
+  evalTimer: null,
+  failTimer: null,
+  reactionIdx: 0,
+  hold: { active: false, lastActivityAt: 0, dropped: false, droppedAt: 0, boundary: false },
+  endingGen: 0,
+};
 const DAILY1_MIN_RALLIES = 4;
 let daily1Chat = { rallies: 0, backToTankSpoken: false };
 let daily1OpenForceAt = 0;
@@ -6458,6 +6520,7 @@ function maybeElicitEigoSkipNudge() {
 
 function runPostTurnCoachNudges() {
   if (actionState !== "active" || !client?.connected) return;
+  if (usesPart3Architecture()) return;
   const text = lastAssistantText().trim();
   if (!text) return;
 
@@ -8645,6 +8708,10 @@ function isMcqChoiceUiActive(segment = getCurrentSegment()) {
   }
   if (isCh2FreeTalkUi() || isCh4FreeTalkUi()) return false;
 
+  if (usesPart3Architecture()) {
+    return !part3MissingMemories(segment).length && Boolean(getPart3CurrentBeat(segment));
+  }
+
   if (segment?.id === "ch4" && ch4ColorChoiceActive()) return true;
 
   if (segment?.id === "quiz1") {
@@ -9346,6 +9413,7 @@ function isMcqQuestionReplayActive() {
 /** Current on-screen MCQ / quiz question Learny should read aloud. */
 function getActiveMcqQuestionScript(segment = getCurrentSegment()) {
   if (!segment) return "";
+  if (usesPart3Architecture()) return part3PromptScript(segment);
   if (segment.id === "quiz1") {
     return quiz1ItemSpeak(getCurrentQuiz1Item());
   }
@@ -9398,6 +9466,12 @@ function withPart2McqExactSpeakRule(outbound) {
 function forceMcqQuestionExactReplay(reason = "ui-replay") {
   if (!client?.connected || actionState !== "active") return false;
   const segment = getCurrentSegment();
+  if (usesPart3Architecture()) {
+    const part3Script = part3PromptScript(segment);
+    if (!part3Script) return false;
+    dbg("force part3 question replay", { reason, segment: segment?.id });
+    return sendClientText(withPart3ExactSpeakRule(part3Script), { force: true });
+  }
   if (segment?.id === "quiz1") {
     return forceQuiz1ExactSpeak(reason);
   }
@@ -9512,6 +9586,8 @@ async function getChoiceAudioContext() {
 /** Hosted option readout; never sends a learner turn or touches lesson scoring. */
 async function speakChoiceLabel(label, button) {
   const text = String(label || "").trim();
+  const part3NameSamples = part3NameAudioFor(text);
+  if (part3NameSamples) return speakPart3NameAudio(text, button, part3NameSamples);
   const manifestEntry = MCQ_AUDIO_MANIFEST[normalizeMcqAudioLabel(text)];
   if (!text || !manifestEntry) {
     setChoiceSpeakerState(button, "error");
@@ -9564,6 +9640,941 @@ async function speakChoiceLabel(label, button) {
       }
     }, 1600);
   }
+}
+
+// ===== Part 3 — Presentation Practice (beginner) =====
+
+function part3Memories() {
+  const memories = { ...(loadLessonState().memories || {}) };
+  if (!String(memories.name || "").trim()) memories.name = "Friend";
+  return memories;
+}
+
+function part3IsMcqSegment(segment = getCurrentSegment()) {
+  return Array.isArray(segment?.part3Beats);
+}
+
+function part3IsPresentationSegment(segment = getCurrentSegment()) {
+  return segment?.type === "presentation" && Array.isArray(segment?.part3Sets);
+}
+
+function part3VisibleBeats(segment, memories = part3Memories()) {
+  const fishType = String(memories.fishType || "").toLowerCase();
+  return (segment?.part3Beats || [])
+    .filter((beat) => !beat.onlyIfFishType || beat.onlyIfFishType === fishType)
+    .map((beat) => resolvePart3Beat(beat, memories))
+    .filter(Boolean);
+}
+
+function getPart3CurrentBeat(segment = getCurrentSegment()) {
+  if (!part3IsMcqSegment(segment)) return null;
+  const beats = part3VisibleBeats(segment);
+  const index = Number(loadMcqCursor(segment.id) || 0);
+  if (!beats.length || index >= beats.length) return null;
+  return { beat: beats[index], index, total: beats.length };
+}
+
+function part3CurrentSet(segment = getCurrentSegment()) {
+  if (!part3IsPresentationSegment(segment)) return null;
+  const sets = segment.part3Sets;
+  const index = Number(loadMcqCursor(segment.id) || 0);
+  if (index >= sets.length) return null;
+  return { set: sets[index], index, total: sets.length };
+}
+
+function part3BeatKey(segment, beat) {
+  return `${segment?.id || ""}:${beat?.id || ""}`;
+}
+
+/** Distractor colour for `needsOtherColor` beats — stable per chapter visit. */
+function part3OtherColor(segment, beat) {
+  if (!beat?.needsOtherColor) return "";
+  const key = part3BeatKey(segment, beat);
+  const glass = String(part3Memories().glassColor || "").toLowerCase();
+  let color = part3State.otherColors[key];
+  if (!color || color === glass) {
+    const pool = PART3_GLASS_COLORS.filter((c) => c !== glass);
+    color = pool[Math.floor(Math.random() * pool.length)];
+    part3State.otherColors[key] = color;
+  }
+  return color;
+}
+
+function part3Extras(segment, beat) {
+  return { otherColor: part3OtherColor(segment, beat) };
+}
+
+function part3ChoiceLabels(segment, beat) {
+  const memories = part3Memories();
+  const extras = part3Extras(segment, beat);
+  let raw = [...(beat?.choices || [])];
+  if (beat?.excludeMemory) {
+    const excluded = String(memories[beat.excludeMemory] || "").toLowerCase();
+    raw = raw.filter((choice) => choice.toLowerCase() !== excluded);
+  }
+  const labels = raw.map((choice) => formatChoiceLabel(resolvePart3Text(choice, memories, extras)));
+  return getShuffledChoiceLabels(`part3:${part3BeatKey(segment, beat)}`, labels);
+}
+
+function part3AnswerLabel(segment, beat) {
+  if (!beat?.answer) return "";
+  return formatChoiceLabel(resolvePart3Text(beat.answer, part3Memories(), part3Extras(segment, beat)));
+}
+
+function part3IsCorrect(segment, beat, label) {
+  const picked = normalizeMcqChoice(label);
+  if (beat.kind === "pick") {
+    if (!beat.accept) return true;
+    return beat.accept.some((choice) => normalizeMcqChoice(choice) === picked);
+  }
+  return normalizeMcqChoice(part3AnswerLabel(segment, beat)) === picked;
+}
+
+function part3SetSpeak(set) {
+  return set ? part3BeatSpeak(set, part3Memories()) : "";
+}
+
+/** Script Learny reads for the current beat / set (replay + opening). */
+function part3PromptScript(segment = getCurrentSegment()) {
+  if (part3IsMcqSegment(segment)) {
+    const cur = getPart3CurrentBeat(segment);
+    return cur ? part3BeatSpeak(cur.beat, part3Memories(), part3Extras(segment, cur.beat)) : "";
+  }
+  if (part3IsPresentationSegment(segment)) {
+    return part3SetSpeak(part3CurrentSet(segment)?.set);
+  }
+  return "";
+}
+
+function part3MissingMemories(segment = getCurrentSegment()) {
+  if (!segment || segment.id === "p3ch0") return [];
+  const memories = loadLessonState().memories || {};
+  return PART3_REQUIRED_MEMORIES.filter((key) => !String(memories[key] || "").trim());
+}
+
+function part3ClearSpeechTimers() {
+  if (part3State.evalTimer) clearTimeout(part3State.evalTimer);
+  if (part3State.failTimer) clearTimeout(part3State.failTimer);
+  part3State.evalTimer = null;
+  part3State.failTimer = null;
+}
+
+function part3ResetAttempt() {
+  part3ClearSpeechTimers();
+  part3State.transcript = "";
+  part3State.tries = 0;
+  part3State.showFull = false;
+}
+
+/** Fresh chapter visit: new distractor colours, new shuffles, no leftover retry UI. */
+function part3SyncSegmentEntry(segment = getCurrentSegment()) {
+  const id = segment?.id || "";
+  if (!id || part3State.segmentId === id) return;
+  if (part3State.segmentId) {
+    part3State.otherColors = {};
+    clearShuffledChoiceCache(`part3:${id}`);
+  }
+  part3State.segmentId = id;
+  part3State.wrongBeatKey = "";
+  part3State.wrongLabel = "";
+  part3ResetAttempt();
+}
+
+function part3NameChoiceLabels() {
+  const beat = getSegmentById("p3ch1")?.part3Beats?.find((b) => b.nameAudio);
+  const name = String(loadLessonState().memories?.name || "").trim();
+  if (!beat || !name) return [];
+  const memories = part3Memories();
+  return beat.choices.map((choice) => formatChoiceLabel(resolvePart3Text(choice, memories)));
+}
+
+function part3EnsureNameAudio() {
+  const labels = part3NameChoiceLabels();
+  if (!labels.length) return;
+  ensurePart3NameAudio(labels, {
+    proxyUrl: activeProxyUrl,
+    projectId,
+    model,
+    voiceName: voice,
+  });
+}
+
+function part3SyncName(displayName = part3State.displayName) {
+  if (!usesPart3Architecture()) return;
+  const name = part3EnglishName(displayName);
+  if (!name) return;
+  if (String(loadLessonState().memories?.name || "") !== name) {
+    recordMemory("name", name);
+    updateLessonBanner();
+  }
+  part3EnsureNameAudio();
+}
+
+function part3NameAudioFor(label) {
+  if (!usesPart3Architecture()) return null;
+  const key = normalizeMcqAudioLabel(label);
+  if (!part3NameChoiceLabels().some((l) => normalizeMcqAudioLabel(l) === key)) return null;
+  let samples = getPart3NameAudio(label);
+  if (!samples) {
+    part3EnsureNameAudio();
+    samples = getPart3NameAudio(label);
+  }
+  return samples;
+}
+
+async function speakPart3NameAudio(label, button, samplesPromise) {
+  stopChoiceSpeech();
+  const requestId = ++choiceSpeechRequestId;
+  activeChoiceSpeechButton = button;
+  setChoiceSpeakerState(button, "loading");
+  try {
+    const [context, samples] = await Promise.all([getChoiceAudioContext(), samplesPromise]);
+    if (!context) throw new Error("Web Audio is unavailable");
+    if (requestId !== choiceSpeechRequestId || activeChoiceSpeechButton !== button) return;
+    const buffer = context.createBuffer(1, samples.length, PART3_NAME_AUDIO_SAMPLE_RATE);
+    buffer.copyToChannel(samples, 0);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    activeChoiceAudioSource = source;
+    setChoiceSpeakerState(button, "speaking");
+    source.onended = () => finishChoiceSpeech(button, source);
+    source.start();
+  } catch (error) {
+    if (requestId !== choiceSpeechRequestId) return;
+    dbg("part3 name audio failed", String(error?.message || error));
+    activeChoiceAudioSource = null;
+    setChoiceSpeakerState(button, "error");
+    button.title = `もういちど押してね：${label}`;
+    part3EnsureNameAudio();
+    setTimeout(() => {
+      if (activeChoiceSpeechButton === button) {
+        setChoiceSpeakerState(button);
+        activeChoiceSpeechButton = null;
+      }
+    }, 1600);
+  }
+}
+
+function withPart3ExactSpeakRule(exact) {
+  return (
+    "[P3] Your whole audible turn is the text between <exact> tags, spoken EXACTLY once — every word, in order " +
+    "(English first when present, then the ひらがな Japanese). Your FIRST word must be the first word of the script. " +
+    "FORBIDDEN: any word before or after the script (no Great / Nice / Good / Yes / OK / reactions of your own); " +
+    "paraphrasing; translating; reading answer choices; saying the correct English answer. Then STOP and WAIT.\n" +
+    `<exact>${exact}</exact>`
+  );
+}
+
+function seedPart3SpeakBubble(text) {
+  clearHandoffOpeningDisplayLock("part3-speak");
+  resetHandoffOpeningSpeechGate();
+  mcqBeatDisplayLocked = true;
+  mcqBeatSeededExact = text;
+  mcqBeatSeededScript = text;
+  mcqBeatPendingExact = text;
+  mcqBeatLiveStt = "";
+  mcqBeatMissingScriptRepairSent = true;
+  mcqScriptRepairGeneration += 1;
+  chatMessages.push({
+    type: "assistant",
+    text,
+    mcqSeeded: true,
+    sttEnterPending: true,
+  });
+  lastAssistantBubbleAt = Date.now();
+  assistantTurnTranscript = text;
+  assistantTranscriptOpen = true;
+  scheduleRenderChat();
+  updateLearnyThinkingUI();
+}
+
+/** Child speech on an open mic (presentation / ending): hold Live's own replies. */
+function part3NoteChildSpeech() {
+  if (!usesPart3Architecture()) return;
+  const segment = getCurrentSegment();
+  if (!part3IsPresentationSegment(segment) && segment?.type !== "ending") return;
+  const hold = part3State.hold;
+  if (!hold.active) {
+    hold.active = true;
+    hold.dropped = false;
+    hold.droppedAt = 0;
+    hold.boundary = false;
+  }
+  hold.lastActivityAt = Date.now();
+  if (part3State.failTimer) {
+    clearTimeout(part3State.failTimer);
+    part3State.failTimer = null;
+  }
+}
+
+/** Live answered the child's raw audio on its own — the app speaks instead. */
+function shouldDropPart3LiveAudio() {
+  if (!part3State.hold.active || !usesPart3Architecture()) return false;
+  part3State.hold.dropped = true;
+  part3State.hold.droppedAt = Date.now();
+  return true;
+}
+
+function part3NoteLiveTurnBoundary() {
+  if (part3State.hold.active && part3State.hold.dropped) part3State.hold.boundary = true;
+}
+
+function part3HoldSettled() {
+  const hold = part3State.hold;
+  if (!hold.active) return true;
+  if (userActivityOpen) return false;
+  const now = Date.now();
+  if (now - hold.lastActivityAt < 1200) return false;
+  if (hold.dropped) return hold.boundary || now - hold.droppedAt > 1200;
+  return now - hold.lastActivityAt > 1800;
+}
+
+function part3RunWhenHoldSettled(fn) {
+  const tick = () => {
+    if (actionState !== "active" || !client?.connected) return;
+    if (!part3HoldSettled()) {
+      setTimeout(tick, 200);
+      return;
+    }
+    part3State.hold.active = false;
+    fn();
+  };
+  tick();
+}
+
+/** Seed the exact bubble and have Live speak it once (Part 2 forced-speak pattern). */
+function part3Speak(script, { childLabel = "", opening = false } = {}) {
+  const exact = String(script || "").replace(/\s+/g, " ").trim();
+  if (!exact || !client?.connected || actionState !== "active") return false;
+  const outbound = withPart3ExactSpeakRule(exact);
+  const token = ++part3State.speakToken;
+  part3State.lastScript = exact;
+  part3State.lastOutbound = outbound;
+  part3State.speakSentAt = 0;
+  if (opening) skipOutboundForHandoff = false;
+  seedPart3SpeakBubble(exact);
+  if (opening) markChapterTransitionSpeaking();
+  const requestId = ++childTurnRequestId;
+  prepareForUserOutbound();
+  lastPendingUserText = String(childLabel || "").trim();
+  lastUserTurnAt = Date.now();
+  awaitingAssistantReply = true;
+  userTurnSentViaClientText = false;
+  updateLearnyThinkingUI();
+  const send = () => {
+    if (requestId !== childTurnRequestId || token !== part3State.speakToken) return false;
+    if (actionState !== "active" || !client?.connected) return false;
+    const ok = Boolean(sendClientText(outbound, { force: true }));
+    userTurnSentViaClientText = ok;
+    if (!ok) return false;
+    noteMcqExactSpeakSent(exact);
+    part3State.speakSentAt = Date.now();
+    lastUserTurnAt = part3State.speakSentAt;
+    awaitingAssistantReply = true;
+    updateLearnyThinkingUI();
+    armSilentReplyWatch(lastPendingUserText || `part3:${exact.slice(0, 32)}`, {
+      fromVoice: false,
+      mode: opening ? "opening" : "mcq",
+      turnKey: `part3-${token}-${part3State.speakSentAt}`,
+      replayOutbound: outbound,
+      replaySent: true,
+      initialDelay: Math.max(4500, Math.min(estimateSpeechMs(exact) + 1800, 8000)),
+    });
+    return true;
+  };
+  part3RunWhenHoldSettled(() => {
+    if (assistantIsSpeaking()) sealStaleAssistantPlaybackEstimate("part3-speak");
+    if (assistantIsSpeaking()) whenAssistantIdle(send, "part3-speak");
+    else send();
+  });
+  return true;
+}
+
+/**
+ * Wrong answer: play the hosted おしい！もういちど！ clip instead of a Live turn
+ * (Live prefixes it with "Great!"). Falls back to part3Speak if the clip is
+ * missing or fails. lastOutbound stays on the question so a poke re-asks it.
+ */
+function part3SpeakRetry(childLabel = "") {
+  if (!ENDING_AUDIO_MANIFEST[PART3_RETRY_AUDIO_KEY]?.path) {
+    return part3Speak(PART3_RETRY_SPEAK, { childLabel });
+  }
+  if (actionState !== "active" || !client?.connected) return false;
+  const token = ++part3State.speakToken;
+  const bubble = { type: "assistant", text: PART3_RETRY_SPEAK };
+  chatMessages.push(bubble);
+  scheduleRenderChat();
+  const fallback = async (error) => {
+    nativeConsole.warn("Static part3 retry failed; using Gemini Live", error);
+    stopEndingStaticAudio();
+    await resumeMicAfterEndingStaticAudio();
+    if (token !== part3State.speakToken) return;
+    const idx = chatMessages.indexOf(bubble);
+    if (idx >= 0) chatMessages.splice(idx, 1);
+    part3Speak(PART3_RETRY_SPEAK, { childLabel });
+  };
+  const play = () => {
+    if (token !== part3State.speakToken) return;
+    pauseMicForEndingStaticAudio();
+    playEndingStaticAudio(PART3_RETRY_AUDIO_KEY)
+      .then(() => resumeMicAfterEndingStaticAudio())
+      .catch(fallback);
+  };
+  part3RunWhenHoldSettled(() => {
+    if (assistantIsSpeaking()) whenAssistantIdle(play, "part3-retry");
+    else play();
+  });
+  return true;
+}
+
+/** Run fn once the latest part3Speak has been heard and playback has drained. */
+function part3AfterSpeechDelivered(fn) {
+  const token = part3State.speakToken;
+  const startedAt = Date.now();
+  const tick = () => {
+    if (token !== part3State.speakToken) return;
+    if (actionState !== "active" || !client?.connected) return;
+    const sentAt = part3State.speakSentAt;
+    const heard = sentAt > 0 && lastAssistantAudioAt >= sentAt;
+    if ((heard && !learnyIsBusySpeaking()) || Date.now() - startedAt > 25000) {
+      fn();
+      return;
+    }
+    setTimeout(tick, 300);
+  };
+  setTimeout(tick, 400);
+}
+
+function part3PokeRecover() {
+  const outbound = part3State.lastOutbound;
+  if (!outbound || part3State.hold.active || part3State.evalTimer) return false;
+  lastUserTurnAt = Date.now();
+  audioPlayer?.beginTurn?.();
+  awaitingAssistantReply = true;
+  updateLearnyThinkingUI();
+  const ok = Boolean(sendClientText(outbound, { force: true }));
+  if (ok) {
+    noteMcqExactSpeakSent(part3State.lastScript);
+    part3State.speakSentAt = Date.now();
+    dbg("part3 poke re-speak", part3State.lastScript.slice(0, 48));
+  }
+  return ok;
+}
+
+function part3NextReaction() {
+  const reaction = PART3_REACTIONS[part3State.reactionIdx % PART3_REACTIONS.length];
+  part3State.reactionIdx += 1;
+  return `${reaction.en} ${reaction.ja}`;
+}
+
+function part3CompleteSegment(segment, quote = "") {
+  clearHandoffOpeningDisplayLock("part3-complete");
+  clearMcqBeatDisplayLock("part3-complete");
+  clearMcqBeatPendingExact("part3-complete");
+  const result = completeSegment(segment.id, { userQuote: quote });
+  if (!result.ok) {
+    dbg("part3 complete failed", { segment: segment.id, reason: result.reason });
+    return false;
+  }
+  clearSegmentUi(segment.id);
+  if (!result.alreadyDone) {
+    try {
+      questSfx.playQuestComplete();
+    } catch {
+      // ignore
+    }
+  }
+  if (afterSegmentAdvanced(segment.id, result, { lastQuote: quote, fromSegmentId: segment.id })) {
+    return true;
+  }
+  renderChoiceBar(getCurrentSegment());
+  return true;
+}
+
+function part3SavePick(beat, label) {
+  const value = String(label || "").trim().toLowerCase();
+  if (!beat.memoryKey || !value) return;
+  recordMemory(beat.memoryKey, value);
+  if (beat.memoryKey === "fishType") {
+    const state = loadLessonState();
+    const memories = { ...(state.memories || {}) };
+    delete memories.fishColor;
+    if (value === "tropical fish") delete memories.presentationFish;
+    else memories.presentationFish = value;
+    state.memories = memories;
+    saveLessonState(state);
+  } else if (beat.memoryKey === "fishColor") {
+    recordMemory("presentationFish", `${value} tropical fish`);
+  }
+}
+
+function handlePart3ChoiceClick(label) {
+  const segment = getCurrentSegment();
+  const cur = getPart3CurrentBeat(segment);
+  if (!cur) return;
+  clearHandoffOpeningDisplayLock("part3-choice");
+  clearMcqBeatDisplayLock("part3-choice");
+  clearMcqBeatPendingExact("part3-choice");
+  resetHandoffOpeningSpeechGate();
+  const beat = cur.beat;
+  const correct = part3IsCorrect(segment, beat, label);
+  if (beat.kind === "mcq") {
+    const event = recordMcqAttempt({
+      segmentId: segment.id,
+      beatId: beat.id,
+      learnyPrompt: part3BeatSpeak(beat, part3Memories(), part3Extras(segment, beat)),
+      choice: label,
+      correct,
+      choices: part3ChoiceLabels(segment, beat),
+      answer: part3AnswerLabel(segment, beat),
+    });
+    try {
+      event.level = getActiveLevelId();
+    } catch {
+      // ignore
+    }
+    notifyMcqActivity(event);
+    notifyParentProgress();
+  }
+  addUserAnswerBubble(label);
+
+  if (!correct) {
+    part3State.wrongBeatKey = part3BeatKey(segment, beat);
+    part3State.wrongLabel = label;
+    try {
+      questSfx.playTryAgain();
+    } catch {
+      // ignore
+    }
+    part3SpeakRetry(label);
+    renderChoiceBar(segment);
+    return;
+  }
+
+  part3State.wrongBeatKey = "";
+  part3State.wrongLabel = "";
+  if (beat.kind === "pick") part3SavePick(beat, label);
+  const beats = part3VisibleBeats(segment);
+  const next = cur.index + 1;
+  setMcqCursor(segment.id, next);
+  if (next >= beats.length) {
+    part3CompleteSegment(segment, beat.kind === "mcq" ? label : "");
+    return;
+  }
+  const nextBeat = beats[next];
+  const script = part3BeatSpeak(nextBeat, part3Memories(), part3Extras(segment, nextBeat));
+  const praise = segment.id === "p3ch0" || nextBeat.noPraise ? "" : nextMcqTranscriptPraise();
+  part3Speak([praise, script].filter(Boolean).join(" "), { childLabel: label });
+  updateLessonBanner();
+}
+
+const PART3_SPEECH_SKIP_WORDS = new Set([
+  "i", "i'm", "im", "a", "an", "the", "is", "this", "my", "here", "chose", "put",
+]);
+
+const PART3_SPEECH_ALIASES = {
+  aquarium: ["アクアリウム", "すいぞくかん", "水族館"],
+  glass: ["ガラス", "がらす", "grass", "glas"],
+  coral: ["コーラル", "サンゴ", "さんご", "珊瑚"],
+  kelp: ["ケルプ", "昆布", "こんぶ"],
+  amethyst: ["アメジスト", "アメシスト"],
+  soul: ["ソウル", "ソール", "sole", "seoul"],
+  sand: ["サンド", "砂"],
+  fish: ["フィッシュ", "魚", "fishes"],
+  salmon: ["サーモン", "サモン", "鮭"],
+  cod: ["コッド", "タラ", "鱈", "god", "cot", "code"],
+  puffer: ["パファー", "パッファー", "フグ", "ふぐ", "河豚"],
+  tropical: ["トロピカル", "熱帯"],
+  like: ["ライク", "好き", "すき"],
+  blue: ["ブルー", "青"],
+  red: ["レッド", "赤"],
+  green: ["グリーン", "緑"],
+  yellow: ["イエロー", "黄色"],
+  orange: ["オレンジ"],
+  pink: ["ピンク"],
+  purple: ["パープル", "紫"],
+  white: ["ホワイト", "白"],
+};
+
+function part3EditDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+
+function part3NormalizeSpeech(text) {
+  return String(text || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[’`]/g, "'")
+    .replace(/[^a-z'\u3040-\u30ff\u3400-\u9fff]+/g, " ")
+    .trim();
+}
+
+function part3SpeechHasWord(said, saidWords, word) {
+  for (const alias of PART3_SPEECH_ALIASES[word] || []) {
+    if (/^[a-z]+$/.test(alias) ? saidWords.includes(alias) : said.includes(alias)) return true;
+  }
+  const tolerance = word.length >= 6 ? 2 : word.length >= 4 ? 1 : 0;
+  return saidWords.some(
+    (w) =>
+      w === word ||
+      (tolerance > 0 && Math.abs(w.length - word.length) <= tolerance && part3EditDistance(w, word) <= tolerance) ||
+      (word.length >= 5 && w.length >= 4 && w.startsWith(word.slice(0, 4)))
+  );
+}
+
+/** Meaning over exact wording: most content words per line, most lines per set. */
+function part3PresentationMatches(set, spoken) {
+  const said = part3NormalizeSpeech(spoken);
+  if (!said) return false;
+  const saidWords = said.split(/\s+/).filter(Boolean);
+  const memories = part3Memories();
+  const lines = set?.lines || [];
+  let matched = 0;
+  for (const line of lines) {
+    if (line.text.includes("{name}")) {
+      const nameWords = part3NormalizeSpeech(memories.name).split(/\s+/).filter(Boolean);
+      const nameHit = nameWords.some((w) => part3SpeechHasWord(said, saidWords, w));
+      if (nameHit || /\b(i'?m|i am|my name)\b/.test(said)) matched += 1;
+      continue;
+    }
+    const keywords = [
+      ...new Set(
+        part3NormalizeSpeech(resolvePart3Text(line.text, memories))
+          .split(/\s+/)
+          .filter((w) => w && !PART3_SPEECH_SKIP_WORDS.has(w))
+      ),
+    ];
+    if (!keywords.length) continue;
+    const hits = keywords.filter((w) => part3SpeechHasWord(said, saidWords, w)).length;
+    if (hits >= Math.ceil(keywords.length / 2)) matched += 1;
+  }
+  return matched >= Math.max(1, Math.ceil(lines.length * 0.6));
+}
+
+function part3AdvancePresentation(segment, cur, said = "") {
+  part3ResetAttempt();
+  clearMcqBeatDisplayLock("part3-presentation");
+  clearMcqBeatPendingExact("part3-presentation");
+  const next = cur.index + 1;
+  setMcqCursor(segment.id, next);
+  if (next < cur.total) {
+    const line = part3SetSpeak(segment.part3Sets[next]) || part3NextReaction();
+    part3Speak(line, { childLabel: said });
+    renderChoiceBar(segment);
+    return;
+  }
+  renderChoiceBar(segment);
+  if (!part3Speak(part3NextReaction(), { childLabel: said })) {
+    part3CompleteSegment(segment);
+    return;
+  }
+  part3AfterSpeechDelivered(() => {
+    if (getCurrentSegment()?.id !== segment.id) return;
+    part3CompleteSegment(segment);
+  });
+}
+
+function part3EvaluatePresentation({ typed = false } = {}) {
+  part3ClearSpeechTimers();
+  const segment = getCurrentSegment();
+  const cur = part3CurrentSet(segment);
+  const said = part3State.transcript.trim();
+  if (!cur || !said) return;
+  if (part3PresentationMatches(cur.set, said)) {
+    part3AdvancePresentation(segment, cur, said);
+    return;
+  }
+  const retry = () => {
+    part3State.failTimer = null;
+    part3State.transcript = "";
+    part3State.tries += 1;
+    renderChoiceBar(segment);
+    part3SpeakRetry(said);
+  };
+  if (typed) retry();
+  else part3State.failTimer = setTimeout(retry, PART3_SPEECH_FAIL_GRACE_MS);
+}
+
+function part3HandleVoiceTranscript(text) {
+  part3NoteChildSpeech();
+  if (!part3IsPresentationSegment() || !part3CurrentSet()) return;
+  part3State.transcript = `${part3State.transcript} ${text}`.trim();
+  if (part3State.evalTimer) clearTimeout(part3State.evalTimer);
+  part3State.evalTimer = setTimeout(() => part3EvaluatePresentation(), PART3_SPEECH_SETTLE_MS);
+}
+
+function part3HandleTypedText(text) {
+  const segment = getCurrentSegment();
+  if (part3IsPresentationSegment(segment) && part3CurrentSet(segment)) {
+    addUserAnswerBubble(text);
+    part3State.transcript = text;
+    part3EvaluatePresentation({ typed: true });
+    return;
+  }
+  if (part3IsMcqSegment(segment)) {
+    addMessage("ボタンで えらんでね。", "system");
+    refreshChoiceBarIfNeeded();
+    return;
+  }
+  addUserAnswerBubble(text);
+}
+
+function renderPart3PresentationCard(segment, { show }) {
+  const cur = part3CurrentSet(segment);
+  if (!cur) return false;
+  show();
+  choiceBar.classList.add("is-part3-presentation");
+  if (chatInput) chatInput.placeholder = "こえで いってみよう（にゅうりょくも OK）";
+  const memories = part3Memories();
+  const cloze = Boolean(cur.set.cloze) && !part3State.showFull;
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "lesson-choice-title-row";
+  const title = document.createElement("p");
+  title.className = "lesson-choice-title";
+  title.textContent = cur.set.cloze
+    ? "2かいめ：あなを うめて いってね"
+    : segment.id === "p3final"
+      ? "1かいめ：ぜんぶ よんでね"
+      : `つづけて いってみよう（${cur.index + 1} / ${cur.total}）`;
+  titleRow.appendChild(title);
+  const script = part3SetSpeak(cur.set);
+  if (script) {
+    const replay = document.createElement("button");
+    replay.type = "button";
+    replay.className = "lesson-choice-question-replay";
+    replay.textContent = CHOICE_QUESTION_REPLAY_LABEL;
+    replay.title = CHOICE_QUESTION_REPLAY_LABEL;
+    replay.setAttribute("aria-label", CHOICE_QUESTION_REPLAY_LABEL);
+    replay.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      replayActiveMcqQuestion(replay);
+    });
+    titleRow.appendChild(replay);
+  }
+  choiceBar.appendChild(titleRow);
+
+  const card = document.createElement("div");
+  card.className = "part3-presentation-card";
+  card.setAttribute("aria-label", "はっぴょうの ぶん");
+  for (const line of cur.set.lines) {
+    const p = document.createElement("p");
+    p.className = "part3-presentation-line";
+    let text = resolvePart3Text(line.text, memories);
+    const blank = resolvePart3Text(line.blank, memories);
+    if (cloze && blank) {
+      const at = text.toLowerCase().indexOf(blank.toLowerCase());
+      if (at >= 0) text = `${text.slice(0, at)}________${text.slice(at + blank.length)}`;
+    }
+    p.textContent = text;
+    card.appendChild(p);
+  }
+  choiceBar.appendChild(card);
+
+  const hint = document.createElement("p");
+  hint.className = "part3-presentation-hint";
+  hint.textContent = isMuted
+    ? "マイクを オンにして、つづけて いってみよう！"
+    : "マイク オン！ つづけて いってみよう！";
+  choiceBar.appendChild(hint);
+
+  const actions = document.createElement("div");
+  actions.className = "part3-presentation-actions";
+  const mic = document.createElement("button");
+  mic.type = "button";
+  mic.className = `part3-presentation-btn${isMuted ? "" : " is-mic-on"}`;
+  mic.innerHTML = `${isMuted ? ICON_MIC_OFF : ICON_MIC}<span>${isMuted ? "マイクを オンにする" : "マイクを オフにする"}</span>`;
+  mic.disabled = actionState !== "active";
+  mic.addEventListener("click", async () => {
+    await toggleMute();
+    refreshChoiceBarIfNeeded();
+  });
+  actions.appendChild(mic);
+  if (cur.set.cloze) {
+    const full = document.createElement("button");
+    full.type = "button";
+    full.className = "part3-presentation-btn";
+    full.textContent = part3State.showFull ? "あなあきに もどす" : "ぜんぶ みる";
+    full.addEventListener("click", () => {
+      part3State.showFull = !part3State.showFull;
+      refreshChoiceBarIfNeeded();
+    });
+    actions.appendChild(full);
+  }
+  if (part3State.tries >= PART3_PRESENTATION_MAX_TRIES) {
+    const next = document.createElement("button");
+    next.type = "button";
+    next.className = "part3-presentation-btn is-primary";
+    next.textContent = "できた！つぎへ";
+    next.disabled = choicesLocked();
+    next.addEventListener("click", () => {
+      if (choicesLocked()) return;
+      const latest = part3CurrentSet(segment);
+      if (latest && getCurrentSegment()?.id === segment.id) {
+        part3AdvancePresentation(segment, latest, "");
+      }
+    });
+    actions.appendChild(next);
+  }
+  choiceBar.appendChild(actions);
+  return true;
+}
+
+function renderPart3ChoiceBar(segment, { appendChoices, show, hide }) {
+  choiceBar.classList.remove("is-part3-eight", "is-part3-presentation");
+  part3SyncSegmentEntry(segment);
+  if (part3MissingMemories(segment).length) {
+    hide();
+    return;
+  }
+  if (part3IsMcqSegment(segment)) {
+    const cur = getPart3CurrentBeat(segment);
+    if (!cur) {
+      hide();
+      return;
+    }
+    const memories = part3Memories();
+    const extras = part3Extras(segment, cur.beat);
+    const labels = part3ChoiceLabels(segment, cur.beat);
+    const retrying = part3State.wrongBeatKey === part3BeatKey(segment, cur.beat);
+    const title = retrying
+      ? PART3_RETRY_SPEAK
+      : cur.beat.kind === "pick"
+        ? "タップして えらんでね"
+        : `答えをタップ（${cur.index + 1} / ${cur.total}）`;
+    if (labels.length > 4) choiceBar.classList.add("is-part3-eight");
+    appendChoices(labels, (label) => handlePart3ChoiceClick(label), title, {
+      en: resolvePart3Text(cur.beat.learnyEn || "", memories, extras),
+      ja: resolvePart3Text(cur.beat.learnyJa || "", memories, extras),
+    });
+    if (retrying) {
+      choiceBar.querySelector(".lesson-choice-title")?.classList.add("is-retry");
+      const wrong = normalizeMcqChoice(part3State.wrongLabel);
+      choiceBar.querySelectorAll(".lesson-choice-btn").forEach((btn) => {
+        if (wrong && normalizeMcqChoice(btn.textContent) === wrong) {
+          btn.classList.add("is-wrong");
+          btn.setAttribute("aria-invalid", "true");
+        }
+      });
+    }
+    return;
+  }
+  if (part3IsPresentationSegment(segment) && renderPart3PresentationCard(segment, { show })) return;
+  hide();
+}
+
+function part3OnCallStarted() {
+  part3ResetAttempt();
+  part3State.hold.active = false;
+  part3State.endingGen += 1;
+  part3SyncName();
+  if (!part3State.displayName) {
+    try {
+      window.parent.postMessage({ type: "gc_request_user_profile" }, "*");
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function part3KickOpening() {
+  let segment = getCurrentSegment();
+  if (part3MissingMemories(segment).length) {
+    const jumped = jumpToSegment("p3ch0", getActiveLessonId(), getActiveLevelId());
+    if (jumped?.ok) {
+      addMessage("まずは Chapter 0 で じぶんの すいぞくかんを おもいだそう！", "system");
+      updateLessonBanner();
+      segment = getCurrentSegment();
+    }
+  }
+  part3SyncSegmentEntry(segment);
+  part3ResetAttempt();
+  if (segment?.type === "ending") return part3StartEnding();
+  if (part3IsMcqSegment(segment) && !getPart3CurrentBeat(segment)) {
+    setMcqCursor(segment.id, 0);
+  }
+  if (part3IsPresentationSegment(segment) && !part3CurrentSet(segment)) {
+    setMcqCursor(segment.id, 0);
+  }
+  const script =
+    part3PromptScript(segment) ||
+    (part3IsPresentationSegment(segment) ? part3SetSpeak(segment.part3Sets[0]) : "");
+  const ok = part3Speak(script, { opening: true });
+  if (ok) renderChoiceBar(segment);
+  return ok;
+}
+
+function part3StartEnding() {
+  const gen = ++part3State.endingGen;
+  forceMicMutedForMcq();
+  paintMuteButton();
+  return part3SpeakEndingTurn(0, gen);
+}
+
+function part3SpeakEndingTurn(index, gen) {
+  if (gen !== part3State.endingGen || getCurrentSegment()?.type !== "ending") return false;
+  if (index >= PART3_ENDING_TURNS.length) {
+    part3FinishEnding(gen);
+    return true;
+  }
+  if (!part3Speak(PART3_ENDING_TURNS[index], { opening: index === 0 })) return false;
+  part3AfterSpeechDelivered(() => part3SpeakEndingTurn(index + 1, gen));
+  return true;
+}
+
+function part3FinishEnding(gen) {
+  if (gen !== part3State.endingGen) return;
+  const segment = getCurrentSegment();
+  if (segment?.type === "ending") {
+    const result = completeSegment(segment.id, {});
+    if (result.ok && !result.alreadyDone) {
+      try {
+        questSfx.playQuestComplete();
+      } catch {
+        // ignore
+      }
+    }
+  }
+  clearPendingReplyWatch("part3-ending-done");
+  clearAwaitingAssistantReply();
+  updateLessonBanner();
+  showLessonCompleteModal();
+  setTimeout(() => {
+    if (gen !== part3State.endingGen || actionState !== "active") return;
+    disconnectAPI();
+    actionState = "idle";
+    updateActionUI();
+  }, 1200);
+}
+
+function configurePart3GeminiClient(geminiClient, state) {
+  geminiClient.functions = [];
+  geminiClient.functionsMap = {};
+  geminiClient.systemInstructions = buildPart3LessonInstructions(state, LEVEL_INFO.id);
+  geminiClient.inputAudioTranscription = true;
+  geminiClient.outputAudioTranscription = true;
+  geminiClient.googleGrounding = false;
+  geminiClient.enableAffectiveDialog = false;
+  geminiClient.responseModalities = ["AUDIO"];
+  geminiClient.voiceName = voice;
+  geminiClient.temperature = temperature;
+  geminiClient.proactivity = { proactiveAudio: false };
+  geminiClient.automaticActivityDetection = { disabled: true };
+  geminiClient.setEnableFunctionCalls(false);
+  geminiClient.sessionResumptionEnabled = true;
+  geminiClient.resumeHandle = sessionResumeHandle || null;
 }
 
 function canonicalMcqQuestion({ en = "", ja = "" } = {}) {
@@ -9738,6 +10749,12 @@ function renderChoiceBar(segment) {
     });
     choiceBar.appendChild(grid);
   };
+
+  if (usesPart3Architecture()) {
+    renderPart3ChoiceBar(segment, { appendChoices, show, hide });
+    syncMicForMcqMode();
+    return;
+  }
 
   if (segment?.id === "quiz1") {
     const item = getCurrentQuiz1Item();
@@ -12687,6 +13704,16 @@ function kickOpeningTurn(opts = {}) {
   }
   if (actionState !== "active" && actionState !== "connecting") return false;
   const state = loadLessonState();
+  if (usesPart3Architecture(state)) {
+    const ok = part3KickOpening();
+    if (ok) {
+      openingSent = true;
+      clearOpeningKickFallback();
+      pendingOpeningKickOpts = null;
+      blockCoachUntilUserSpeaks = false;
+    }
+    return ok;
+  }
   // Ending Turn A: only forceEnding1Intro may speak — never also send ending1StartNudge.
   if (getCurrentSegment(state)?.id === "ending1") {
     if (claimEnding1IntroIfGeminiStarted()) {
@@ -12937,12 +13964,18 @@ function bindVoiceGateActivity() {
       client.signalActivityStart?.();
       userActivityOpen = true;
       voiceActivitySequence += 1;
+      part3NoteChildSpeech();
       return;
     }
     // Child stopped speaking (local gate closed) — hand the turn to Learny now.
     if (!userActivityOpen) return;
     client.signalActivityEnd?.();
     userActivityOpen = false;
+    // Part 3 evaluates the transcript itself — no Live reply / silent-watch here.
+    if (usesPart3Architecture()) {
+      part3NoteChildSpeech();
+      return;
+    }
     // INPUT_TRANSCRIPTION is best-effort. Start a real turn watchdog from the
     // local gate close so speech that produced neither STT nor a model reply
     // still gets one bounded recovery attempt without adding a fake bubble.
@@ -13778,6 +14811,10 @@ function normalizePresentedMcqText(text) {
 
 function currentActionableMcqPrompts(segment = getCurrentSegment()) {
   if (!segment) return [];
+  if (usesPart3Architecture()) {
+    const part3Script = part3PromptScript(segment);
+    return part3Script ? [part3Script] : [];
+  }
   if (segment.id === "quiz1") {
     const item = getCurrentQuiz1Item();
     return item ? [quiz1ItemSpeak(item)] : [];
@@ -13820,6 +14857,8 @@ function assistantHeardSinceUserTurn() {
 /** True when a post-child OUTPUT_TRANSCRIPTION contains the exact active MCQ. */
 function actionableMcqPresentedSinceUserTurn() {
   if (!lastUserTurnAt) return false;
+  // Part 3 hiragana STT rarely matches the seed verbatim; audible speech is delivery.
+  if (usesPart3Architecture()) return assistantHeardSinceUserTurn();
   const pendingExact = String(mcqBeatPendingExact || "").trim();
   // Mid-chapter Part 2 (and any seeded beat): bubble text ≠ spoken delivery.
   if (pendingExact) {
@@ -15242,6 +16281,10 @@ function armPendingReplyWatch(userText, attempt = 0, { fromVoice = false } = {})
 function processUserProgressSideEffects(userText, { skipWarmup = false, fromVoice = false, skipCh2 = false, skipDaily1 = false } = {}) {
   const t = String(userText || "").trim();
   if (!t) return;
+  if (usesPart3Architecture()) {
+    part3HandleVoiceTranscript(t);
+    return;
+  }
   let recoveryReplayOutbound = "";
   let recoveryReplaySent = false;
   const sideKey = normalizeUserText(t);
@@ -15485,6 +16528,10 @@ function sendUserText(text) {
     addMessage("右上の「はじめる」を押してから送ってね。", "system");
     return;
   }
+  if (usesPart3Architecture()) {
+    part3HandleTypedText(t);
+    return;
+  }
   // Prefer MCQ path when buttons are up — keeps progress + reply-watch in sync.
   // Intermediate: same path for voice/typed answers (no buttons).
   if (tryRouteFinal1Answer(t)) return;
@@ -15642,6 +16689,10 @@ function sendUserText(text) {
 
 function configureGeminiClient(geminiClient) {
   const state = loadLessonState();
+  if (usesPart3Architecture(state)) {
+    configurePart3GeminiClient(geminiClient, state);
+    return;
+  }
   const segmentId = getCurrentSegment(state)?.id;
   const endingPhase2 = segmentId === "ending1";
   const daily1Phase = segmentId === "daily1";
@@ -16207,6 +17258,10 @@ function handleMessage(message) {
         // Drop only — interrupting cut the hosted/Live make+tell mid-line.
         break;
       }
+      if (shouldDropPart3LiveAudio()) {
+        dbg("drop Live audio while part3 child speaks");
+        break;
+      }
       // Ghost second Perfect often has ZERO STT — gate on audio packets alone.
       if (gateEnding1IntroAudioPacket() || shouldDropEnding1IntroAudio()) {
         dbg("drop ending1 duplicate Perfect audio packet");
@@ -16270,6 +17325,7 @@ function handleMessage(message) {
       const chunk = String(message.data.text || "");
       const finished = Boolean(message.data.finished);
       if (!chunk.trim() && !finished) break;
+      if (shouldDropPart3LiveAudio()) break;
       cancelAssistantTurnEnd();
       applyAssistantTranscriptChunk(chunk, { finished });
       lastAssistantProgressAt = Date.now();
@@ -16294,6 +17350,7 @@ function handleMessage(message) {
       break;
     }
     case MultimodalLiveResponseType.TURN_COMPLETE:
+      part3NoteLiveTurnBoundary();
       lastAssistantProgressAt = Date.now();
       audioPlayer?.finishTurnIngress?.();
       finishAssistantTurn();
@@ -16318,6 +17375,7 @@ function handleMessage(message) {
       break;
     }
     case MultimodalLiveResponseType.INTERRUPTED: {
+      part3NoteLiveTurnBoundary();
       const interruptedRecovery = capturePendingRecovery();
       const wasAudiblyDelivered = silentReplyDelivered();
       if (audioPlayer) audioPlayer.interrupt();
@@ -16659,6 +17717,7 @@ async function applyChapterJumpFromParent({ lessonId, segmentId: _segmentId } = 
 }
 
 function shouldHandoffAfter(completedSegmentId) {
+  if (usesPart3Architecture()) return PART3_HANDOFF_AFTER.has(completedSegmentId);
   return (
     usesBeginnerHomeworkArchitecture() &&
     PART1_HANDOFF_AFTER.has(completedSegmentId)
@@ -17437,6 +18496,8 @@ async function handleActionButton() {
   sessionResumeHandle = null;
   intentionalDisconnect = false;
   isMuted = false;
+  // Part 3: mic starts OFF — buttons first, mic only for presentation practice.
+  if (usesPart3Architecture()) isMuted = true;
   // Fresh call on ending must re-kick Turn A (stale intro flags left empty chat).
   if (getCurrentSegment()?.id === "ending1") {
     resetEnding1Beat();
@@ -17484,6 +18545,7 @@ async function handleActionButton() {
       audioStreaming = false;
     }
     actionState = "active";
+    if (usesPart3Architecture()) part3OnCallStarted();
     restoreChapterUiFromLessonState();
     renderChoiceBar(getCurrentSegment());
     if (resumingMidChapter) {
@@ -17624,6 +18686,7 @@ function pokeLearny({ automatic = false, armWatch = false } = {}) {
   if (pokeCooldownAt && Date.now() - pokeCooldownAt < POKE_COOLDOWN_MS) return false;
   pokeCooldownAt = Date.now();
   flashPokeButton();
+  if (usesPart3Architecture()) return part3PokeRecover();
 
   const seg = getCurrentSegment();
   if (!automatic) {
@@ -17916,6 +18979,10 @@ window.addEventListener("message", (e) => {
   }
   if (e.data?.type === "gc_user_profile") {
     setLearnerDisplayName(e.data.displayName || "");
+    if (usesPart3Architecture()) {
+      part3State.displayName = String(e.data.displayName || "");
+      part3SyncName();
+    }
   }
   if (e.data?.type === "gc_end_call") {
     if (actionState === "active" || actionState === "connecting") {

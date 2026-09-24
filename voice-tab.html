@@ -12,7 +12,7 @@
             window.GC_LEVEL =
                 level === 'intermediate' || level === 'advanced' ? level : 'beginner';
             var lesson = params.get('lesson');
-            window.GC_LESSON = lesson === 'part2' ? 'part2' : 'part1';
+            window.GC_LESSON = lesson === 'part2' || lesson === 'part3' ? lesson : 'part1';
         })();
     </script>
     <link rel="icon" href="images/tab-logo.png" type="image/png">
@@ -764,6 +764,79 @@
             40% { transform: translateX(4px); }
             60% { transform: translateX(-3px); }
             80% { transform: translateX(2px); }
+        }
+        /* Part 3: 8-choice picks + presentation practice card */
+        .lesson-choice-bar.is-part3-eight .lesson-choice-grid { gap: 8px; }
+        .lesson-choice-bar.is-part3-eight .lesson-choice-btn {
+            min-height: 46px;
+            padding: 10px 8px;
+            font-size: 0.95rem;
+        }
+        .part3-presentation-card {
+            display: grid;
+            gap: 6px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #fff;
+            border: 1px solid #c8e6c9;
+        }
+        .part3-presentation-line {
+            margin: 0;
+            color: #1b5e20;
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
+        }
+        .part3-presentation-hint {
+            margin: 0;
+            color: #455a64;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-align: center;
+        }
+        .part3-presentation-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            padding-bottom: 8px;
+        }
+        .part3-presentation-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 44px;
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 2px solid #a5d6a7;
+            background: #fff;
+            color: #2e7d32;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .part3-presentation-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .part3-presentation-btn:hover,
+        .part3-presentation-btn:focus-visible {
+            border-color: var(--primary);
+            background: #e8f5e9;
+        }
+        .part3-presentation-btn.is-mic-on {
+            border-color: var(--primary);
+            background: #e8f5e9;
+        }
+        .part3-presentation-btn.is-primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+        }
+        .part3-presentation-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
         }
 
         .input-field {
@@ -1863,6 +1936,6 @@
         </div>
     </div>
 
-    <script type="module" src="./js/homework-voice.js?v=20260922-part2-intro-tts"></script>
+    <script type="module" src="./js/homework-voice.js?v=20260924-part3"></script>
 </body>
 </html>

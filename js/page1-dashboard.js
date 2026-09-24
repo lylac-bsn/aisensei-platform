@@ -11,7 +11,7 @@ import {
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js?v=20260921-admin-part-split";
+} from "./lesson-engine.js?v=20260924-part3";
 import {
   BADGE_FAMILIES,
   FAMILY_LABELS_JA,
@@ -24,7 +24,7 @@ import {
   segmentNeedsAccuracyReplay,
   evaluateAndAwardBadges,
   evaluateAndAwardBadgesForAllParts,
-} from "./badge-engine.js?v=20260921-admin-part-split";
+} from "./badge-engine.js?v=20260924-part3";
 import { QuestSfx } from "./quest-sfx.js";
 
 const PANEL_LABELS = {
@@ -254,9 +254,9 @@ function activeLessonStorageKey(level = getActiveLevelId()) {
 export function readStoredActiveHomeworkLesson(level = getActiveLevelId()) {
   try {
     const fromUrl = new URLSearchParams(window.location.search).get("lesson");
-    if (fromUrl === "part1" || fromUrl === "part2") return fromUrl;
+    if (fromUrl === "part1" || fromUrl === "part2" || fromUrl === "part3") return fromUrl;
     const stored = localStorage.getItem(activeLessonStorageKey(level));
-    if (stored === "part1" || stored === "part2") return stored;
+    if (stored === "part1" || stored === "part2" || stored === "part3") return stored;
   } catch {
     // ignore
   }
@@ -264,7 +264,7 @@ export function readStoredActiveHomeworkLesson(level = getActiveLevelId()) {
 }
 
 function persistActiveHomeworkLesson(lessonId, level = getActiveLevelId()) {
-  const id = lessonId === "part2" ? "part2" : "part1";
+  const id = lessonId === "part2" || lessonId === "part3" ? lessonId : "part1";
   try {
     localStorage.setItem(activeLessonStorageKey(level), id);
   } catch {
@@ -394,7 +394,7 @@ export function setActiveHomeworkLesson(lessonId) {
 }
 
 export function getActiveHomeworkLesson() {
-  return activeLessonId === "part2" ? "part2" : "part1";
+  return activeLessonId === "part2" || activeLessonId === "part3" ? activeLessonId : "part1";
 }
 
 function levelId() {
@@ -409,6 +409,8 @@ function refreshDashboardChrome() {
   const allBadges = displayedEarnedBadges();
   const badgeCount = document.getElementById("trophy-badge-count");
   const slots = document.getElementById("trophy-badge-slots");
+  const shelf = document.querySelector(".trophy-shelf");
+  if (shelf) shelf.hidden = false;
 
   if (useBadgeShelf()) {
     const tiers = highestTierByFamily(allBadges, activeBadgePrefix());
@@ -434,6 +436,8 @@ function refreshDashboardChrome() {
   }
 
   const catalog = getBadgeCatalogForLesson(activeLessonId);
+  // Part 3 has no badges — hide the shelf instead of showing 0/0.
+  if (shelf && !catalog.length) shelf.hidden = true;
   const catalogIds = new Set(catalog.map((b) => b.id));
   const earned = allBadges.filter((id) => catalogIds.has(id));
   if (badgeCount) badgeCount.textContent = `${earned.length}/${catalog.length || 0}`;
@@ -502,7 +506,7 @@ function broadcastChapterJump(segmentId) {
     window.parent?.postMessage?.(msg, "*");
     window.dispatchEvent(new CustomEvent("learny-progress-changed"));
     document
-      .querySelectorAll("#iframe-part1, #iframe-part2, #server-iframe-1, #server-iframe-2")
+      .querySelectorAll("#iframe-part1, #iframe-part2, #iframe-part3, #server-iframe-1, #server-iframe-2")
       .forEach((f) => {
         f.contentWindow?.postMessage(msg, "*");
       });
@@ -716,7 +720,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
       window.parent?.postMessage?.({ type: "gc_reset_lesson", lessonId: activeLessonId }, "*");
       window.parent?.postMessage?.({ type: "gc_quest_progress_update" }, "*");
       document
-        .querySelectorAll("#iframe-part1, #iframe-part2, #server-iframe-1, #server-iframe-2")
+        .querySelectorAll("#iframe-part1, #iframe-part2, #iframe-part3, #server-iframe-1, #server-iframe-2")
         .forEach((f) => {
           f.contentWindow?.postMessage({ type: "gc_reset_lesson", lessonId: activeLessonId }, "*");
           f.contentWindow?.postMessage({ type: "gc_quest_progress_update" }, "*");

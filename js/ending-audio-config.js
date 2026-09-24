@@ -23,6 +23,13 @@ export const PART2_ENDING_FINALE_SPEAK =
   "If you play Minecraft again, try using today's English too! See you next time! " +
   "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！";
 
+/**
+ * Part 3 wrong-answer line. Hosted because Live pads this short Japanese-only
+ * line with its own praise ("Great! おしい…"). Must equal PART3_RETRY_SPEAK.
+ */
+export const PART3_RETRY_AUDIO_KEY = "beginner-part3-retry";
+export const PART3_RETRY_AUDIO_TEXT = "おしい！もういちど！";
+
 /** A goodbye only counts as Turn C after the explicit 終わりにする action. */
 export function isEnding1FinaleTranscript(
   text,
@@ -54,5 +61,10 @@ export const ENDING_AUDIO_SCRIPTS = Object.freeze([
     key: "beginner-part2-finale",
     text: PART2_ENDING_FINALE_SPEAK,
     source: "beginner:part2.ending1.finale",
+  }),
+  Object.freeze({
+    key: PART3_RETRY_AUDIO_KEY,
+    text: PART3_RETRY_AUDIO_TEXT,
+    source: "beginner:part3.retry",
   }),
 ]);

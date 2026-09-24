@@ -10,12 +10,47 @@ import {
   mcqAudioSpokenText,
   normalizeMcqAudioLabel,
 } from "../js/mcq-audio-config.js";
+import {
+  PART3_GLASS_COLORS,
+  PART3_FISH_COLORS,
+  PART3_DECORATION1_CHOICES,
+  PART3_DECORATION2_POOL,
+  resolvePart3Text,
+} from "../js/lessons/aquarium-presentation.js";
 
 const labels = new Map();
+
+/** Part 3 {token} values; {name} labels are generated per learner at runtime. */
+const PART3_TOKEN_VALUES = {
+  glassColor: PART3_GLASS_COLORS,
+  otherColor: PART3_GLASS_COLORS,
+  decoration1: PART3_DECORATION1_CHOICES,
+  decoration2: PART3_DECORATION2_POOL,
+  fishColor: PART3_FISH_COLORS,
+};
+
+function expandPart3Template(template) {
+  const tokens = [...new Set([...template.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))]
+    .filter((token) => token !== "fishArticle");
+  if (tokens.includes("name")) return [];
+  let combos = [{}];
+  for (const token of tokens) {
+    const values = PART3_TOKEN_VALUES[token];
+    if (!values) throw new Error(`Unknown Part 3 choice token {${token}} in "${template}"`);
+    combos = combos.flatMap((combo) => values.map((value) => ({ ...combo, [token]: value })));
+  }
+  return combos.map(({ otherColor, ...memories }) =>
+    resolvePart3Text(template, memories, { otherColor })
+  );
+}
 
 function addLabel(rawLabel, source) {
   const template = String(rawLabel || "").trim();
   if (!template) return;
+  if (/\{\w+\}/.test(template)) {
+    expandPart3Template(template).forEach((expanded) => addExpandedLabel(expanded, source, {}));
+    return;
+  }
   const hasColor = /\[color(?:Ja)?\]|___/i.test(template);
   const hasFishCount = /\[fishCount(?:Minus1|Plus1)?\]/i.test(template);
 

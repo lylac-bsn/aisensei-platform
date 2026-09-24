@@ -8,7 +8,7 @@ import {
   PART2_CH5_BEAT1_SPEAK,
   PART2_CH6_BEAT1_SPEAK,
 } from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260921-ending-autostart";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260924-part3";
 import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {
   buildPartReporting,
@@ -105,9 +105,11 @@ function resolveLessonId() {
     const params = new URLSearchParams(window.location.search);
     const fromQuery = params.get("lesson");
     if (fromQuery === "part1" || fromQuery === "part2") return fromQuery;
+    if (fromQuery === "part3" && resolveLevelId() === "beginner") return fromQuery;
     const fromGlobal =
       (typeof window !== "undefined" && window.GC_LESSON) || globalThis.GC_LESSON;
     if (fromGlobal === "part1" || fromGlobal === "part2") return fromGlobal;
+    if (fromGlobal === "part3" && resolveLevelId() === "beginner") return fromGlobal;
   } catch {
     // ignore
   }
@@ -152,6 +154,13 @@ export function usesBeginnerPart2Architecture(
   levelId = ACTIVE_LEVEL_ID
 ) {
   return getLesson(lessonId, levelId)?.architecture === "beginner-part2-v1";
+}
+
+export function usesBeginnerPart3Architecture(
+  lessonId = ACTIVE_LESSON_ID,
+  levelId = ACTIVE_LEVEL_ID
+) {
+  return getLesson(lessonId, levelId)?.architecture === "beginner-part3-v1";
 }
 
 /** Returns true for any beginner architecture (Part 1 or Part 2). */
@@ -589,7 +598,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerArchitecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260921-admin-part-split")
+  import("./badge-engine.js?v=20260924-part3")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges(lessonId, levelId);
       if (newlyEarned?.length) {
@@ -662,6 +671,12 @@ export function getSegmentById(id, lessonId = ACTIVE_LESSON_ID) {
 
 /** Banner labels from the homework markdown (CHAPTER 0, QUIZ 1, …). */
 export function getSegmentChapterMeta(segment) {
+  if (segment?.chapterMeta?.label) {
+    return {
+      label: String(segment.chapterMeta.label),
+      num: String(segment.chapterMeta.num ?? ""),
+    };
+  }
   const id = String(segment?.id || "");
   const ch = id.match(/^ch(\d+)$/);
   if (ch) return { label: "CHAPTER", num: ch[1] };
@@ -941,7 +956,7 @@ export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID, cloudLevel = nu
   const part2 = resolvePartForSync("part2", levelId, cloud.part2);
   const claimed = loadEarnedLessonBadges();
   const pending = loadPendingLessonBadges();
-  return {
+  const snapshot = {
     progressContractVersion: PROGRESS_CONTRACT_VERSION,
     part1,
     part2,
@@ -958,6 +973,14 @@ export function buildProgressSnapshot(levelId = ACTIVE_LEVEL_ID, cloudLevel = nu
       part2: buildPartReporting(part2),
     },
   };
+  // Part 3 exists for beginner only; the whole level field is rewritten on sync.
+  if (usesBeginnerPart3Architecture("part3", levelId)) {
+    const part3 = resolvePartForSync("part3", levelId, cloud.part3);
+    snapshot.part3 = part3;
+    snapshot.part3Complete = Boolean(part3.complete || cloud.part3Complete);
+    snapshot.reporting.part3 = buildPartReporting(part3);
+  }
+  return snapshot;
 }
 
 export function loadLessonStateFor(lessonId, levelId) {
@@ -1937,6 +1960,32 @@ export function buildLessonInstructions(state = loadLessonState(), levelId = ACT
     .join("\n");
 
   return adaptCoachTextForLevel(raw, instructionLevel);
+}
+
+/**
+ * Part 3 (presentation practice): the client owns every line. Learny only
+ * voices the <exact> scripts the app sends and stays silent otherwise.
+ */
+export function buildPart3LessonInstructions(state = loadLessonState(), levelId = ACTIVE_LEVEL_ID) {
+  const lesson = getLesson(state.lessonId);
+  const segment = getCurrentSegment(state);
+  return [
+    "You are ラーニー先生 (Learny), a warm Japanese-English homework tutor for children.",
+    "This is HOMEWORK: presentation practice about the aquarium the child made in Minecraft.",
+    lesson.weekNote,
+    noSystemBackendRule(),
+    japaneseOutputRule("beginner").split(" BEGINNER (CRITICAL")[0],
+    "SCRIPT MODE (CRITICAL — NEVER BREAK): The app sends messages that contain a script between <exact> and </exact>. " +
+      "Speak EXACTLY that script, word for word, once, in a warm teacher voice — nothing before it, nothing after it. " +
+      "Do not translate, paraphrase, add praise, add questions, read answer choices, or reveal answers.",
+    "SILENCE RULE: When the child speaks or types without an <exact> script from the app, say NOTHING. " +
+      "The app checks the child's answer and then sends the next <exact> script.",
+    "Never mention timers, the app UI, buttons, mic, tools, or technical status.",
+    `Lesson: ${lesson.title} (${lesson.titleEn})`,
+    `CURRENT SEGMENT ${state.segmentIndex + 1}/${lesson.segments.length}: ${segment.id} ${segment.title}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function buildOpeningNudge(state = loadLessonState()) {

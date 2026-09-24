@@ -12,7 +12,7 @@ import {
   loadBadgeRevocations,
   saveEarnedLessonBadges,
   savePendingLessonBadges,
-} from "./lesson-engine.js?v=20260921-admin-part-split";
+} from "./lesson-engine.js?v=20260924-part3";
 import {
   normalizeIdList,
   resolveClaimedBadgeIds,

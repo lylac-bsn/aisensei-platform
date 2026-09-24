@@ -3,12 +3,12 @@
  * Stats persist in lesson state for admin analysis.
  */
 
-import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260921-admin-part-split";
+import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260924-part3";
 import {
   isBadgeEnabledScope,
   maybeRecordBadgeFirstTry,
   evaluateAndAwardBadges,
-} from "./badge-engine.js?v=20260921-admin-part-split";
+} from "./badge-engine.js?v=20260924-part3";
 
 /** @typedef {{
  *   id: string,

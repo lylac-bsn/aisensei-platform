@@ -4,9 +4,9 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260921-admin-part-split";
+import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260924-part3";
 import { logUserActivity } from "./activity-log.js";
-import { getActiveLevelInfo } from "./lesson-engine.js?v=20260921-admin-part-split";
+import { getActiveLevelInfo } from "./lesson-engine.js?v=20260924-part3";
 import { openLevelSwitcher } from "./level-picker.js";
 
 const firebaseConfig = {
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function syncVoiceUserProfile(displayName) {
-        document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {
+        document.querySelectorAll('#iframe-part1, #iframe-part2, #iframe-part3').forEach((frame) => {
             try {
                 frame.contentWindow?.postMessage({ type: 'gc_user_profile', displayName }, '*');
             } catch {
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function endAllVoiceCalls() {
-        document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {
+        document.querySelectorAll('#iframe-part1, #iframe-part2, #iframe-part3').forEach((frame) => {
             try {
                 frame.contentWindow?.postMessage({ type: 'gc_end_call' }, '*');
             } catch {

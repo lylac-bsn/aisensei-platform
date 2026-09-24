@@ -151,7 +151,7 @@ export async function logUserActivity(db, userId, event) {
   const payload = {
     type: String(event.type),
     level: event.level || null,
-    lessonId: event.lessonId === "part1" || event.lessonId === "part2"
+    lessonId: event.lessonId === "part1" || event.lessonId === "part2" || event.lessonId === "part3"
       ? event.lessonId
       : null,
     questIndex: Number.isFinite(event.questIndex) ? event.questIndex : null,
