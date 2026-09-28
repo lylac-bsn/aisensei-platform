@@ -100,15 +100,109 @@ export const PART3_FISH_JA = Object.freeze({
   "tropical fish": "ねったいぎょ",
 });
 
-export const PART3_RETRY_SPEAK = "おしい！もういちど！";
+/**
+ * Japanese line for a Part 3 presentation phrase (phrase list). Wording follows
+ * the Chapter 1–5 learnyJa prompts. Returns "" for anything else.
+ */
+export function part3PhraseJa(phrase) {
+  const key = String(phrase || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[.!?。！？]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!key) return "";
+  if (key === "this is my aquarium") return "これが わたしの すいぞくかんです";
+  if (key === "i like this fish") return "この おさかなが すきです";
+  const name = String(phrase).trim().match(/^i['’]?m\s+(.+?)[.!?]*$/i);
+  if (name) return `わたしは ${name[1]} です`;
+  const glass = key.match(/^i chose (\w+) glass$/);
+  if (glass && PART3_COLOR_JA[glass[1]]) return `${PART3_COLOR_JA[glass[1]]} がらすを えらびました`;
+  const put = key.match(/^i put (?:an? )?(.+) here$/);
+  if (put && PART3_DECORATION_JA[put[1]]) return `ここに ${PART3_DECORATION_JA[put[1]]}を おきました`;
+  if (put && PART3_FISH_JA[put[1]]) return `ここに ${PART3_FISH_JA[put[1]]}を おきました`;
+  const tropical = key.match(/^i chose (?:an? )?(\w+) tropical fish$/);
+  if (tropical && PART3_COLOR_JA[tropical[1]]) {
+    return `${PART3_COLOR_JA[tropical[1]]} ねったいぎょを えらびました`;
+  }
+  const fish = key.match(/^i chose (?:an? )?(.+)$/);
+  if (fish && PART3_FISH_JA[fish[1]]) return `${PART3_FISH_JA[fish[1]]}を えらびました`;
+  return "";
+}
 
-/** Reaction phrases — one per finished section, never all at once. */
+/**
+ * Wrong-answer reactions (rotated). Learny says one, then re-asks the same
+ * question — the reaction never reveals the answer. `title` is the choice-bar banner.
+ */
+export const PART3_RETRY_REACTIONS = Object.freeze([
+  { title: "おしい！もういちど！", speak: "So close! おしい！もういちど！" },
+  { title: "ざんねん！ちがうよ", speak: "Nice try! Not quite. ざんねん！ちがうよ。" },
+  { title: "ん〜、それじゃないみたい", speak: "Hmm, not that one. ん〜、それじゃないみたい。" },
+  { title: "おっと！もういちど やってみよう", speak: "Oops! Let's try again. おっと！もういちど やってみよう！" },
+  { title: "だいじょうぶ！もう いっかい！", speak: "That's okay! One more time! だいじょうぶ！もう いっかい！" },
+  { title: "いい ちょうせん！もういちど！", speak: "Good try! Let's pick again! いい ちょうせん！もういちど！" },
+]);
+
+/**
+ * Presentation retry feedback: which sentence (1-based, within the card) wasn't
+ * heard. Longest presentation set is 7 lines.
+ */
+export const PART3_MISSED_LINE_MAX = 7;
+export function part3MissedLinesFeedback(missed) {
+  const list = (missed || []).filter((n) => n >= 1 && n <= PART3_MISSED_LINE_MAX);
+  if (list.length === 1) {
+    const n = list[0];
+    return `I couldn't hear sentence ${n}. ${n}ばんめの ぶんが きこえなかったよ。`;
+  }
+  return "Some sentences were missing. きこえなかった ぶんが あるよ。あかい ぶんを よく みてね。";
+}
+
+/** Short praise before the next MCQ script (rotated). */
+export const PART3_PRAISES = Object.freeze([
+  "Great!",
+  "Amazing!",
+  "Nice one!",
+  "やったね！",
+  "ばっちり！",
+  "Yes!",
+]);
+
+/** Reaction phrases after the child says presentation lines (praise the speaking). */
 export const PART3_REACTIONS = Object.freeze([
-  { en: "That looks great!", ja: "みためが いいね！" },
+  { en: "Great speaking!", ja: "じょうずに いえたね！" },
   { en: "That's cool!", ja: "すごいね！かっこいい！" },
-  { en: "So creative!", ja: "はっそうが すごいね！" },
+  { en: "Nice and clear!", ja: "はっきり いえたね！" },
   { en: "Nice one!", ja: "いいね！" },
 ]);
+
+/**
+ * Chapter 0 reaction that names what the child just picked (spoken before the
+ * next script). `memories` already includes the new pick.
+ */
+export function part3PickReaction(memoryKey, memories = {}) {
+  const cap = (text) => String(text || "").replace(/\b\w/g, (ch) => ch.toUpperCase());
+  const first = (text) => String(text || "").replace(/^\w/, (ch) => ch.toUpperCase());
+  const value = lower(memories[memoryKey]);
+  if (!value) return "";
+  switch (memoryKey) {
+    case "glassColor":
+      return `${cap(value)} glass! Cool! ${PART3_COLOR_JA[value] || ""} がらす、かっこいいね！`;
+    case "decoration1":
+      return `${cap(value)}! Nice! ${PART3_DECORATION_JA[value] || ""}、いいね！`;
+    case "decoration2":
+      return `${cap(value)} too! So creative! ${PART3_DECORATION_JA[value] || ""}も おいたんだね！`;
+    case "fishType":
+      return `${first(part3PresentationFishWithArticle(value))}! Nice one! ${PART3_FISH_JA[value] || ""}、いいね！`;
+    case "fishColor":
+      return (
+        `${first(part3PresentationFishWithArticle(`${value} tropical fish`))}! That's cool! ` +
+        `${PART3_COLOR_JA[value] || ""} ねったいぎょ、かっこいいね！`
+      );
+    default:
+      return "";
+  }
+}
 
 export const PART3_ENDING_TURNS = Object.freeze([
   "Great job! You practiced your whole presentation! ぐれーと じょぶ！さいしょから さいごまで れんしゅう できたね！",
@@ -214,7 +308,10 @@ export function resolvePart3Beat(beat, memories = {}) {
   if (!beat?.variants) return beat || null;
   const key = part3FishVariantKey(memories);
   const variant = key ? beat.variants[key] : null;
-  return variant ? { ...variant, id: beat.id } : null;
+  if (!variant) return null;
+  const { variants: _variants, ...base } = beat;
+  // Keep beat-level fields (kind, id) — badge scoring only records kind "mcq".
+  return { ...base, ...variant, id: beat.id };
 }
 
 const HIRA_ROMAJI = {
@@ -310,7 +407,83 @@ export const AQUARIUM_PART3 = {
   titleEn: "Presentation Practice",
   weekNote: "このあとのリアルレッスンで、自分が作った水族館について英語で発表できるように練習する。",
   stopRule: "Presentation practice only — use the learner's own Chapter 0 answers.",
-  badges: [],
+  /** Part 3 has no ending free talk — its speaking badge is the presentation. */
+  badgeFamilies: ["chapter", "presentation", "accuracy"],
+  chapterBadgeMilestones: { bronze: "p3ch0", silver: "p3quiz", gold: "p3ending" },
+  badges: [
+    {
+      id: "p3_chapter_bronze",
+      family: "chapter",
+      tier: "bronze",
+      label: "チャプター ブロンズ",
+      desc: "Chapter 0 をクリア",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p3_chapter_silver",
+      family: "chapter",
+      tier: "silver",
+      label: "チャプター シルバー",
+      desc: "ミニクイズまでクリア",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p3_chapter_gold",
+      family: "chapter",
+      tier: "gold",
+      label: "チャプター ゴールド",
+      desc: "Part 3 をさいごまでクリア",
+      image: "images/completion-badge-gold.png",
+    },
+    {
+      id: "p3_presentation_bronze",
+      family: "presentation",
+      tier: "bronze",
+      label: "はっぴょう ブロンズ",
+      desc: "はっぴょうの章を1つ、じぶんの こえで ぜんぶ いえた",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p3_presentation_silver",
+      family: "presentation",
+      tier: "silver",
+      label: "はっぴょう シルバー",
+      desc: "はっぴょうの章を2つ、じぶんの こえで ぜんぶ いえた",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p3_presentation_gold",
+      family: "presentation",
+      tier: "gold",
+      label: "はっぴょう ゴールド",
+      desc: "Chapter 6・Chapter 7・ファイナルを ぜんぶ じぶんの こえで いえた",
+      image: "images/completion-badge-gold.png",
+    },
+    {
+      id: "p3_accuracy_bronze",
+      family: "accuracy",
+      tier: "bronze",
+      label: "いっぱつせいかい ブロンズ",
+      desc: "4択をさいしょの1かいで正解できた数が50%より上",
+      image: "images/completion-badge-bronze.png",
+    },
+    {
+      id: "p3_accuracy_silver",
+      family: "accuracy",
+      tier: "silver",
+      label: "いっぱつせいかい シルバー",
+      desc: "4択をさいしょの1かいで正解できた数が75%より上",
+      image: "images/completion-badge-silver.png",
+    },
+    {
+      id: "p3_accuracy_gold",
+      family: "accuracy",
+      tier: "gold",
+      label: "いっぱつせいかい ゴールド",
+      desc: "4択をぜんぶさいしょの1かいで正解できた",
+      image: "images/completion-badge-gold.png",
+    },
+  ],
   memories: [
     "name",
     "glassColor",
@@ -348,9 +521,8 @@ export const AQUARIUM_PART3 = {
         {
           id: "decoration2",
           kind: "pick",
-          noPraise: true,
-          learnyEn: "Nice! What else did you put in your aquarium?",
-          learnyJa: "いいね！ほかには なにを おいた？",
+          learnyEn: "What else did you put in your aquarium?",
+          learnyJa: "ほかには なにを おいた？",
           choices: PART3_DECORATION2_POOL,
           excludeMemory: "decoration1",
           memoryKey: "decoration2",
@@ -640,6 +812,7 @@ export const AQUARIUM_PART3 = {
         },
         {
           id: "secondHalf",
+          noPraise: true,
           learnyEn: "Nice! Now let's try the second half!",
           learnyJa: "いいね！つぎは うしろの はんぶんを いってみよう！",
           lines: lineRange(4, 7),
@@ -660,7 +833,13 @@ export const AQUARIUM_PART3 = {
           learnyJa: "さいごの はっぴょう れんしゅうだよ！れっつごー！",
           lines: lineRange(0, 7),
         },
-        { id: "round2", cloze: true, lines: lineRange(0, 7) },
+        {
+          id: "round2",
+          cloze: true,
+          learnyEn: "Now fill in the blanks!",
+          learnyJa: "こんどは あなを うめて いってみよう！",
+          lines: lineRange(0, 7),
+        },
       ],
     },
     {
@@ -673,3 +852,113 @@ export const AQUARIUM_PART3 = {
     },
   ],
 };
+
+/**
+ * Every Part 3 line with no learner tokens, hosted as pre-generated TTS
+ * (ending-audio-config.js → scripts/generate-ending-audio.py). The runtime
+ * plays a line from these clips only when every piece of it has one.
+ */
+export function part3StaticAudioScripts() {
+  const items = [];
+  const seen = new Set();
+  const add = (key, text, source) => {
+    const spoken = String(text || "").replace(/\s+/g, " ").trim();
+    if (!spoken || seen.has(spoken)) return;
+    seen.add(spoken);
+    items.push({ key: `beginner-part3-${key}`, text: spoken, source: `beginner:part3.${source}` });
+  };
+  const slug = (value) => lower(value).replace(/[^a-z0-9]+/g, "-");
+  const segment = (id) => AQUARIUM_PART3.segments.find((s) => s.id === id);
+
+  for (const beat of segment("p3ch0").part3Beats) {
+    add(`ch0-${beat.id}`, part3BeatSpeak(beat), `ch0.${beat.id}`);
+  }
+  const picks = {
+    glassColor: PART3_GLASS_COLORS,
+    decoration1: PART3_DECORATION1_CHOICES,
+    decoration2: PART3_DECORATION2_POOL,
+    fishType: PART3_FISH_CHOICES,
+    fishColor: PART3_FISH_COLORS,
+  };
+  for (const [memoryKey, values] of Object.entries(picks)) {
+    for (const value of values) {
+      add(
+        `react-${memoryKey}-${slug(value)}`,
+        part3PickReaction(memoryKey, { [memoryKey]: lower(value) }),
+        `ch0.reaction.${memoryKey}.${slug(value)}`
+      );
+    }
+  }
+  // Chapter 1–5 + quiz scripts: one clip per Chapter 0 answer they mention.
+  // Lines with the learner's name stay on Live.
+  const NAME = "\u0001";
+  const base = {
+    name: NAME,
+    glassColor: lower(PART3_GLASS_COLORS[0]),
+    decoration1: lower(PART3_DECORATION1_CHOICES[0]),
+    decoration2: lower(PART3_DECORATION2_POOL[1]),
+    fishType: "salmon",
+    presentationFish: "salmon",
+  };
+  const memorySets = [
+    ...PART3_GLASS_COLORS.map((v) => ({ glassColor: lower(v) })),
+    ...PART3_DECORATION1_CHOICES.map((v) => ({ decoration1: lower(v) })),
+    ...PART3_DECORATION2_POOL.map((v) => ({ decoration2: lower(v) })),
+    ...PART3_FISH_CHOICES.flatMap((fish) =>
+      lower(fish) === "tropical fish"
+        ? PART3_FISH_COLORS.map((c) => ({
+            fishType: "tropical fish",
+            fishColor: lower(c),
+            presentationFish: `${lower(c)} tropical fish`,
+          }))
+        : [{ fishType: lower(fish), presentationFish: lower(fish) }]
+    ),
+  ].map((m) => ({ ...base, ...m }));
+  const TOKEN_MEMORY = {
+    glassColor: "glassColor",
+    glassColorJa: "glassColor",
+    decoration1: "decoration1",
+    decoration1Ja: "decoration1",
+    decoration2: "decoration2",
+    decoration2Ja: "decoration2",
+    fishColor: "fishColor",
+    fishColorJa: "fishColor",
+    fishArticle: "fishColor",
+    presentationFish: "presentationFish",
+    presentationFishJa: "presentationFish",
+    presentationFishWithArticle: "presentationFish",
+  };
+  for (const id of ["p3ch1", "p3ch2", "p3ch3", "p3ch4", "p3ch5", "p3quiz"]) {
+    for (const beat of segment(id).part3Beats) {
+      for (const memories of memorySets) {
+        const resolved = resolvePart3Beat(beat, memories);
+        if (!resolved) continue;
+        const text = part3BeatSpeak(resolved, memories, { otherColor: "red" });
+        if (text.includes(NAME)) continue;
+        const tokens = `${resolved.learnyEn || ""} ${resolved.learnyJa || ""}`.match(/\{\w+\}/g) || [];
+        const memoryKeys = [...new Set(tokens.map((t) => TOKEN_MEMORY[t.slice(1, -1)]).filter(Boolean))];
+        const suffix = [
+          beat.variants && !memoryKeys.includes("presentationFish") ? part3FishVariantKey(memories) : "",
+          ...memoryKeys.map((k) => slug(memories[k])),
+        ]
+          .filter(Boolean)
+          .join("-");
+        add(`${id.slice(2)}-${beat.id}${suffix ? `-${suffix}` : ""}`, text, `${id}.${beat.id}`);
+      }
+    }
+  }
+  PART3_RETRY_REACTIONS.forEach((r, i) => add(`retry-${i + 1}`, r.speak, `retry.${i + 1}`));
+  for (let n = 1; n <= PART3_MISSED_LINE_MAX; n += 1) {
+    add(`missed-${n}`, part3MissedLinesFeedback([n]), `presentation.missed.${n}`);
+  }
+  add("missed-many", part3MissedLinesFeedback([1, 2]), "presentation.missed.many");
+  PART3_PRAISES.forEach((text, i) => add(`praise-${i + 1}`, text, `praise.${i + 1}`));
+  PART3_REACTIONS.forEach((r, i) => add(`reaction-${i + 1}`, `${r.en} ${r.ja}`, `reaction.${i + 1}`));
+  for (const id of ["p3ch6", "p3ch7", "p3final"]) {
+    for (const set of segment(id).part3Sets) {
+      add(`${id.slice(2)}-${slug(set.id)}`, part3BeatSpeak(set), `${id}.${set.id}`);
+    }
+  }
+  PART3_ENDING_TURNS.forEach((text, i) => add(`ending-${i + 1}`, text, `ending.${i + 1}`));
+  return items;
+}

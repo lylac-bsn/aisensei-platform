@@ -127,6 +127,10 @@ export class GeminiLiveAPI {
     this.temperature = 1.0; // Default temperature
     this.proactivity = { proactiveAudio: false }; // Proactivity config
     this.inputAudioTranscription = false;
+    /** BCP-47 codes for input STT; empty = automatic language detection. */
+    this.inputTranscriptionLanguageCodes = null;
+    /** Phrases that bias input STT (lesson words, the learner's name). */
+    this.inputTranscriptionVocabulary = null;
     this.outputAudioTranscription = false;
     this.enableFunctionCalls = false;
     this.functions = [];
@@ -431,7 +435,14 @@ export class GeminiLiveAPI {
 
     // Add transcription config if enabled
     if (this.inputAudioTranscription) {
-      sessionSetupMessage.setup.input_audio_transcription = {};
+      const transcription = {};
+      if (this.inputTranscriptionLanguageCodes?.length) {
+        transcription.language_codes = this.inputTranscriptionLanguageCodes;
+      }
+      if (this.inputTranscriptionVocabulary?.length) {
+        transcription.custom_vocabulary = this.inputTranscriptionVocabulary;
+      }
+      sessionSetupMessage.setup.input_audio_transcription = transcription;
     }
     if (this.outputAudioTranscription) {
       sessionSetupMessage.setup.output_audio_transcription = {};

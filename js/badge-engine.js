@@ -16,7 +16,7 @@ import {
   saveBadgeRevocations,
   saveLessonState,
   usesBeginnerArchitecture,
-} from "./lesson-engine.js?v=20260924-part3";
+} from "./lesson-engine.js?v=20260928-variant-kind";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",
@@ -25,11 +25,30 @@ export const BADGE_IMAGES = Object.freeze({
   locked: "images/owl-locked-slot.png",
 });
 
+/** Part 1 / Part 2 shelf. Part 3 declares its own via `lesson.badgeFamilies`. */
 export const BADGE_FAMILIES = Object.freeze(["chapter", "freetalk", "accuracy"]);
 
 export const TIER_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3 });
 
-/** Beginner Part 1 and Part 2 share the same badge shelf (chapter / freetalk / accuracy). */
+const BADGE_ARCHITECTURES = new Set([
+  "beginner-part1-v1",
+  "beginner-part2-v1",
+  "beginner-part3-v1",
+]);
+
+const DEFAULT_CHAPTER_MILESTONES = Object.freeze({
+  bronze: "ch0",
+  silver: "quiz1",
+  gold: "ending1",
+});
+
+export function badgeFamiliesForLesson(lesson) {
+  return Array.isArray(lesson?.badgeFamilies) && lesson.badgeFamilies.length
+    ? lesson.badgeFamilies
+    : BADGE_FAMILIES;
+}
+
+/** Beginner Parts 1–3 each have a 3-family shelf, kept apart by badge prefix. */
 export function isBadgeEnabledScope(
   levelId = getActiveLevelId(),
   lessonId = getActiveLessonId()
@@ -54,7 +73,7 @@ export function badgePrefixForScope(
 
 export function parseBadgeId(id) {
   const m = String(id || "").match(
-    /^(.*?)_(chapter|freetalk|accuracy)_(bronze|silver|gold)$/
+    /^(.*?)_(chapter|freetalk|presentation|accuracy)_(bronze|silver|gold)$/
   );
   if (!m) return null;
   return { prefix: m[1], family: m[2], tier: m[3] };
@@ -75,6 +94,12 @@ export function listScorableBeats(lesson, state = null) {
   };
 
   for (const seg of lesson?.segments || []) {
+    if (Array.isArray(seg.part3Beats)) {
+      // Chapter 0 picks are the learner's own answers, not scored.
+      for (const beat of seg.part3Beats) {
+        if (beat?.id && beat.kind === "mcq") push(seg.id, beat.id, "mcq");
+      }
+    }
     if (Array.isArray(seg.mcqBeats)) {
       for (const beat of seg.mcqBeats) {
         if (beat?.id) push(seg.id, beat.id, "mcq");
@@ -111,12 +136,41 @@ export function listScorableBeats(lesson, state = null) {
   return out;
 }
 
-export function computeChapterTier(state) {
+export function computeChapterTier(state, lesson = null) {
+  const milestones = lesson?.chapterBadgeMilestones || DEFAULT_CHAPTER_MILESTONES;
   const done = new Set(state?.completedSegmentIds || []);
-  if (state?.complete || done.has("ending1")) return "gold";
-  if (done.has("quiz1")) return "silver";
-  if (done.has("ch0")) return "bronze";
+  if (state?.complete || done.has(milestones.gold)) return "gold";
+  if (done.has(milestones.silver)) return "silver";
+  if (done.has(milestones.bronze)) return "bronze";
   return null;
+}
+
+/**
+ * Part 3 はっぴょう: presentation chapters (Ch6 / Ch7 / Final) where every set
+ * has been said by the learner on some play. 1 → bronze, 2 → silver, 3 → gold.
+ */
+export function computePresentationStats(state, lesson) {
+  const spoken = state?.presentationSpokenBest || {};
+  const chapters = (lesson?.segments || [])
+    .filter((seg) => Array.isArray(seg.part3Sets) && seg.part3Sets.length)
+    .map((seg) => {
+      const sets = seg.part3Sets.map((set) => ({
+        id: set.id,
+        spoken: spoken[`${seg.id}.${set.id}`] === true,
+      }));
+      return {
+        segmentId: seg.id,
+        title: seg.title || seg.id,
+        sets,
+        done: sets.every((set) => set.spoken),
+      };
+    });
+  const doneCount = chapters.filter((c) => c.done).length;
+  let tier = null;
+  if (chapters.length && doneCount >= chapters.length) tier = "gold";
+  else if (doneCount >= 2) tier = "silver";
+  else if (doneCount >= 1) tier = "bronze";
+  return { chapters, doneCount, total: chapters.length, tier };
 }
 
 export function computeFreetalkTier(count) {
@@ -188,7 +242,7 @@ export function segmentNeedsAccuracyReplay(
   const arch = lesson?.architecture;
   if (
     !id ||
-    (arch !== "beginner-part1-v1" && arch !== "beginner-part2-v1") ||
+    !BADGE_ARCHITECTURES.has(arch) ||
     earnedAccuracyTier === "gold" ||
     !(state?.completedSegmentIds || []).includes(id)
   ) {
@@ -204,23 +258,27 @@ export function segmentNeedsAccuracyReplay(
 
 /** All tier ids unlocked up to and including `tier`. */
 export function tierIdsForFamily(family, tier, lesson) {
-  if (!tier || !BADGE_FAMILIES.includes(family)) return [];
+  if (!tier || !badgeFamiliesForLesson(lesson).includes(family)) return [];
   const order = ["bronze", "silver", "gold"];
   const idx = order.indexOf(tier);
   if (idx < 0) return [];
   return order.slice(0, idx + 1).map((t) => badgeId(family, t, lesson));
 }
 
+function computeFamilyTier(family, state, lesson) {
+  if (family === "chapter") return computeChapterTier(state, lesson);
+  if (family === "freetalk") return computeFreetalkTier(state?.endingFreetalkEnglishCount);
+  if (family === "presentation") return computePresentationStats(state, lesson).tier;
+  if (family === "accuracy") return computeAccuracyTier(state, lesson).tier;
+  return null;
+}
+
 export function evaluateLessonBadges(state, lesson) {
-  const arch = lesson?.architecture;
-  if (arch !== "beginner-part1-v1" && arch !== "beginner-part2-v1") return [];
+  if (!BADGE_ARCHITECTURES.has(lesson?.architecture)) return [];
   const ids = [];
-  const chapter = computeChapterTier(state);
-  ids.push(...tierIdsForFamily("chapter", chapter, lesson));
-  const freetalk = computeFreetalkTier(state?.endingFreetalkEnglishCount);
-  ids.push(...tierIdsForFamily("freetalk", freetalk, lesson));
-  const { tier: accuracy } = computeAccuracyTier(state, lesson);
-  ids.push(...tierIdsForFamily("accuracy", accuracy, lesson));
+  for (const family of badgeFamiliesForLesson(lesson)) {
+    ids.push(...tierIdsForFamily(family, computeFamilyTier(family, state, lesson), lesson));
+  }
   return [...new Set(ids)];
 }
 
@@ -267,13 +325,13 @@ export function evaluateAndAwardBadges(
   return { newlyEarned, desired };
 }
 
-/** Re-score Part 1 and Part 2 so admin/sync see both prefixes. */
+/** Re-score every beginner part so admin/sync see all prefixes. */
 export function evaluateAndAwardBadgesForAllParts(
   levelId = getActiveLevelId()
 ) {
   const newlyEarned = [];
   const desired = [];
-  for (const lessonId of ["part1", "part2"]) {
+  for (const lessonId of ["part1", "part2", "part3"]) {
     if (!isBadgeEnabledScope(levelId, lessonId)) continue;
     const result = evaluateAndAwardBadges(lessonId, levelId);
     newlyEarned.push(...(result.newlyEarned || []));
@@ -378,8 +436,34 @@ export function recordEndingFreetalkEnglish(text) {
   };
 }
 
+/**
+ * Part 3: the learner said a presentation set themselves (voice or typed —
+ * the skip button does not count). Sticky across plays.
+ */
+export function recordPresentationSpoken(segmentId, setId) {
+  if (!isBadgeEnabledScope()) return { newlyEarned: [] };
+  const key = `${String(segmentId || "").trim()}.${String(setId || "").trim()}`;
+  if (key.startsWith(".") || key.endsWith(".")) return { newlyEarned: [] };
+  const state = loadLessonState();
+  if (state.presentationSpokenBest?.[key] !== true) {
+    state.presentationSpokenBest = { ...(state.presentationSpokenBest || {}), [key]: true };
+    saveLessonState(state);
+  }
+  const { newlyEarned } = evaluateAndAwardBadges(state.lessonId);
+  if (newlyEarned.length) {
+    try {
+      window.dispatchEvent(new CustomEvent("learny-badges-earned", { detail: { newlyEarned } }));
+      window.parent?.postMessage?.({ type: "gc_badges_earned", newlyEarned }, "*");
+    } catch {
+      // ignore
+    }
+  }
+  return { newlyEarned };
+}
+
 /** Highest earned tier per family from earned id list. */
 export function highestTierByFamily(earnedIds, badgePrefix = null) {
+  // Part 3's "presentation" key is added only when such a badge is present.
   const out = { chapter: null, freetalk: null, accuracy: null };
   for (const id of earnedIds || []) {
     const parsed = parseBadgeId(id);
@@ -402,6 +486,10 @@ export function familySlotImage(tier) {
 export const FAMILY_LABELS_JA = Object.freeze({
   chapter: { label: "チャプター", desc: "章をクリアするとランクアップ" },
   freetalk: { label: "フリートーク", desc: "おしまいの英会話でランクアップ" },
+  presentation: {
+    label: "はっぴょう",
+    desc: "はっぴょうれんしゅうの章を じぶんの こえで ぜんぶ いえるとランクアップ",
+  },
   accuracy: {
     label: "いっぱつせいかい",
     desc: "4択を各章でさいしょの1かいで正解するとランクアップ（やりなおしOK）",

@@ -506,15 +506,17 @@
             border-top: 1px solid var(--border);
             flex-shrink: 0;
             min-height: 0;
-            max-height: min(46vh, 360px);
-            overflow-y: auto;
+            max-height: min(64vh, 560px);
+            overflow: hidden;
         }
 
         .input-area-row {
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-shrink: 0;
         }
+        .input-area > .ending-end-btn { flex-shrink: 0; }
 
         .input-area.has-mcq .input-area-row {
             opacity: 0.72;
@@ -537,6 +539,9 @@
             gap: 10px;
             padding: 12px 12px 4px;
             margin: 0;
+            flex: 0 1 auto;
+            min-height: 0;
+            overflow: hidden;
             border-radius: 16px;
             background: linear-gradient(180deg, #eef8ef 0%, #f7fbf7 100%);
             border: 2px solid #7cbc7f;
@@ -649,7 +654,13 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
+            flex: 0 1 auto;
+            min-height: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 2px 4px;
         }
+        .lesson-choice-bar > :not(.lesson-choice-grid):not(.part3-presentation-card) { flex-shrink: 0; }
         .lesson-choice-bar.is-fish-count-picker .lesson-choice-grid--fish-count {
             grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 8px;
@@ -774,18 +785,59 @@
         }
         .part3-presentation-card {
             display: grid;
-            gap: 6px;
-            padding: 12px 14px;
+            gap: 4px;
+            padding: 10px 14px;
             border-radius: 12px;
             background: #fff;
             border: 1px solid #c8e6c9;
+            flex: 0 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .part3-presentation-card.is-long { gap: 1px; padding: 8px 14px; }
+        .part3-presentation-card.is-long .part3-presentation-line {
+            font-size: 0.96rem;
+            line-height: 1.3;
         }
         .part3-presentation-line {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
             margin: 0;
             color: #1b5e20;
-            font-size: 1.05rem;
+            font-size: 1.02rem;
             font-weight: 700;
-            line-height: 1.4;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+        .part3-presentation-num {
+            flex: 0 0 auto;
+            min-width: 1.35em;
+            height: 1.35em;
+            border-radius: 50%;
+            background: #e8f5e9;
+            color: #2e7d32;
+            font-size: 0.78em;
+            font-weight: 800;
+            line-height: 1.35em;
+            text-align: center;
+            align-self: center;
+        }
+        .part3-presentation-line.is-heard .part3-presentation-num {
+            background: #43a047;
+            color: #fff;
+        }
+        .part3-presentation-line.is-missed { color: #c62828; }
+        .part3-presentation-line.is-missed .part3-presentation-num {
+            background: #e53935;
+            color: #fff;
+        }
+        .part3-presentation-heard {
+            margin: 0;
+            color: #6d4c41;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-align: center;
             overflow-wrap: anywhere;
         }
         .part3-presentation-hint {
@@ -800,7 +852,7 @@
             flex-wrap: wrap;
             justify-content: center;
             gap: 8px;
-            padding-bottom: 8px;
+            padding-bottom: 6px;
         }
         .part3-presentation-btn {
             display: inline-flex;
@@ -1771,7 +1823,9 @@
             .header-avatar { width: 40px; height: 40px; }
             .quest-banner { min-height: 0; padding: 10px 12px; }
             .lesson-choice-btn { min-height: 44px; font-size: 0.88rem; padding: 10px 8px; }
-            .input-area { max-height: min(42vh, 300px); padding: 8px 10px 10px; gap: 8px; }
+            .input-area { max-height: 62vh; padding: 8px 10px 10px; gap: 8px; }
+            .lesson-choice-bar { gap: 6px; padding: 8px 10px 2px; }
+            .part3-presentation-btn { min-height: 38px; padding: 6px 12px; }
             .chat-area { padding: 10px 10px; }
         }
 
@@ -1936,6 +1990,6 @@
         </div>
     </div>
 
-    <script type="module" src="./js/homework-voice.js?v=20260924-part3"></script>
+    <script type="module" src="./js/homework-voice.js?v=20260928-variant-kind"></script>
 </body>
 </html>

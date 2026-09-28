@@ -23,7 +23,7 @@ MANIFEST_PATH = OUTPUT_DIR / "manifest.js"
 
 MODEL = "gemini-3.1-flash-tts-preview"
 VOICE = "Kore"
-PROMPT_VERSION = "warm-clear-exact-v1"
+PROMPT_VERSION = "warm-clear-exact-v2"
 SAMPLE_RATE = 24_000
 CHANNELS = 1
 SAMPLE_WIDTH = 2
@@ -74,11 +74,14 @@ def valid_wav(path: Path) -> bool:
 
 
 def synthesis_prompt(spoken_text: str) -> str:
+    # No "Label:" before the text — for one- or two-word choices the model
+    # read the label aloud ("Answer choice, pink coral").
     return (
-        "Read the following English answer choice exactly as written. "
+        "Say only the English words between the quotation marks, exactly once. "
         "Use a warm, friendly teacher voice for a young child, with natural "
-        "pronunciation and a calm pace. Do not add, remove, or explain any words.\n"
-        f"Answer choice: {spoken_text}"
+        "pronunciation and a calm pace. Do not say any introduction, label, or "
+        "other words before or after them.\n"
+        f"\"{spoken_text}\""
     )
 
 
@@ -116,9 +119,22 @@ def generate_one(client, choice: dict) -> dict:
             return {**choice, "filename": filename, "cached": False}
         except Exception as error:  # SDK exceptions vary by API status.
             last_error = error
+            if is_quota_error(error):
+                break
             if attempt < 2:
                 time.sleep(2**attempt)
-    raise RuntimeError(f"Failed to generate {choice['display']!r}: {last_error}")
+    raise GenerationError(f"Failed to generate {choice['display']!r}: {last_error}", quota=is_quota_error(last_error))
+
+
+class GenerationError(RuntimeError):
+    def __init__(self, message: str, quota: bool = False):
+        super().__init__(message)
+        self.quota = quota
+
+
+def is_quota_error(error) -> bool:
+    text = str(error or "")
+    return "429" in text or "RESOURCE_EXHAUSTED" in text or "Rate limit exceeded" in text
 
 
 def manifest_source(results: list[dict]) -> str:
@@ -212,15 +228,32 @@ def main() -> None:
 
         client = genai.Client(api_key=api_key)
     results = []
+    failed = []
+    quota_hit = False
     with ThreadPoolExecutor(max_workers=max(1, min(args.concurrency, 8))) as pool:
         futures = {pool.submit(generate_one, client, choice): choice for choice in choices}
         for index, future in enumerate(as_completed(futures), 1):
-            result = future.result()
+            try:
+                result = future.result()
+            except GenerationError as error:
+                failed.append(futures[future]["key"])
+                if error.quota and not quota_hit:
+                    quota_hit = True
+                    print(f"[{index}/{len(choices)}] API quota reached: {error}", file=sys.stderr)
+                elif not error.quota:
+                    print(f"[{index}/{len(choices)}] FAILED: {error}", file=sys.stderr)
+                continue
             results.append(result)
             state = "cached" if result["cached"] else "generated"
             print(f"[{index}/{len(choices)}] {state}: {result['display']}")
 
+    # The runtime shows a "no audio" state for keys missing here, so a partial run is still usable.
     MANIFEST_PATH.write_text(manifest_source(results), encoding="utf-8")
+    if failed:
+        reason = "API quota reached" if quota_hit else "generation errors"
+        raise RuntimeError(
+            f"Wrote {len(results)}/{len(choices)} clips; {len(failed)} still missing ({reason}). Re-run to continue."
+        )
     validate(choices)
 
 

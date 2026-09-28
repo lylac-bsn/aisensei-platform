@@ -1,3 +1,5 @@
+import { part3StaticAudioScripts } from "./lessons/aquarium-presentation.js?v=20260928-variant-kind";
+
 /** Fixed Beginner ending lines hosted as pre-generated Gemini TTS. */
 export const ENDING1_INTRO_SPEAK =
   "Perfect! We made a fish tank together! Thank you for helping! ぱーふぇくと！ いっしょに すいそうを つくれたね！ てつだって くれて ありがとう！ " +
@@ -22,13 +24,6 @@ export const PART2_ENDING_INTRO_SPEAK =
 export const PART2_ENDING_FINALE_SPEAK =
   "If you play Minecraft again, try using today's English too! See you next time! " +
   "つぎに まいんくらふとで あそぶときも、きょうの えいごを つかってみてね！またね！";
-
-/**
- * Part 3 wrong-answer line. Hosted because Live pads this short Japanese-only
- * line with its own praise ("Great! おしい…"). Must equal PART3_RETRY_SPEAK.
- */
-export const PART3_RETRY_AUDIO_KEY = "beginner-part3-retry";
-export const PART3_RETRY_AUDIO_TEXT = "おしい！もういちど！";
 
 /** A goodbye only counts as Turn C after the explicit 終わりにする action. */
 export function isEnding1FinaleTranscript(
@@ -62,9 +57,5 @@ export const ENDING_AUDIO_SCRIPTS = Object.freeze([
     text: PART2_ENDING_FINALE_SPEAK,
     source: "beginner:part2.ending1.finale",
   }),
-  Object.freeze({
-    key: PART3_RETRY_AUDIO_KEY,
-    text: PART3_RETRY_AUDIO_TEXT,
-    source: "beginner:part3.retry",
-  }),
+  ...part3StaticAudioScripts().map((item) => Object.freeze(item)),
 ]);

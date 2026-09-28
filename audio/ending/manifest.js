@@ -4,7 +4,7 @@ export const ENDING_AUDIO_METADATA = Object.freeze({
   "voice": "Kore",
   "promptVersion": "warm-bilingual-exact-v1",
   "sampleRate": 24000,
-  "count": 4
+  "count": 143
 });
 
 export const ENDING_AUDIO_MANIFEST = Object.freeze({
@@ -27,5 +27,700 @@ export const ENDING_AUDIO_MANIFEST = Object.freeze({
     "path": "/audio/ending/a2ed15fbc190bd7335cc.wav",
     "text": "Perfect! You remembered a lot about your aquarium! ぱーふぇくと！このまえの すいぞくかんのこと、たくさん おもいだせたね！ You remembered the decorations and the fish too! かざりも おさかなも おもいだせたね！ Your teacher might ask you some of the same questions next time! つぎの レッスンで せんせいが おなじ しつもんを するかもしれないよ！ You'll be ready! これで ばっちりだね！ Now, let's chat freely with Teacher Learny! それじゃあラーニー先生と自由に会話してみよう！",
     "source": "beginner:part2.ending1.intro"
+  },
+  "beginner-part3-ch0-decoration1": {
+    "path": "/audio/ending/18b6f9e669007b35c346.wav",
+    "text": "What did you put in your aquarium? すいぞくかんに なにを おいた？",
+    "source": "beginner:part3.ch0.decoration1"
+  },
+  "beginner-part3-ch0-decoration2": {
+    "path": "/audio/ending/c3eacb08f55dccdc369d.wav",
+    "text": "What else did you put in your aquarium? ほかには なにを おいた？",
+    "source": "beginner:part3.ch0.decoration2"
+  },
+  "beginner-part3-ch0-fishColor": {
+    "path": "/audio/ending/c7eecae8fdb719666388.wav",
+    "text": "What color was your tropical fish? ねったいぎょは なにいろだった？",
+    "source": "beginner:part3.ch0.fishColor"
+  },
+  "beginner-part3-ch0-fishType": {
+    "path": "/audio/ending/264e30dcdaa9858573d9.wav",
+    "text": "What fish did you choose? どんな おさかなを えらんだ？",
+    "source": "beginner:part3.ch0.fishType"
+  },
+  "beginner-part3-ch0-glassColor": {
+    "path": "/audio/ending/e708d5a7dc77cdcc9f83.wav",
+    "text": "First, let's remember your aquarium! What color glass did you choose? まずは じぶんの すいぞくかんを おもいだそう！なにいろの がらすを えらんだ？",
+    "source": "beginner:part3.ch0.glassColor"
+  },
+  "beginner-part3-ch1-thisIsMyAquarium": {
+    "path": "/audio/ending/dfa0e54c6e3aa072d2d3.wav",
+    "text": "Now introduce your aquarium! 「これが わたしの すいぞくかんです」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch1.thisIsMyAquarium"
+  },
+  "beginner-part3-ch2-choseGlass-blue": {
+    "path": "/audio/ending/fb1c232adffd2982194f.wav",
+    "text": "Do you remember the color you told me? 「あおい がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-green": {
+    "path": "/audio/ending/f0d3224c17af258ff997.wav",
+    "text": "Do you remember the color you told me? 「みどりの がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-orange": {
+    "path": "/audio/ending/9aea4db854f2e831a6a3.wav",
+    "text": "Do you remember the color you told me? 「おれんじの がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-pink": {
+    "path": "/audio/ending/da7a8ea5103f7786409e.wav",
+    "text": "Do you remember the color you told me? 「ぴんくの がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-purple": {
+    "path": "/audio/ending/9d541887f0aedded2418.wav",
+    "text": "Do you remember the color you told me? 「むらさきの がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-red": {
+    "path": "/audio/ending/a7bc44eba68626af0a3d.wav",
+    "text": "Do you remember the color you told me? 「あかい がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-white": {
+    "path": "/audio/ending/36f98a6208bd25a192b0.wav",
+    "text": "Do you remember the color you told me? 「しろい がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch2-choseGlass-yellow": {
+    "path": "/audio/ending/c1227da30a335b18b790.wav",
+    "text": "Do you remember the color you told me? 「きいろい がらすを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch2.choseGlass"
+  },
+  "beginner-part3-ch3-putDecoration1-amethyst": {
+    "path": "/audio/ending/db9992540d41a377a873.wav",
+    "text": "You told me you put amethyst in your aquarium! 「ここに あめじすとを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-blue-coral": {
+    "path": "/audio/ending/02485bc27bad3d0d1d37.wav",
+    "text": "You told me you put blue coral in your aquarium! 「ここに あおい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-coral": {
+    "path": "/audio/ending/c17bab678bb0cbe48663.wav",
+    "text": "You told me you put coral in your aquarium! 「ここに さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-kelp": {
+    "path": "/audio/ending/6a15c491ec2bd7580365.wav",
+    "text": "You told me you put kelp in your aquarium! 「ここに こんぶを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-pink-coral": {
+    "path": "/audio/ending/fc3fb9156785281fac2a.wav",
+    "text": "You told me you put pink coral in your aquarium! 「ここに ぴんくの さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-red-coral": {
+    "path": "/audio/ending/28c63a736e8ff3ddfca8.wav",
+    "text": "You told me you put red coral in your aquarium! 「ここに あかい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-soul-sand": {
+    "path": "/audio/ending/a305aa66e4bece192a28.wav",
+    "text": "You told me you put soul sand in your aquarium! 「ここに そうるさんどを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration1-yellow-coral": {
+    "path": "/audio/ending/c842bbc3e164f3015c16.wav",
+    "text": "You told me you put yellow coral in your aquarium! 「ここに きいろい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration1"
+  },
+  "beginner-part3-ch3-putDecoration2-amethyst": {
+    "path": "/audio/ending/40c2699656730d43216e.wav",
+    "text": "And you also had amethyst! 「ここに あめじすとを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-blue-coral": {
+    "path": "/audio/ending/b03bcdc3bf2600c4caf6.wav",
+    "text": "And you also had blue coral! 「ここに あおい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-coral": {
+    "path": "/audio/ending/85a09828b44ec4bb29c6.wav",
+    "text": "And you also had coral! 「ここに さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-kelp": {
+    "path": "/audio/ending/d0c4ed69f2002293510e.wav",
+    "text": "And you also had kelp! 「ここに こんぶを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-pink-coral": {
+    "path": "/audio/ending/42b6a77e01f5057784f1.wav",
+    "text": "And you also had pink coral! 「ここに ぴんくの さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-purple-coral": {
+    "path": "/audio/ending/5f97a78951dc2406a0bd.wav",
+    "text": "And you also had purple coral! 「ここに むらさきの さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-red-coral": {
+    "path": "/audio/ending/3b65951f6297ae741d81.wav",
+    "text": "And you also had red coral! 「ここに あかい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-soul-sand": {
+    "path": "/audio/ending/1ce7f4c26fa392d785d9.wav",
+    "text": "And you also had soul sand! 「ここに そうるさんどを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch3-putDecoration2-yellow-coral": {
+    "path": "/audio/ending/f969b96c83a18f5fe1cf.wav",
+    "text": "And you also had yellow coral! 「ここに きいろい さんごを おきました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch3.putDecoration2"
+  },
+  "beginner-part3-ch4-choseFish-cod": {
+    "path": "/audio/ending/2409c48f03fba1f7e40b.wav",
+    "text": "You chose a cod! 「たらを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-puffer": {
+    "path": "/audio/ending/92d1b61d6db46df83e74.wav",
+    "text": "You chose a puffer fish! 「ふぐを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-salmon": {
+    "path": "/audio/ending/19da10914070c2fdc5ac.wav",
+    "text": "You chose a salmon! 「さけを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-blue": {
+    "path": "/audio/ending/df7e8e1d8da5391af3da.wav",
+    "text": "You chose a blue tropical fish! 「あおい ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-green": {
+    "path": "/audio/ending/b7464ffaa50d88234f48.wav",
+    "text": "You chose a green tropical fish! 「みどりの ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-orange": {
+    "path": "/audio/ending/c14dc423753460c33c1a.wav",
+    "text": "You chose an orange tropical fish! 「おれんじの ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-pink": {
+    "path": "/audio/ending/1261fc78d004b427f7ae.wav",
+    "text": "You chose a pink tropical fish! 「ぴんくの ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-purple": {
+    "path": "/audio/ending/7be2777e4a831f46c794.wav",
+    "text": "You chose a purple tropical fish! 「むらさきの ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-red": {
+    "path": "/audio/ending/da7f76aa6f7aa0e66763.wav",
+    "text": "You chose a red tropical fish! 「あかい ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-white": {
+    "path": "/audio/ending/28fcac0686b541485513.wav",
+    "text": "You chose a white tropical fish! 「しろい ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch4-choseFish-tropical-yellow": {
+    "path": "/audio/ending/513092fc002b72105e80.wav",
+    "text": "You chose a yellow tropical fish! 「きいろい ねったいぎょを えらびました」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch4.choseFish"
+  },
+  "beginner-part3-ch5-likeThisFish": {
+    "path": "/audio/ending/5449d2ef4610e9a2fe35.wav",
+    "text": "You chose your fish. Now tell us how you feel about it! 「この おさかなが すきです」の えいごを えらんでね！",
+    "source": "beginner:part3.p3ch5.likeThisFish"
+  },
+  "beginner-part3-ch6-set1": {
+    "path": "/audio/ending/05d40a43eeea59ea2e36.wav",
+    "text": "Let's say these two sentences together! この 2つを つづけて いってみよう！",
+    "source": "beginner:part3.p3ch6.set1"
+  },
+  "beginner-part3-ch7-firsthalf": {
+    "path": "/audio/ending/760b148caf5becd1c818.wav",
+    "text": "Great! Let's try the first half! いいね！まずは まえの はんぶんを いってみよう！",
+    "source": "beginner:part3.p3ch7.firstHalf"
+  },
+  "beginner-part3-ch7-secondhalf": {
+    "path": "/audio/ending/6b1136f9118f2c7522a2.wav",
+    "text": "Nice! Now let's try the second half! いいね！つぎは うしろの はんぶんを いってみよう！",
+    "source": "beginner:part3.p3ch7.secondHalf"
+  },
+  "beginner-part3-ending-1": {
+    "path": "/audio/ending/549f1993b7a256b3fdcb.wav",
+    "text": "Great job! You practiced your whole presentation! ぐれーと じょぶ！さいしょから さいごまで れんしゅう できたね！",
+    "source": "beginner:part3.ending.1"
+  },
+  "beginner-part3-ending-2": {
+    "path": "/audio/ending/27829b60425c4e8f7945.wav",
+    "text": "You talked about your glass, decorations, and fish! がらすも かざりも おさかなも えいごで いえたね！",
+    "source": "beginner:part3.ending.2"
+  },
+  "beginner-part3-ending-3": {
+    "path": "/audio/ending/f7865f59cc45d728e302.wav",
+    "text": "Now you're ready to show your aquarium to your teacher! Good luck! これで せんせいの まえでも はっぴょう できるね！がんばってね！",
+    "source": "beginner:part3.ending.3"
+  },
+  "beginner-part3-final-round1": {
+    "path": "/audio/ending/28b2067db2108451d24b.wav",
+    "text": "Final presentation practice! Let's go! さいごの はっぴょう れんしゅうだよ！れっつごー！",
+    "source": "beginner:part3.p3final.round1"
+  },
+  "beginner-part3-final-round2": {
+    "path": "/audio/ending/4a79eb58ff63abddc284.wav",
+    "text": "Now fill in the blanks! こんどは あなを うめて いってみよう！",
+    "source": "beginner:part3.p3final.round2"
+  },
+  "beginner-part3-missed-1": {
+    "path": "/audio/ending/6eec623ddce20210ab4c.wav",
+    "text": "I couldn't hear sentence 1. 1ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.1"
+  },
+  "beginner-part3-missed-2": {
+    "path": "/audio/ending/c35a984c8ceff4da807a.wav",
+    "text": "I couldn't hear sentence 2. 2ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.2"
+  },
+  "beginner-part3-missed-3": {
+    "path": "/audio/ending/1642bbc3bac8291258ba.wav",
+    "text": "I couldn't hear sentence 3. 3ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.3"
+  },
+  "beginner-part3-missed-4": {
+    "path": "/audio/ending/ecbb414c4afac82dc3c3.wav",
+    "text": "I couldn't hear sentence 4. 4ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.4"
+  },
+  "beginner-part3-missed-5": {
+    "path": "/audio/ending/fddaf5e9701e23bc2505.wav",
+    "text": "I couldn't hear sentence 5. 5ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.5"
+  },
+  "beginner-part3-missed-6": {
+    "path": "/audio/ending/47c6a2186b20f35ee9bb.wav",
+    "text": "I couldn't hear sentence 6. 6ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.6"
+  },
+  "beginner-part3-missed-7": {
+    "path": "/audio/ending/d5a27adeb961ec8bbe6c.wav",
+    "text": "I couldn't hear sentence 7. 7ばんめの ぶんが きこえなかったよ。",
+    "source": "beginner:part3.presentation.missed.7"
+  },
+  "beginner-part3-missed-many": {
+    "path": "/audio/ending/909a45c0ee5f8d80c7cf.wav",
+    "text": "Some sentences were missing. きこえなかった ぶんが あるよ。あかい ぶんを よく みてね。",
+    "source": "beginner:part3.presentation.missed.many"
+  },
+  "beginner-part3-praise-1": {
+    "path": "/audio/ending/c80ff1248c071b848bea.wav",
+    "text": "Great!",
+    "source": "beginner:part3.praise.1"
+  },
+  "beginner-part3-praise-2": {
+    "path": "/audio/ending/1fcf5e9afece3ea4c26b.wav",
+    "text": "Amazing!",
+    "source": "beginner:part3.praise.2"
+  },
+  "beginner-part3-praise-3": {
+    "path": "/audio/ending/8579b8d3b0b22bef9ab8.wav",
+    "text": "Nice one!",
+    "source": "beginner:part3.praise.3"
+  },
+  "beginner-part3-praise-4": {
+    "path": "/audio/ending/55b45e84312acdb7903e.wav",
+    "text": "やったね！",
+    "source": "beginner:part3.praise.4"
+  },
+  "beginner-part3-praise-5": {
+    "path": "/audio/ending/eea03483b2141ebe94fa.wav",
+    "text": "ばっちり！",
+    "source": "beginner:part3.praise.5"
+  },
+  "beginner-part3-praise-6": {
+    "path": "/audio/ending/ba211f0a447e3f26192a.wav",
+    "text": "Yes!",
+    "source": "beginner:part3.praise.6"
+  },
+  "beginner-part3-quiz-q1Glass-blue": {
+    "path": "/audio/ending/1e35af35348907469843.wav",
+    "text": "「あおい がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-green": {
+    "path": "/audio/ending/e19822fc22f5d9b1bd3b.wav",
+    "text": "「みどりの がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-orange": {
+    "path": "/audio/ending/5fa6b19a810912498ceb.wav",
+    "text": "「おれんじの がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-pink": {
+    "path": "/audio/ending/4ad9f2a306a3b1f394bc.wav",
+    "text": "「ぴんくの がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-purple": {
+    "path": "/audio/ending/a3557a6239eb3918ccc2.wav",
+    "text": "「むらさきの がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-red": {
+    "path": "/audio/ending/df2dda97632b5bc79928.wav",
+    "text": "「あかい がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-white": {
+    "path": "/audio/ending/a76c17d94d7f192fb9e8.wav",
+    "text": "「しろい がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q1Glass-yellow": {
+    "path": "/audio/ending/c572cbe1c264261d95ac.wav",
+    "text": "「きいろい がらすを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q1Glass"
+  },
+  "beginner-part3-quiz-q2Decoration-amethyst": {
+    "path": "/audio/ending/fd6c05f9fe2396d6dc1f.wav",
+    "text": "「ここに あめじすとを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-blue-coral": {
+    "path": "/audio/ending/40aa6f6c1c47bcf15fa5.wav",
+    "text": "「ここに あおい さんごを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-coral": {
+    "path": "/audio/ending/24437ceed72eead99735.wav",
+    "text": "「ここに さんごを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-kelp": {
+    "path": "/audio/ending/75527c99302c3205aed5.wav",
+    "text": "「ここに こんぶを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-pink-coral": {
+    "path": "/audio/ending/23e68ed864a868e913cc.wav",
+    "text": "「ここに ぴんくの さんごを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-red-coral": {
+    "path": "/audio/ending/fed63ab40249c0a95899.wav",
+    "text": "「ここに あかい さんごを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-soul-sand": {
+    "path": "/audio/ending/5ce60d10f04c868b0ce9.wav",
+    "text": "「ここに そうるさんどを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q2Decoration-yellow-coral": {
+    "path": "/audio/ending/a25e210bf713ff2721b4.wav",
+    "text": "「ここに きいろい さんごを おきました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q2Decoration"
+  },
+  "beginner-part3-quiz-q3Fish-blue-tropical-fish": {
+    "path": "/audio/ending/238a320ae07a96b24c31.wav",
+    "text": "「あおい ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-cod": {
+    "path": "/audio/ending/c18ce019ac79b7725192.wav",
+    "text": "「たらを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-green-tropical-fish": {
+    "path": "/audio/ending/c892c722b1d94300f10f.wav",
+    "text": "「みどりの ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-orange-tropical-fish": {
+    "path": "/audio/ending/f687017f8f7310f86bca.wav",
+    "text": "「おれんじの ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-pink-tropical-fish": {
+    "path": "/audio/ending/4b42c4b4a4be11ff5fc9.wav",
+    "text": "「ぴんくの ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-puffer-fish": {
+    "path": "/audio/ending/58fe6690ca87cfce1a3d.wav",
+    "text": "「ふぐを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-purple-tropical-fish": {
+    "path": "/audio/ending/54251d75348cfee5cff6.wav",
+    "text": "「むらさきの ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-red-tropical-fish": {
+    "path": "/audio/ending/446aeaf758618e45ce90.wav",
+    "text": "「あかい ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-salmon": {
+    "path": "/audio/ending/612ef9d9d63911569a93.wav",
+    "text": "「さけを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-white-tropical-fish": {
+    "path": "/audio/ending/0970c600c5c0736f1c81.wav",
+    "text": "「しろい ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-quiz-q3Fish-yellow-tropical-fish": {
+    "path": "/audio/ending/a10d33e1192734271d14.wav",
+    "text": "「きいろい ねったいぎょを えらびました」は えいごで？",
+    "source": "beginner:part3.p3quiz.q3Fish"
+  },
+  "beginner-part3-react-decoration1-amethyst": {
+    "path": "/audio/ending/6b40c5cc2ed4d5590a87.wav",
+    "text": "Amethyst! Nice! あめじすと、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.amethyst"
+  },
+  "beginner-part3-react-decoration1-blue-coral": {
+    "path": "/audio/ending/e40fdcf842de53822749.wav",
+    "text": "Blue Coral! Nice! あおい さんご、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.blue-coral"
+  },
+  "beginner-part3-react-decoration1-coral": {
+    "path": "/audio/ending/fe6b9fe068991df4de6f.wav",
+    "text": "Coral! Nice! さんご、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.coral"
+  },
+  "beginner-part3-react-decoration1-kelp": {
+    "path": "/audio/ending/02a93928c56943cc819f.wav",
+    "text": "Kelp! Nice! こんぶ、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.kelp"
+  },
+  "beginner-part3-react-decoration1-pink-coral": {
+    "path": "/audio/ending/77a8c0860d625d281131.wav",
+    "text": "Pink Coral! Nice! ぴんくの さんご、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.pink-coral"
+  },
+  "beginner-part3-react-decoration1-red-coral": {
+    "path": "/audio/ending/ea0c61b21342b22f0549.wav",
+    "text": "Red Coral! Nice! あかい さんご、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.red-coral"
+  },
+  "beginner-part3-react-decoration1-soul-sand": {
+    "path": "/audio/ending/38f4675b5fcdaacae0a2.wav",
+    "text": "Soul Sand! Nice! そうるさんど、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.soul-sand"
+  },
+  "beginner-part3-react-decoration1-yellow-coral": {
+    "path": "/audio/ending/c866de23076fe090b346.wav",
+    "text": "Yellow Coral! Nice! きいろい さんご、いいね！",
+    "source": "beginner:part3.ch0.reaction.decoration1.yellow-coral"
+  },
+  "beginner-part3-react-decoration2-amethyst": {
+    "path": "/audio/ending/2b4e01af949543fc78e3.wav",
+    "text": "Amethyst too! So creative! あめじすとも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.amethyst"
+  },
+  "beginner-part3-react-decoration2-blue-coral": {
+    "path": "/audio/ending/9deb019816c16e6fd064.wav",
+    "text": "Blue Coral too! So creative! あおい さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.blue-coral"
+  },
+  "beginner-part3-react-decoration2-coral": {
+    "path": "/audio/ending/bb5d7f8950e22455b208.wav",
+    "text": "Coral too! So creative! さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.coral"
+  },
+  "beginner-part3-react-decoration2-kelp": {
+    "path": "/audio/ending/3890c876b92d49f4c430.wav",
+    "text": "Kelp too! So creative! こんぶも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.kelp"
+  },
+  "beginner-part3-react-decoration2-pink-coral": {
+    "path": "/audio/ending/52d2f67993b24dcc03cb.wav",
+    "text": "Pink Coral too! So creative! ぴんくの さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.pink-coral"
+  },
+  "beginner-part3-react-decoration2-purple-coral": {
+    "path": "/audio/ending/ab320dbc5eed72b532dd.wav",
+    "text": "Purple Coral too! So creative! むらさきの さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.purple-coral"
+  },
+  "beginner-part3-react-decoration2-red-coral": {
+    "path": "/audio/ending/b63c5187ade36f2fb43c.wav",
+    "text": "Red Coral too! So creative! あかい さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.red-coral"
+  },
+  "beginner-part3-react-decoration2-soul-sand": {
+    "path": "/audio/ending/5c40b939a4961378670f.wav",
+    "text": "Soul Sand too! So creative! そうるさんども おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.soul-sand"
+  },
+  "beginner-part3-react-decoration2-yellow-coral": {
+    "path": "/audio/ending/0c026ba315f895569837.wav",
+    "text": "Yellow Coral too! So creative! きいろい さんごも おいたんだね！",
+    "source": "beginner:part3.ch0.reaction.decoration2.yellow-coral"
+  },
+  "beginner-part3-react-fishColor-blue": {
+    "path": "/audio/ending/95298e48aeb8f7171dc5.wav",
+    "text": "A blue tropical fish! That's cool! あおい ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.blue"
+  },
+  "beginner-part3-react-fishColor-green": {
+    "path": "/audio/ending/804c1248ce4e17645f3f.wav",
+    "text": "A green tropical fish! That's cool! みどりの ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.green"
+  },
+  "beginner-part3-react-fishColor-orange": {
+    "path": "/audio/ending/eac0c7a7f111dd33063f.wav",
+    "text": "An orange tropical fish! That's cool! おれんじの ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.orange"
+  },
+  "beginner-part3-react-fishColor-pink": {
+    "path": "/audio/ending/7a7efdefa0764e5b1647.wav",
+    "text": "A pink tropical fish! That's cool! ぴんくの ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.pink"
+  },
+  "beginner-part3-react-fishColor-purple": {
+    "path": "/audio/ending/dd2b75573a041758231d.wav",
+    "text": "A purple tropical fish! That's cool! むらさきの ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.purple"
+  },
+  "beginner-part3-react-fishColor-red": {
+    "path": "/audio/ending/dd8efd125faf4a681480.wav",
+    "text": "A red tropical fish! That's cool! あかい ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.red"
+  },
+  "beginner-part3-react-fishColor-white": {
+    "path": "/audio/ending/25b041d9a63f76880473.wav",
+    "text": "A white tropical fish! That's cool! しろい ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.white"
+  },
+  "beginner-part3-react-fishColor-yellow": {
+    "path": "/audio/ending/744682725c18ac58a585.wav",
+    "text": "A yellow tropical fish! That's cool! きいろい ねったいぎょ、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.fishColor.yellow"
+  },
+  "beginner-part3-react-fishType-cod": {
+    "path": "/audio/ending/20c4e36c01651f179714.wav",
+    "text": "A cod! Nice one! たら、いいね！",
+    "source": "beginner:part3.ch0.reaction.fishType.cod"
+  },
+  "beginner-part3-react-fishType-puffer-fish": {
+    "path": "/audio/ending/b9c250d2a17b11c7e45e.wav",
+    "text": "A puffer fish! Nice one! ふぐ、いいね！",
+    "source": "beginner:part3.ch0.reaction.fishType.puffer-fish"
+  },
+  "beginner-part3-react-fishType-salmon": {
+    "path": "/audio/ending/ccb0f6feaf3b1ade2263.wav",
+    "text": "A salmon! Nice one! さけ、いいね！",
+    "source": "beginner:part3.ch0.reaction.fishType.salmon"
+  },
+  "beginner-part3-react-fishType-tropical-fish": {
+    "path": "/audio/ending/50ecc1e44d366e974e75.wav",
+    "text": "A tropical fish! Nice one! ねったいぎょ、いいね！",
+    "source": "beginner:part3.ch0.reaction.fishType.tropical-fish"
+  },
+  "beginner-part3-react-glassColor-blue": {
+    "path": "/audio/ending/71cffd09b152e797a85d.wav",
+    "text": "Blue glass! Cool! あおい がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.blue"
+  },
+  "beginner-part3-react-glassColor-green": {
+    "path": "/audio/ending/855b8a019a4eded3522e.wav",
+    "text": "Green glass! Cool! みどりの がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.green"
+  },
+  "beginner-part3-react-glassColor-orange": {
+    "path": "/audio/ending/e57694e0a16369b19f4a.wav",
+    "text": "Orange glass! Cool! おれんじの がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.orange"
+  },
+  "beginner-part3-react-glassColor-pink": {
+    "path": "/audio/ending/66c205e331f82d090337.wav",
+    "text": "Pink glass! Cool! ぴんくの がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.pink"
+  },
+  "beginner-part3-react-glassColor-purple": {
+    "path": "/audio/ending/a0a2e5d456eb6ab2d3e1.wav",
+    "text": "Purple glass! Cool! むらさきの がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.purple"
+  },
+  "beginner-part3-react-glassColor-red": {
+    "path": "/audio/ending/a4a63b8a78c1b4b9b2c3.wav",
+    "text": "Red glass! Cool! あかい がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.red"
+  },
+  "beginner-part3-react-glassColor-white": {
+    "path": "/audio/ending/dda156ccc4daa169d2a6.wav",
+    "text": "White glass! Cool! しろい がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.white"
+  },
+  "beginner-part3-react-glassColor-yellow": {
+    "path": "/audio/ending/c631fb3870f1b651a502.wav",
+    "text": "Yellow glass! Cool! きいろい がらす、かっこいいね！",
+    "source": "beginner:part3.ch0.reaction.glassColor.yellow"
+  },
+  "beginner-part3-reaction-1": {
+    "path": "/audio/ending/3251182b61d0e0973bef.wav",
+    "text": "Great speaking! じょうずに いえたね！",
+    "source": "beginner:part3.reaction.1"
+  },
+  "beginner-part3-reaction-2": {
+    "path": "/audio/ending/5ba09a5e91a7f8f11e7c.wav",
+    "text": "That's cool! すごいね！かっこいい！",
+    "source": "beginner:part3.reaction.2"
+  },
+  "beginner-part3-reaction-3": {
+    "path": "/audio/ending/09aaad278c64cb3b1644.wav",
+    "text": "Nice and clear! はっきり いえたね！",
+    "source": "beginner:part3.reaction.3"
+  },
+  "beginner-part3-reaction-4": {
+    "path": "/audio/ending/52695a04687a5eece6a5.wav",
+    "text": "Nice one! いいね！",
+    "source": "beginner:part3.reaction.4"
+  },
+  "beginner-part3-retry-1": {
+    "path": "/audio/ending/9b720ea34e6d565d5dee.wav",
+    "text": "So close! おしい！もういちど！",
+    "source": "beginner:part3.retry.1"
+  },
+  "beginner-part3-retry-2": {
+    "path": "/audio/ending/394acb4b57b73e061f33.wav",
+    "text": "Nice try! Not quite. ざんねん！ちがうよ。",
+    "source": "beginner:part3.retry.2"
+  },
+  "beginner-part3-retry-3": {
+    "path": "/audio/ending/1755a191958fe442301e.wav",
+    "text": "Hmm, not that one. ん〜、それじゃないみたい。",
+    "source": "beginner:part3.retry.3"
+  },
+  "beginner-part3-retry-4": {
+    "path": "/audio/ending/bc87180b6fddb8eb2d2e.wav",
+    "text": "Oops! Let's try again. おっと！もういちど やってみよう！",
+    "source": "beginner:part3.retry.4"
+  },
+  "beginner-part3-retry-5": {
+    "path": "/audio/ending/ec2bc5c052e6bd1d4ebb.wav",
+    "text": "That's okay! One more time! だいじょうぶ！もう いっかい！",
+    "source": "beginner:part3.retry.5"
+  },
+  "beginner-part3-retry-6": {
+    "path": "/audio/ending/633a32ab5406f08b8b76.wav",
+    "text": "Good try! Let's pick again! いい ちょうせん！もういちど！",
+    "source": "beginner:part3.retry.6"
   }
 });

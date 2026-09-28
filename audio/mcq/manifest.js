@@ -2,914 +2,1724 @@
 export const MCQ_AUDIO_METADATA = Object.freeze({
   "model": "gemini-3.1-flash-tts-preview",
   "voice": "Kore",
-  "promptVersion": "warm-clear-exact-v1",
+  "promptVersion": "warm-clear-exact-v2",
   "sampleRate": 24000,
-  "count": 151
+  "count": 286
 });
 
 export const MCQ_AUDIO_MANIFEST = Object.freeze({
+  "amethyst": {
+    "path": "/audio/mcq/022982ce1a1c7f75afae.wav",
+    "text": "Amethyst",
+    "spokenText": "Amethyst",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[6]"
+  },
   "back": {
-    "path": "/audio/mcq/dc16aaefe0bbbf432e5c.wav",
+    "path": "/audio/mcq/813fe1124cda99684f9e.wav",
     "text": "back",
     "spokenText": "back",
     "source": "beginner:part1.segments[2].mcqBeats[1].choices[3]"
   },
   "beach": {
-    "path": "/audio/mcq/b9c7a11ae474b8ee209e.wav",
+    "path": "/audio/mcq/f3af3003c2e3554a3bb3.wav",
     "text": "beach",
     "spokenText": "beach",
     "source": "beginner:part1.segments[2].mcqBeats[0].choices[0]"
   },
+  "blue": {
+    "path": "/audio/mcq/4f97cd9c266d185a2fc3.wav",
+    "text": "blue",
+    "spokenText": "blue",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[0]"
+  },
+  "blue coral": {
+    "path": "/audio/mcq/24a892ef664ff767a91f.wav",
+    "text": "Blue Coral",
+    "spokenText": "Blue Coral",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[3]"
+  },
   "can you make an aquarium?": {
-    "path": "/audio/mcq/46b9bfc4131068e12251.wav",
+    "path": "/audio/mcq/3fd171ac1dfdd0a66f53.wav",
     "text": "Can you make an aquarium?",
     "spokenText": "Can you make an aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[4].choices[3]"
   },
+  "cod": {
+    "path": "/audio/mcq/e8f28ff8e17004b8191a.wav",
+    "text": "Cod",
+    "spokenText": "Cod",
+    "source": "beginner:part3.segments[0].part3Beats[3].choices[0]"
+  },
+  "coral": {
+    "path": "/audio/mcq/7f250e481d649bc42c15.wav",
+    "text": "Coral",
+    "spokenText": "Coral",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[0]"
+  },
   "did you find an aquarium?": {
-    "path": "/audio/mcq/8d9473da2807dd0c8be7.wav",
+    "path": "/audio/mcq/148561d5b5cb9cbd909f.wav",
     "text": "Did you find an aquarium?",
     "spokenText": "Did you find an aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[4].choices[2]"
   },
   "dirt": {
-    "path": "/audio/mcq/6f0c5a91793cd1bf4382.wav",
+    "path": "/audio/mcq/fa9ea937d53a436a5504.wav",
     "text": "dirt",
     "spokenText": "dirt",
     "source": "beginner:part1.segments[1].mcqBeats[0].choices[3]"
   },
   "do you like your aquarium?": {
-    "path": "/audio/mcq/5bbd5328bb0dbfd79fcf.wav",
+    "path": "/audio/mcq/5f0eaa20f64915f2f742.wav",
     "text": "Do you like your aquarium?",
     "spokenText": "Do you like your aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[0].choices[3]"
   },
   "do you like your tank?": {
-    "path": "/audio/mcq/2e7e6cc91f5554c1fc51.wav",
+    "path": "/audio/mcq/b240cdb83a3210e75a7b.wav",
     "text": "Do you like your tank?",
     "spokenText": "Do you like your tank?",
     "source": "beginner:part2.segments[8].mcqBeats[2].choices[3]"
   },
   "do you need an aquarium?": {
-    "path": "/audio/mcq/b1e6eaf2ccfa08238d33.wav",
+    "path": "/audio/mcq/c3689c5aff809b6e2fc1.wav",
     "text": "Do you need an aquarium?",
     "spokenText": "Do you need an aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[4].choices[1]"
   },
   "forest": {
-    "path": "/audio/mcq/6ae71639d0b26759258f.wav",
+    "path": "/audio/mcq/3a128988d86141668285.wav",
     "text": "forest",
     "spokenText": "forest",
     "source": "beginner:part1.segments[2].mcqBeats[0].choices[3]"
   },
   "glass": {
-    "path": "/audio/mcq/4d0ae57fd025b054c30b.wav",
+    "path": "/audio/mcq/556f34cf78dc463f0c79.wav",
     "text": "glass",
     "spokenText": "glass",
     "source": "beginner:part1.segments[1].mcqBeats[0].choices[0]"
   },
+  "green": {
+    "path": "/audio/mcq/89d3aed2109f0e1a3c90.wav",
+    "text": "green",
+    "spokenText": "green",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[2]"
+  },
   "how many aquariums do you have?": {
-    "path": "/audio/mcq/137052f484603870353d.wav",
+    "path": "/audio/mcq/9a2655ffc922d4f1548f.wav",
     "text": "How many aquariums do you have?",
     "spokenText": "How many aquariums do you have?",
     "source": "beginner:part2.segments[8].mcqBeats[3].choices[3]"
   },
   "how many fish are in your tank?": {
-    "path": "/audio/mcq/a6f5ae2ae688d36facf6.wav",
+    "path": "/audio/mcq/02e567ae958d90f339b9.wav",
     "text": "How many fish are in your tank?",
     "spokenText": "How many fish are in your tank?",
     "source": "beginner:part2.segments[8].mcqBeats[2].choices[0]"
   },
   "how many fish are there?": {
-    "path": "/audio/mcq/3fbfcd1ab8357eeb5d98.wav",
+    "path": "/audio/mcq/d72f4dedc5518e63db8c.wav",
     "text": "How many fish are there?",
     "spokenText": "How many fish are there?",
     "source": "beginner:part2.segments[8].mcqBeats[0].choices[2]"
   },
   "i caught a fish!": {
-    "path": "/audio/mcq/f184b73ca45a612e3668.wav",
+    "path": "/audio/mcq/c3a9065673c083fca334.wav",
     "text": "I caught a fish!",
     "spokenText": "I caught a fish!",
     "source": "beginner:part2.segments[2].mcqBeats[1].choices[1]"
   },
   "i caught the fish in the tank": {
-    "path": "/audio/mcq/b29af4be2fcaba03d450.wav",
+    "path": "/audio/mcq/2f4bcb7f8a01e99ebe9b.wav",
     "text": "I caught the fish in the tank",
     "spokenText": "I caught the fish in the tank.",
     "source": "beginner:part2.segments[5].mcqBeats[0].choices[2]"
   },
   "i caught this fish": {
-    "path": "/audio/mcq/856c39eb4e198fa6b3f8.wav",
+    "path": "/audio/mcq/0539c6090e6fbf4d2622.wav",
     "text": "I caught this fish",
     "spokenText": "I caught this fish.",
     "source": "beginner:part2.segments[2].mcqBeats[4].choices[2]"
   },
   "i choose blue": {
-    "path": "/audio/mcq/e87b21e51944efef4cd9.wav",
+    "path": "/audio/mcq/39f3bfd41e2bff59f634.wav",
     "text": "I choose blue",
     "spokenText": "I choose blue.",
     "source": "beginner:part1.segments[9].items[8].choices[2]"
   },
   "i choose this fish": {
-    "path": "/audio/mcq/1f5412160d9a5c303e07.wav",
+    "path": "/audio/mcq/0968a60150b9588c9d9c.wav",
     "text": "I choose this fish",
     "spokenText": "I choose this fish.",
     "source": "beginner:part2.segments[2].mcqBeats[4].choices[0]"
   },
   "i choose this one": {
-    "path": "/audio/mcq/9bb0f3accef2aecce5ab.wav",
+    "path": "/audio/mcq/5ec33ba78026af655b8d.wav",
     "text": "I choose this one",
     "spokenText": "I choose this one.",
     "source": "beginner:part2.segments[1].mcqBeats[2].choices[0]"
   },
+  "i chose a blue tropical fish": {
+    "path": "/audio/mcq/dc718162ea0d7a3ff1ad.wav",
+    "text": "I chose a blue tropical fish",
+    "spokenText": "I chose a blue tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a cod": {
+    "path": "/audio/mcq/f4e088687ba3bdb9b0e8.wav",
+    "text": "I chose a cod",
+    "spokenText": "I chose a cod.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.cod.choices[0]"
+  },
+  "i chose a green tropical fish": {
+    "path": "/audio/mcq/a4b3195375cdbd1e0375.wav",
+    "text": "I chose a green tropical fish",
+    "spokenText": "I chose a green tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a pink tropical fish": {
+    "path": "/audio/mcq/b337ca91c12c739adaa9.wav",
+    "text": "I chose a pink tropical fish",
+    "spokenText": "I chose a pink tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a puffer fish": {
+    "path": "/audio/mcq/6269265839c31a87050a.wav",
+    "text": "I chose a puffer fish",
+    "spokenText": "I chose a puffer fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.puffer.choices[0]"
+  },
+  "i chose a purple tropical fish": {
+    "path": "/audio/mcq/01850b96d3eeb2b9b707.wav",
+    "text": "I chose a purple tropical fish",
+    "spokenText": "I chose a purple tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a red tropical fish": {
+    "path": "/audio/mcq/ccceb8618c04bd66dbb4.wav",
+    "text": "I chose a red tropical fish",
+    "spokenText": "I chose a red tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a salmon": {
+    "path": "/audio/mcq/3e6675d1de8d96a172b5.wav",
+    "text": "I chose a salmon",
+    "spokenText": "I chose a salmon.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.salmon.choices[0]"
+  },
+  "i chose a white tropical fish": {
+    "path": "/audio/mcq/b0126e21ff0959d1e459.wav",
+    "text": "I chose a white tropical fish",
+    "spokenText": "I chose a white tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose a yellow tropical fish": {
+    "path": "/audio/mcq/07cd7843f56d3f2eedd6.wav",
+    "text": "I chose a yellow tropical fish",
+    "spokenText": "I chose a yellow tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose amethyst": {
+    "path": "/audio/mcq/6cbc4abe83a82ffcd756.wav",
+    "text": "I chose amethyst",
+    "spokenText": "I chose amethyst.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose an orange tropical fish": {
+    "path": "/audio/mcq/7bd2bd08cd4ce2f60c55.wav",
+    "text": "I chose an orange tropical fish",
+    "spokenText": "I chose an orange tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[0]"
+  },
+  "i chose blue coral": {
+    "path": "/audio/mcq/4e9e33bbe04c47276d32.wav",
+    "text": "I chose blue coral",
+    "spokenText": "I chose blue coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose blue glass": {
+    "path": "/audio/mcq/6b2da45159f31dbbd4cc.wav",
+    "text": "I chose blue glass",
+    "spokenText": "I chose blue glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose coral": {
+    "path": "/audio/mcq/f70faff80ff040375b3e.wav",
+    "text": "I chose coral",
+    "spokenText": "I chose coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose green glass": {
+    "path": "/audio/mcq/bdad576183a2b304a0b1.wav",
+    "text": "I chose green glass",
+    "spokenText": "I chose green glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose kelp": {
+    "path": "/audio/mcq/b9544a586216d497aaf0.wav",
+    "text": "I chose kelp",
+    "spokenText": "I chose kelp.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose my aquarium": {
+    "path": "/audio/mcq/13566bd11ce858553779.wav",
+    "text": "I chose my aquarium",
+    "spokenText": "I chose my aquarium.",
+    "source": "beginner:part3.segments[1].part3Beats[1].choices[3]"
+  },
+  "i chose orange glass": {
+    "path": "/audio/mcq/fca92a0df5ab16e34c2c.wav",
+    "text": "I chose orange glass",
+    "spokenText": "I chose orange glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose pink coral": {
+    "path": "/audio/mcq/05f528e48fa26d9d31c2.wav",
+    "text": "I chose pink coral",
+    "spokenText": "I chose pink coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose pink glass": {
+    "path": "/audio/mcq/771669a895a3585c480f.wav",
+    "text": "I chose pink glass",
+    "spokenText": "I chose pink glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose purple coral": {
+    "path": "/audio/mcq/4f8bf90d4b347d87465a.wav",
+    "text": "I chose purple coral",
+    "spokenText": "I chose purple coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[1]"
+  },
+  "i chose purple glass": {
+    "path": "/audio/mcq/e5e863345778e2aeb590.wav",
+    "text": "I chose purple glass",
+    "spokenText": "I chose purple glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose red coral": {
+    "path": "/audio/mcq/028e3b98ed91864bdd05.wav",
+    "text": "I chose red coral",
+    "spokenText": "I chose red coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose red glass": {
+    "path": "/audio/mcq/426a8a7e7ff47a8dcf0d.wav",
+    "text": "I chose red glass",
+    "spokenText": "I chose red glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose soul sand": {
+    "path": "/audio/mcq/fe3636d16c119aa1eedd.wav",
+    "text": "I chose soul sand",
+    "spokenText": "I chose soul sand.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose this fish": {
+    "path": "/audio/mcq/2c8ac0cf4409c8c7e499.wav",
+    "text": "I chose this fish",
+    "spokenText": "I chose this fish.",
+    "source": "beginner:part3.segments[5].part3Beats[0].choices[1]"
+  },
+  "i chose white glass": {
+    "path": "/audio/mcq/5d7a725ef14097efb06e.wav",
+    "text": "I chose white glass",
+    "spokenText": "I chose white glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
+  "i chose yellow coral": {
+    "path": "/audio/mcq/f572ed0c08157f8e886d.wav",
+    "text": "I chose yellow coral",
+    "spokenText": "I chose yellow coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[1]"
+  },
+  "i chose yellow glass": {
+    "path": "/audio/mcq/b9687a36a990b8d8fdac.wav",
+    "text": "I chose yellow glass",
+    "spokenText": "I chose yellow glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[0]"
+  },
   "i found a blue fish!": {
-    "path": "/audio/mcq/b6ca8a5de86557cbc5d0.wav",
+    "path": "/audio/mcq/23357b53d39b3675bd3a.wav",
     "text": "I found a blue fish!",
     "spokenText": "I found a blue fish!",
     "source": "beginner:part2.segments[2].mcqBeats[2].choices[0]"
   },
+  "i found a blue tropical fish": {
+    "path": "/audio/mcq/2df36f539e48187b2013.wav",
+    "text": "I found a blue tropical fish",
+    "spokenText": "I found a blue tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a cod": {
+    "path": "/audio/mcq/e0cd8a78eb8e6a0bf482.wav",
+    "text": "I found a cod",
+    "spokenText": "I found a cod.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.cod.choices[1]"
+  },
   "i found a fish!": {
-    "path": "/audio/mcq/025b2250a4515d101d8a.wav",
+    "path": "/audio/mcq/b084ac1d38f2ed234f6b.wav",
     "text": "I found a fish!",
     "spokenText": "I found a fish!",
     "source": "beginner:part2.segments[2].mcqBeats[1].choices[0]"
   },
+  "i found a green tropical fish": {
+    "path": "/audio/mcq/42396d4ccd961b6dcae6.wav",
+    "text": "I found a green tropical fish",
+    "spokenText": "I found a green tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a pink tropical fish": {
+    "path": "/audio/mcq/11570bf676f89fbd6c17.wav",
+    "text": "I found a pink tropical fish",
+    "spokenText": "I found a pink tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a puffer fish": {
+    "path": "/audio/mcq/370493696a319392fd52.wav",
+    "text": "I found a puffer fish",
+    "spokenText": "I found a puffer fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.puffer.choices[1]"
+  },
+  "i found a purple tropical fish": {
+    "path": "/audio/mcq/08f0183caa521e4e7f86.wav",
+    "text": "I found a purple tropical fish",
+    "spokenText": "I found a purple tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a red tropical fish": {
+    "path": "/audio/mcq/4001858ac037a49b0619.wav",
+    "text": "I found a red tropical fish",
+    "spokenText": "I found a red tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a salmon": {
+    "path": "/audio/mcq/d7f4e94662afd08d5b80.wav",
+    "text": "I found a salmon",
+    "spokenText": "I found a salmon.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.salmon.choices[1]"
+  },
+  "i found a white tropical fish": {
+    "path": "/audio/mcq/6cf328f538ecd72a79b0.wav",
+    "text": "I found a white tropical fish",
+    "spokenText": "I found a white tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found a yellow tropical fish": {
+    "path": "/audio/mcq/90afc8c331f4a984d40d.wav",
+    "text": "I found a yellow tropical fish",
+    "spokenText": "I found a yellow tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found amethyst": {
+    "path": "/audio/mcq/40500bcc18b844792ed5.wav",
+    "text": "I found amethyst",
+    "spokenText": "I found amethyst.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
+  "i found an orange tropical fish": {
+    "path": "/audio/mcq/d637dd40397bd8ad56d3.wav",
+    "text": "I found an orange tropical fish",
+    "spokenText": "I found an orange tropical fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[1]"
+  },
+  "i found blue coral": {
+    "path": "/audio/mcq/5403b67c79aa7749f268.wav",
+    "text": "I found blue coral",
+    "spokenText": "I found blue coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
+  "i found blue glass": {
+    "path": "/audio/mcq/be56e03987808d6154a5.wav",
+    "text": "I found blue glass",
+    "spokenText": "I found blue glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
   "i found coral": {
-    "path": "/audio/mcq/b9f6ede9f328a48c651b.wav",
+    "path": "/audio/mcq/8edc82b97381ccaef9bd.wav",
     "text": "I found coral",
     "spokenText": "I found coral.",
     "source": "beginner:part2.segments[9].items[1].choices[1]"
   },
   "i found coral here": {
-    "path": "/audio/mcq/671a759194d62e95ddb0.wav",
+    "path": "/audio/mcq/5c545c0c89fb8179564e.wav",
     "text": "I found coral here",
     "spokenText": "I found coral here.",
     "source": "beginner:part2.segments[1].mcqBeats[1].choices[1]"
   },
   "i found five fish": {
-    "path": "/audio/mcq/75b755c591f27fb6ee95.wav",
+    "path": "/audio/mcq/463e5b76954e06aa831d.wav",
     "text": "I found five fish",
     "spokenText": "I found five fish.",
     "source": "beginner:part2.segments[9].items[16].choices[3]"
   },
   "i found five sand": {
-    "path": "/audio/mcq/adcb184b30c67af20392.wav",
+    "path": "/audio/mcq/78b139f4ef6502f2f04c.wav",
     "text": "I found five sand",
     "spokenText": "I found five sand.",
-    "source": "beginner:part2.segments[7].mcqBeats[2].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[3].choices[3]"
   },
   "i found glass": {
-    "path": "/audio/mcq/ba259ac30e56ec45a111.wav",
+    "path": "/audio/mcq/e051e5a4dcca5d7d9652.wav",
     "text": "I found glass",
     "spokenText": "I found glass.",
     "source": "beginner:part1.segments[1].mcqBeats[1].choices[1]"
   },
+  "i found green glass": {
+    "path": "/audio/mcq/545c4d41a96760f34223.wav",
+    "text": "I found green glass",
+    "spokenText": "I found green glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
   "i found it in here": {
-    "path": "/audio/mcq/b195d78457cfebe2bc0d.wav",
+    "path": "/audio/mcq/7f99a688d6da14e0f5ed.wav",
     "text": "I found it in here",
     "spokenText": "I found it in here.",
     "source": "beginner:part2.segments[5].mcqBeats[1].choices[1]"
   },
   "i found it!": {
-    "path": "/audio/mcq/31db4aebe377a808e3bb.wav",
+    "path": "/audio/mcq/0d4f99e8010a0d122ab1.wav",
     "text": "I found it!",
     "spokenText": "I found it!",
     "source": "beginner:part2.segments[1].mcqBeats[4].choices[2]"
   },
   "i found kelp": {
-    "path": "/audio/mcq/c13c121f718ed008e792.wav",
+    "path": "/audio/mcq/808b06b7bfc4fcc8aa3c.wav",
     "text": "I found kelp",
     "spokenText": "I found kelp.",
     "source": "beginner:part2.segments[9].items[0].choices[1]"
   },
   "i found kelp here": {
-    "path": "/audio/mcq/be9f9d21a1c5fba8e3c9.wav",
+    "path": "/audio/mcq/17b60e13818bfd9dd74b.wav",
     "text": "I found kelp here",
     "spokenText": "I found kelp here.",
     "source": "beginner:part2.segments[1].mcqBeats[0].choices[1]"
   },
+  "i found orange glass": {
+    "path": "/audio/mcq/4839037267956df2972d.wav",
+    "text": "I found orange glass",
+    "spokenText": "I found orange glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
+  "i found pink coral": {
+    "path": "/audio/mcq/bd3416ec4d1ae88b513d.wav",
+    "text": "I found pink coral",
+    "spokenText": "I found pink coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
+  "i found pink glass": {
+    "path": "/audio/mcq/296910af5b98ebae0b70.wav",
+    "text": "I found pink glass",
+    "spokenText": "I found pink glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
+  "i found purple coral": {
+    "path": "/audio/mcq/ff1aaad538d586c9f4dd.wav",
+    "text": "I found purple coral",
+    "spokenText": "I found purple coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[2]"
+  },
+  "i found purple glass": {
+    "path": "/audio/mcq/5a4c3fc4444cb1d64580.wav",
+    "text": "I found purple glass",
+    "spokenText": "I found purple glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
+  "i found red coral": {
+    "path": "/audio/mcq/02f84570b1e6f4d4afc0.wav",
+    "text": "I found red coral",
+    "spokenText": "I found red coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
+  "i found red glass": {
+    "path": "/audio/mcq/146a1df196e3ae2e3b99.wav",
+    "text": "I found red glass",
+    "spokenText": "I found red glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
   "i found sand": {
-    "path": "/audio/mcq/9be69ecee79e6678a471.wav",
+    "path": "/audio/mcq/d2563af8c00eff31bb8f.wav",
     "text": "I found sand",
     "spokenText": "I found sand.",
     "source": "beginner:part1.segments[1].mcqBeats[3].choices[1]"
   },
   "i found some sand!": {
-    "path": "/audio/mcq/87205bcb2bb97f6ff86e.wav",
+    "path": "/audio/mcq/c6fdbce774c8a26c9f5d.wav",
     "text": "I found some sand!",
     "spokenText": "I found some sand!",
     "source": "beginner:part1.segments[2].mcqBeats[2].choices[0]"
   },
+  "i found soul sand": {
+    "path": "/audio/mcq/717db903c39abb5aa2d5.wav",
+    "text": "I found soul sand",
+    "spokenText": "I found soul sand.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
   "i found the fish in the tank": {
-    "path": "/audio/mcq/2e586dfdc25d9d4a1ff4.wav",
+    "path": "/audio/mcq/38b68f347335cc8915f2.wav",
     "text": "I found the fish in the tank",
     "spokenText": "I found the fish in the tank.",
     "source": "beginner:part2.segments[5].mcqBeats[0].choices[1]"
   },
   "i found the ocean!": {
-    "path": "/audio/mcq/0b4b85f1a70dffff83c6.wav",
+    "path": "/audio/mcq/f949e2ef8c15ce928a13.wav",
     "text": "I found the ocean!",
     "spokenText": "I found the ocean!",
     "source": "beginner:part2.segments[2].mcqBeats[0].choices[2]"
   },
   "i found this coral": {
-    "path": "/audio/mcq/96b074171f7c08569e42.wav",
+    "path": "/audio/mcq/b759c386df9728dcd152.wav",
     "text": "I found this coral",
     "spokenText": "I found this coral.",
     "source": "beginner:part2.segments[1].mcqBeats[3].choices[2]"
   },
   "i found this fish": {
-    "path": "/audio/mcq/6cba12dc0063ef9fe824.wav",
+    "path": "/audio/mcq/942fa1a440f5ffceef60.wav",
     "text": "I found this fish",
     "spokenText": "I found this fish.",
     "source": "beginner:part2.segments[2].mcqBeats[3].choices[1]"
   },
   "i found this one": {
-    "path": "/audio/mcq/a7e5fc26661893aa96c0.wav",
+    "path": "/audio/mcq/1e6fae0135389ac32237.wav",
     "text": "I found this one",
     "spokenText": "I found this one.",
     "source": "beginner:part2.segments[1].mcqBeats[2].choices[2]"
   },
   "i found three fish": {
-    "path": "/audio/mcq/db161e22d2afd30a297f.wav",
+    "path": "/audio/mcq/27a3a2521e40648e3a79.wav",
     "text": "I found three fish",
     "spokenText": "I found three fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[2].choices[3]"
+  },
+  "i found white glass": {
+    "path": "/audio/mcq/ebb672ffaf4f9e09bea8.wav",
+    "text": "I found white glass",
+    "spokenText": "I found white glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
+  },
+  "i found yellow coral": {
+    "path": "/audio/mcq/dd64127bf3060e57b47c.wav",
+    "text": "I found yellow coral",
+    "spokenText": "I found yellow coral.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[2]"
+  },
+  "i found yellow glass": {
+    "path": "/audio/mcq/8a6639dee94c52576392.wav",
+    "text": "I found yellow glass",
+    "spokenText": "I found yellow glass.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[2]"
   },
   "i have a blue fish!": {
-    "path": "/audio/mcq/7c0909ca3161a70c20d5.wav",
+    "path": "/audio/mcq/a075d69845ee31d6ac64.wav",
     "text": "I have a blue fish!",
     "spokenText": "I have a blue fish!",
     "source": "beginner:part2.segments[2].mcqBeats[2].choices[2]"
   },
   "i have a fish!": {
-    "path": "/audio/mcq/6dfc19049e9a264e977e.wav",
+    "path": "/audio/mcq/ad190f877147e3faf423.wav",
     "text": "I have a fish!",
     "spokenText": "I have a fish!",
     "source": "beginner:part2.segments[2].mcqBeats[1].choices[2]"
   },
   "i have five fish": {
-    "path": "/audio/mcq/09be06ea3934d6311449.wav",
+    "path": "/audio/mcq/271e561f2a4d51e05403.wav",
     "text": "I have five fish",
     "spokenText": "I have five fish.",
     "source": "beginner:part2.segments[9].items[16].choices[2]"
   },
   "i have five glass": {
-    "path": "/audio/mcq/d343f16f8a80bce3e988.wav",
+    "path": "/audio/mcq/4983a0975166fb9fd19b.wav",
     "text": "I have five glass",
     "spokenText": "I have five glass.",
-    "source": "beginner:part2.segments[7].mcqBeats[2].choices[2]"
+    "source": "beginner:part2.segments[7].mcqBeats[3].choices[2]"
   },
   "i have three fish": {
-    "path": "/audio/mcq/07cc3e5ec39b3e2d5c9f.wav",
+    "path": "/audio/mcq/b5bfff54ca5262defc62.wav",
     "text": "I have three fish",
     "spokenText": "I have three fish.",
     "source": "beginner:part2.segments[9].items[15].choices[2]"
   },
   "i have three glass": {
-    "path": "/audio/mcq/9a1e82eb4aec83c864c1.wav",
+    "path": "/audio/mcq/e3803e750745a3f0b623.wav",
     "text": "I have three glass",
     "spokenText": "I have three glass.",
-    "source": "beginner:part2.segments[7].mcqBeats[1].choices[2]"
+    "source": "beginner:part2.segments[7].mcqBeats[2].choices[2]"
+  },
+  "i like amethyst fish": {
+    "path": "/audio/mcq/f649483244f10a0f6634.wav",
+    "text": "I like amethyst fish",
+    "spokenText": "I like amethyst fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like blue coral fish": {
+    "path": "/audio/mcq/818c10a5417fedb57774.wav",
+    "text": "I like blue coral fish",
+    "spokenText": "I like blue coral fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like blue glass": {
+    "path": "/audio/mcq/d46b457fe24be679b43d.wav",
+    "text": "I like blue glass",
+    "spokenText": "I like blue glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like coral fish": {
+    "path": "/audio/mcq/8e2e957312fceaa6f454.wav",
+    "text": "I like coral fish",
+    "spokenText": "I like coral fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like green glass": {
+    "path": "/audio/mcq/89109d6595ffe6b7c607.wav",
+    "text": "I like green glass",
+    "spokenText": "I like green glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
   },
   "i like kelp": {
-    "path": "/audio/mcq/3ab0927ba6cf9b735324.wav",
+    "path": "/audio/mcq/0dc2f3de054cff9122ed.wav",
     "text": "I like kelp",
     "spokenText": "I like kelp.",
     "source": "beginner:part2.segments[1].mcqBeats[0].choices[3]"
   },
+  "i like kelp fish": {
+    "path": "/audio/mcq/864d814e3158d127c1e4.wav",
+    "text": "I like kelp fish",
+    "spokenText": "I like kelp fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like my aquarium": {
+    "path": "/audio/mcq/ce143da1ed497bc34b02.wav",
+    "text": "I like my aquarium",
+    "spokenText": "I like my aquarium.",
+    "source": "beginner:part3.segments[1].part3Beats[1].choices[2]"
+  },
+  "i like orange glass": {
+    "path": "/audio/mcq/bbb7d983c8ed33a6e508.wav",
+    "text": "I like orange glass",
+    "spokenText": "I like orange glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like pink coral fish": {
+    "path": "/audio/mcq/e97202ed5adc4a5d08b0.wav",
+    "text": "I like pink coral fish",
+    "spokenText": "I like pink coral fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like pink glass": {
+    "path": "/audio/mcq/6669a52deea3fad0c443.wav",
+    "text": "I like pink glass",
+    "spokenText": "I like pink glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like purple glass": {
+    "path": "/audio/mcq/a0c1bb10fbe342150a91.wav",
+    "text": "I like purple glass",
+    "spokenText": "I like purple glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like red coral fish": {
+    "path": "/audio/mcq/8705c9430722b1d32d25.wav",
+    "text": "I like red coral fish",
+    "spokenText": "I like red coral fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like red glass": {
+    "path": "/audio/mcq/78466002acfa03066702.wav",
+    "text": "I like red glass",
+    "spokenText": "I like red glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like soul sand fish": {
+    "path": "/audio/mcq/383f7bb4e5945938619e.wav",
+    "text": "I like soul sand fish",
+    "spokenText": "I like soul sand fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
   "i like the ocean": {
-    "path": "/audio/mcq/ddcb495c6c255eee9ad4.wav",
+    "path": "/audio/mcq/73bdec8c9b13f15d8784.wav",
     "text": "I like the ocean",
     "spokenText": "I like the ocean.",
     "source": "beginner:part2.segments[2].mcqBeats[3].choices[3]"
   },
   "i like the ocean!": {
-    "path": "/audio/mcq/cdbc2beffd61e0e1ef8e.wav",
+    "path": "/audio/mcq/4db9cfb23a22b3cbf1f4.wav",
     "text": "I like the ocean!",
     "spokenText": "I like the ocean!",
     "source": "beginner:part2.segments[2].mcqBeats[0].choices[3]"
   },
   "i like this coral": {
-    "path": "/audio/mcq/ac07bd8cc350a47290e6.wav",
+    "path": "/audio/mcq/db43fe4cc232d50be818.wav",
     "text": "I like this coral",
     "spokenText": "I like this coral.",
     "source": "beginner:part2.segments[1].mcqBeats[3].choices[0]"
   },
+  "i like this fish": {
+    "path": "/audio/mcq/e8328ddac344b4372c3a.wav",
+    "text": "I like this fish",
+    "spokenText": "I like this fish.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[3]"
+  },
+  "i like white glass": {
+    "path": "/audio/mcq/69fd0dda04bb5cb8be08.wav",
+    "text": "I like white glass",
+    "spokenText": "I like white glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
+  "i like yellow coral fish": {
+    "path": "/audio/mcq/a00eef4baca79540a8f8.wav",
+    "text": "I like yellow coral fish",
+    "spokenText": "I like yellow coral fish.",
+    "source": "beginner:part3.segments[6].part3Beats[1].choices[3]"
+  },
+  "i like yellow glass": {
+    "path": "/audio/mcq/3b103132d6b3f71bec25.wav",
+    "text": "I like yellow glass",
+    "spokenText": "I like yellow glass.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[3]"
+  },
   "i made a fish!": {
-    "path": "/audio/mcq/a1cb222f8c8dab7681ff.wav",
+    "path": "/audio/mcq/3a21517601924559a6ca.wav",
     "text": "I made a fish!",
     "spokenText": "I made a fish!",
     "source": "beginner:part2.segments[3].mcqBeats[0].choices[2]"
   },
   "i made a tank!": {
-    "path": "/audio/mcq/d76a005f7faebe779a3c.wav",
+    "path": "/audio/mcq/799abeda29db8d4f1313.wav",
     "text": "I made a tank!",
     "spokenText": "I made a tank!",
     "source": "beginner:part1.segments[3].mcqBeats[1].choices[3]"
   },
   "i made black glass!": {
-    "path": "/audio/mcq/eb7d2bc31a33f71ff245.wav",
+    "path": "/audio/mcq/5fe7853b5a01646dc57e.wav",
     "text": "I made black glass!",
     "spokenText": "I made black glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made blue glass!": {
-    "path": "/audio/mcq/bf4b70911ef960732f96.wav",
+    "path": "/audio/mcq/8f846d4c907a6d686a18.wav",
     "text": "I made blue glass!",
     "spokenText": "I made blue glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made brown glass!": {
-    "path": "/audio/mcq/678067ff44ca5d8ec654.wav",
+    "path": "/audio/mcq/ba3d17399ff9b9256fcb.wav",
     "text": "I made brown glass!",
     "spokenText": "I made brown glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made coral": {
-    "path": "/audio/mcq/49ecee0afd6afee06869.wav",
+    "path": "/audio/mcq/c77cb803299ff2dc3533.wav",
     "text": "I made coral",
     "spokenText": "I made coral.",
     "source": "beginner:part2.segments[1].mcqBeats[1].choices[3]"
   },
   "i made cyan glass!": {
-    "path": "/audio/mcq/b0248c776acc8632262a.wav",
+    "path": "/audio/mcq/465c7cfd10033e9b2a8d.wav",
     "text": "I made cyan glass!",
     "spokenText": "I made cyan glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made glass": {
-    "path": "/audio/mcq/642622d07d8c329ffd97.wav",
+    "path": "/audio/mcq/0c2151233c56c722c360.wav",
     "text": "I made glass",
     "spokenText": "I made glass.",
     "source": "beginner:part1.segments[1].mcqBeats[3].choices[3]"
   },
   "i made glass!": {
-    "path": "/audio/mcq/8d285cc6a384b0847178.wav",
+    "path": "/audio/mcq/4ee7ae96450f4853ce0d.wav",
     "text": "I made glass!",
     "spokenText": "I made glass!",
     "source": "beginner:part1.segments[2].mcqBeats[2].choices[2]"
   },
   "i made green glass!": {
-    "path": "/audio/mcq/46c2b40994b04fa2dff2.wav",
+    "path": "/audio/mcq/bfd25cc4b4ad053ad54f.wav",
     "text": "I made green glass!",
     "spokenText": "I made green glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made it in here": {
-    "path": "/audio/mcq/39c322616d92f903fe00.wav",
+    "path": "/audio/mcq/0ce507de6afbe0f71601.wav",
     "text": "I made it in here",
     "spokenText": "I made it in here.",
     "source": "beginner:part2.segments[5].mcqBeats[1].choices[3]"
   },
   "i made lime glass!": {
-    "path": "/audio/mcq/6df5d611bf128c9c923b.wav",
+    "path": "/audio/mcq/56140184ba92654f091b.wav",
     "text": "I made lime glass!",
     "spokenText": "I made lime glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made magenta glass!": {
-    "path": "/audio/mcq/61937145e0c5def7f2d5.wav",
+    "path": "/audio/mcq/b93d97332f8a476b64c1.wav",
     "text": "I made magenta glass!",
     "spokenText": "I made magenta glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made orange glass!": {
-    "path": "/audio/mcq/a89ac5b022b3b33ebb59.wav",
+    "path": "/audio/mcq/b27a6861ea1350eee88d.wav",
     "text": "I made orange glass!",
     "spokenText": "I made orange glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made pink glass!": {
-    "path": "/audio/mcq/1ce42aa45cbbcef71b51.wav",
+    "path": "/audio/mcq/853073795b2942f804e0.wav",
     "text": "I made pink glass!",
     "spokenText": "I made pink glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made purple glass!": {
-    "path": "/audio/mcq/b684ae768cb96f5939b4.wav",
+    "path": "/audio/mcq/7493e934fb4e1b10efba.wav",
     "text": "I made purple glass!",
     "spokenText": "I made purple glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made red glass": {
-    "path": "/audio/mcq/1bfe5d5a0384bffcef05.wav",
+    "path": "/audio/mcq/33cd811ab11959c0c265.wav",
     "text": "I made red glass",
     "spokenText": "I made red glass.",
     "source": "beginner:part1.segments[9].items[9].choices[0]"
   },
   "i made red glass!": {
-    "path": "/audio/mcq/1f4edefc2bfa3170b415.wav",
+    "path": "/audio/mcq/d704fc116e75bf653ebe.wav",
     "text": "I made red glass!",
     "spokenText": "I made red glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made sand": {
-    "path": "/audio/mcq/716211cfa204b9aad8e5.wav",
+    "path": "/audio/mcq/5d9fd7c099d6d63005b0.wav",
     "text": "I made sand",
     "spokenText": "I made sand.",
     "source": "beginner:part1.segments[1].mcqBeats[1].choices[2]"
   },
   "i made white glass!": {
-    "path": "/audio/mcq/05a7ca612415048df1c2.wav",
+    "path": "/audio/mcq/23123743efeb34694ad8.wav",
     "text": "I made white glass!",
     "spokenText": "I made white glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
   "i made yellow glass!": {
-    "path": "/audio/mcq/383e28f6733dcfc5aab4.wav",
+    "path": "/audio/mcq/98b461aa3c97ae41d176.wav",
     "text": "I made yellow glass!",
     "spokenText": "I made yellow glass!",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[0]"
   },
+  "i need a cod": {
+    "path": "/audio/mcq/295fd6bcd198796abbeb.wav",
+    "text": "I need a cod",
+    "spokenText": "I need a cod.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.cod.choices[3]"
+  },
   "i need a dye": {
-    "path": "/audio/mcq/991fc4d4e0a92f0c5c25.wav",
+    "path": "/audio/mcq/a2d4c7e0b57721502152.wav",
     "text": "I need a dye",
     "spokenText": "I need a dye.",
     "source": "beginner:part1.segments[5].mcqBeats[0].choices[1]"
   },
   "i need a fish!": {
-    "path": "/audio/mcq/3057fb72c1ed467a3f30.wav",
+    "path": "/audio/mcq/bc31c8d0c586fae91798.wav",
     "text": "I need a fish!",
     "spokenText": "I need a fish!",
     "source": "beginner:part2.segments[3].mcqBeats[0].choices[3]"
   },
+  "i need a puffer fish": {
+    "path": "/audio/mcq/e80cbfa3d4578a9f94d7.wav",
+    "text": "I need a puffer fish",
+    "spokenText": "I need a puffer fish.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.puffer.choices[3]"
+  },
+  "i need a salmon": {
+    "path": "/audio/mcq/87bbb628623d7e4ed99f.wav",
+    "text": "I need a salmon",
+    "spokenText": "I need a salmon.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.salmon.choices[3]"
+  },
+  "i need amethyst": {
+    "path": "/audio/mcq/ae8ffab33a8473d673bd.wav",
+    "text": "I need amethyst",
+    "spokenText": "I need amethyst.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
+  "i need blue coral": {
+    "path": "/audio/mcq/701d4543e173f47f41fe.wav",
+    "text": "I need blue coral",
+    "spokenText": "I need blue coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
+  "i need coral": {
+    "path": "/audio/mcq/d15d062b8d2373b9bc86.wav",
+    "text": "I need coral",
+    "spokenText": "I need coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
   "i need fish": {
-    "path": "/audio/mcq/7f97fac696c02c663ea7.wav",
+    "path": "/audio/mcq/d35eb5a1f11af3e620fe.wav",
     "text": "I need fish",
     "spokenText": "I need fish.",
     "source": "beginner:part1.segments[8].mcqBeats[3].choices[2]"
   },
   "i need glass": {
-    "path": "/audio/mcq/58833fa2f05968ab0f3e.wav",
+    "path": "/audio/mcq/15b86c066cc4ace264da.wav",
     "text": "I need glass",
     "spokenText": "I need glass.",
     "source": "beginner:part1.segments[1].mcqBeats[1].choices[0]"
   },
   "i need kelp": {
-    "path": "/audio/mcq/1d5f7cb70be4d6e17241.wav",
+    "path": "/audio/mcq/f0764248d11e951f18b2.wav",
     "text": "I need kelp",
     "spokenText": "I need kelp.",
     "source": "beginner:part2.segments[1].mcqBeats[0].choices[2]"
   },
   "i need more sand": {
-    "path": "/audio/mcq/0a72eeaeab73aae1c268.wav",
+    "path": "/audio/mcq/daf2df50c563a4b301d5.wav",
     "text": "I need more sand",
     "spokenText": "I need more sand.",
     "source": "beginner:part1.segments[6].mcqBeats[3].choices[3]"
   },
   "i need more!": {
-    "path": "/audio/mcq/69b14d9889087b696a7a.wav",
+    "path": "/audio/mcq/2d626d15de9b10ec06c6.wav",
     "text": "I need more!",
     "spokenText": "I need more!",
     "source": "beginner:part2.segments[1].mcqBeats[4].choices[1]"
   },
+  "i need pink coral": {
+    "path": "/audio/mcq/3b914edebd593c876b29.wav",
+    "text": "I need pink coral",
+    "spokenText": "I need pink coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
+  "i need purple coral": {
+    "path": "/audio/mcq/d2b86f081758887b3f72.wav",
+    "text": "I need purple coral",
+    "spokenText": "I need purple coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
+  "i need red coral": {
+    "path": "/audio/mcq/c16a9d82e3ae80462426.wav",
+    "text": "I need red coral",
+    "spokenText": "I need red coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
   "i need sand": {
-    "path": "/audio/mcq/8eac398c305599658c08.wav",
+    "path": "/audio/mcq/df47d747fa5c7603248a.wav",
     "text": "I need sand",
     "spokenText": "I need sand.",
     "source": "beginner:part1.segments[1].mcqBeats[3].choices[0]"
   },
   "i need some sand": {
-    "path": "/audio/mcq/7c84c4d801eb36f0dc87.wav",
+    "path": "/audio/mcq/baa358f073576bc4e686.wav",
     "text": "I need some sand",
     "spokenText": "I need some sand.",
     "source": "beginner:part1.segments[9].items[1].choices[1]"
   },
+  "i need soul sand": {
+    "path": "/audio/mcq/881473a97f6e62b10dea.wav",
+    "text": "I need soul sand",
+    "spokenText": "I need soul sand.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
   "i need this coral": {
-    "path": "/audio/mcq/9b39c85e5812e461395d.wav",
+    "path": "/audio/mcq/4e0f2300e74c1dad286e.wav",
     "text": "I need this coral",
     "spokenText": "I need this coral.",
     "source": "beginner:part2.segments[1].mcqBeats[3].choices[1]"
   },
   "i need this one": {
-    "path": "/audio/mcq/f4fdc4c46df6310b5dc4.wav",
+    "path": "/audio/mcq/3d95fc2e3b75ef991853.wav",
     "text": "I need this one",
     "spokenText": "I need this one.",
     "source": "beginner:part2.segments[1].mcqBeats[2].choices[3]"
   },
   "i need to make glass": {
-    "path": "/audio/mcq/96896871660684af4858.wav",
+    "path": "/audio/mcq/541463286eee981aff8f.wav",
     "text": "I need to make glass",
     "spokenText": "I need to make glass.",
     "source": "beginner:part1.segments[3].mcqBeats[0].choices[0]"
   },
   "i need water": {
-    "path": "/audio/mcq/76604e867627bbed8cfa.wav",
+    "path": "/audio/mcq/dc16821cfc70619f400e.wav",
     "text": "I need water",
     "spokenText": "I need water.",
     "source": "beginner:part1.segments[1].mcqBeats[1].choices[3]"
   },
+  "i need yellow coral": {
+    "path": "/audio/mcq/417de16dd477551ecdb0.wav",
+    "text": "I need yellow coral",
+    "spokenText": "I need yellow coral.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[3]"
+  },
   "i put a blue fish!": {
-    "path": "/audio/mcq/3da91975e6d21671f372.wav",
+    "path": "/audio/mcq/355316b0c12fc0f0be49.wav",
     "text": "I put a blue fish!",
     "spokenText": "I put a blue fish!",
     "source": "beginner:part2.segments[2].mcqBeats[2].choices[3]"
   },
+  "i put a blue tropical fish here": {
+    "path": "/audio/mcq/d0399dce71494bcb73bf.wav",
+    "text": "I put a blue tropical fish here",
+    "spokenText": "I put a blue tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
   "i put a fish!": {
-    "path": "/audio/mcq/278dd15c8bafa54fdf2c.wav",
+    "path": "/audio/mcq/d692575be6a6d370ccd0.wav",
     "text": "I put a fish!",
     "spokenText": "I put a fish!",
     "source": "beginner:part2.segments[3].mcqBeats[1].choices[3]"
   },
+  "i put a green tropical fish here": {
+    "path": "/audio/mcq/de92cad2e7dd6f909b69.wav",
+    "text": "I put a green tropical fish here",
+    "spokenText": "I put a green tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put a pink tropical fish here": {
+    "path": "/audio/mcq/e3215c5aee45c9971186.wav",
+    "text": "I put a pink tropical fish here",
+    "spokenText": "I put a pink tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put a puffer fish here": {
+    "path": "/audio/mcq/c1f6d1b5525bacaf8982.wav",
+    "text": "I put a puffer fish here",
+    "spokenText": "I put a puffer fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.puffer.choices[2]"
+  },
+  "i put a purple tropical fish here": {
+    "path": "/audio/mcq/bfabda0da3c61701b42d.wav",
+    "text": "I put a purple tropical fish here",
+    "spokenText": "I put a purple tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put a red tropical fish here": {
+    "path": "/audio/mcq/51517e661868f3d58b72.wav",
+    "text": "I put a red tropical fish here",
+    "spokenText": "I put a red tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put a white tropical fish here": {
+    "path": "/audio/mcq/46635d9503019022dbc2.wav",
+    "text": "I put a white tropical fish here",
+    "spokenText": "I put a white tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put a yellow tropical fish here": {
+    "path": "/audio/mcq/51f30a94c11195932c27.wav",
+    "text": "I put a yellow tropical fish here",
+    "spokenText": "I put a yellow tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put amethyst here": {
+    "path": "/audio/mcq/7bba47a288f5d27c0a65.wav",
+    "text": "I put amethyst here",
+    "spokenText": "I put amethyst here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
+  "i put an orange tropical fish here": {
+    "path": "/audio/mcq/0ba90cd48e1fecef78eb.wav",
+    "text": "I put an orange tropical fish here",
+    "spokenText": "I put an orange tropical fish here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.tropical.choices[2]"
+  },
+  "i put blue coral here": {
+    "path": "/audio/mcq/d45e6e9b8b205289b8ae.wav",
+    "text": "I put blue coral here",
+    "spokenText": "I put blue coral here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
+  "i put blue glass here": {
+    "path": "/audio/mcq/55acb1dd8f432ac4484e.wav",
+    "text": "I put blue glass here",
+    "spokenText": "I put blue glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put cod here": {
+    "path": "/audio/mcq/15f91c101c1dbf05c624.wav",
+    "text": "I put cod here",
+    "spokenText": "I put cod here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.cod.choices[2]"
+  },
   "i put coral here": {
-    "path": "/audio/mcq/1309ab15b29d93607478.wav",
+    "path": "/audio/mcq/0342cae80a9832e79887.wav",
     "text": "I put coral here",
     "spokenText": "I put coral here.",
     "source": "beginner:part2.segments[1].mcqBeats[1].choices[0]"
   },
   "i put glass here": {
-    "path": "/audio/mcq/8bc60ddc781e0363e45c.wav",
+    "path": "/audio/mcq/b255d973e95c4586c477.wav",
     "text": "I put glass here",
     "spokenText": "I put glass here.",
     "source": "beginner:part1.segments[3].mcqBeats[0].choices[3]"
   },
+  "i put green glass here": {
+    "path": "/audio/mcq/5dd00015be9dfec5f7bb.wav",
+    "text": "I put green glass here",
+    "spokenText": "I put green glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
   "i put it in here": {
-    "path": "/audio/mcq/b8bac26c60119dc0677d.wav",
+    "path": "/audio/mcq/2074f52bf7f18d3cfe8e.wav",
     "text": "I put it in here",
     "spokenText": "I put it in here.",
     "source": "beginner:part2.segments[5].mcqBeats[1].choices[0]"
   },
   "i put kelp here": {
-    "path": "/audio/mcq/d81f44ea8c19749f23d1.wav",
+    "path": "/audio/mcq/2a29bc9f83505222dbeb.wav",
     "text": "I put kelp here",
     "spokenText": "I put kelp here.",
     "source": "beginner:part2.segments[1].mcqBeats[0].choices[0]"
   },
+  "i put orange glass here": {
+    "path": "/audio/mcq/3005f154069f37e33847.wav",
+    "text": "I put orange glass here",
+    "spokenText": "I put orange glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put pink coral here": {
+    "path": "/audio/mcq/ae3548c0b88610b6db2f.wav",
+    "text": "I put pink coral here",
+    "spokenText": "I put pink coral here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
+  "i put pink glass here": {
+    "path": "/audio/mcq/aa729b1cf46b0c6a7ebc.wav",
+    "text": "I put pink glass here",
+    "spokenText": "I put pink glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put purple coral here": {
+    "path": "/audio/mcq/2b650283727c6abb431f.wav",
+    "text": "I put purple coral here",
+    "spokenText": "I put purple coral here.",
+    "source": "beginner:part3.segments[3].part3Beats[1].choices[0]"
+  },
+  "i put purple glass here": {
+    "path": "/audio/mcq/5c41a69b54db51a31c6b.wav",
+    "text": "I put purple glass here",
+    "spokenText": "I put purple glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put red coral here": {
+    "path": "/audio/mcq/28b90454ece37662bf9e.wav",
+    "text": "I put red coral here",
+    "spokenText": "I put red coral here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
+  "i put red glass here": {
+    "path": "/audio/mcq/b75f9da8d3e8e15af066.wav",
+    "text": "I put red glass here",
+    "spokenText": "I put red glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put salmon here": {
+    "path": "/audio/mcq/959e3e7d26a95a413b6f.wav",
+    "text": "I put salmon here",
+    "spokenText": "I put salmon here.",
+    "source": "beginner:part3.segments[4].part3Beats[0].variants.salmon.choices[2]"
+  },
   "i put sand here": {
-    "path": "/audio/mcq/be36d20c99a0dd333448.wav",
+    "path": "/audio/mcq/711070043874951ea479.wav",
     "text": "I put sand here",
     "spokenText": "I put sand here.",
     "source": "beginner:part1.segments[2].mcqBeats[2].choices[3]"
   },
+  "i put soul sand here": {
+    "path": "/audio/mcq/bb91dfbe74d8132b4e45.wav",
+    "text": "I put soul sand here",
+    "spokenText": "I put soul sand here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
   "i put the fish in the tank": {
-    "path": "/audio/mcq/d5df96df454f5a7cd82c.wav",
+    "path": "/audio/mcq/944bc4096259dd3e2652.wav",
     "text": "I put the fish in the tank",
     "spokenText": "I put the fish in the tank.",
     "source": "beginner:part2.segments[5].mcqBeats[0].choices[0]"
   },
   "i put the sand on the bottom": {
-    "path": "/audio/mcq/f60b6289ebd6d1b204f0.wav",
+    "path": "/audio/mcq/70fafa370716ee3db549.wav",
     "text": "I put the sand on the bottom",
     "spokenText": "I put the sand on the bottom.",
     "source": "beginner:part1.segments[8].mcqBeats[0].choices[0]"
   },
   "i put this coral": {
-    "path": "/audio/mcq/59caf6fbf6924442ac10.wav",
+    "path": "/audio/mcq/a2c59d787729ad7aa274.wav",
     "text": "I put this coral",
     "spokenText": "I put this coral.",
     "source": "beginner:part2.segments[1].mcqBeats[3].choices[3]"
   },
   "i put this fish": {
-    "path": "/audio/mcq/a4a78c2a3d129eb88e0e.wav",
+    "path": "/audio/mcq/a28e9d076c972bfa59c0.wav",
     "text": "I put this fish",
     "spokenText": "I put this fish.",
     "source": "beginner:part2.segments[2].mcqBeats[3].choices[2]"
   },
+  "i put this fish here": {
+    "path": "/audio/mcq/ed3680251ce570ab2cf3.wav",
+    "text": "I put this fish here",
+    "spokenText": "I put this fish here.",
+    "source": "beginner:part3.segments[5].part3Beats[0].choices[3]"
+  },
   "i put this one": {
-    "path": "/audio/mcq/464c31c528d82c852bb0.wav",
+    "path": "/audio/mcq/7f6bac81764cfad00466.wav",
     "text": "I put this one",
     "spokenText": "I put this one.",
     "source": "beginner:part2.segments[1].mcqBeats[2].choices[1]"
   },
+  "i put white glass here": {
+    "path": "/audio/mcq/fb403e5f68461904430f.wav",
+    "text": "I put white glass here",
+    "spokenText": "I put white glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
+  "i put yellow coral here": {
+    "path": "/audio/mcq/b6e3126091a8f2376bba.wav",
+    "text": "I put yellow coral here",
+    "spokenText": "I put yellow coral here.",
+    "source": "beginner:part3.segments[3].part3Beats[0].choices[0]"
+  },
+  "i put yellow glass here": {
+    "path": "/audio/mcq/4e7340839a7be8bf8535.wav",
+    "text": "I put yellow glass here",
+    "spokenText": "I put yellow glass here.",
+    "source": "beginner:part3.segments[2].part3Beats[0].choices[1]"
+  },
   "i want a blue fish!": {
-    "path": "/audio/mcq/395d6403c488947bf35c.wav",
+    "path": "/audio/mcq/c8bae4cf657996e58def.wav",
     "text": "I want a blue fish!",
     "spokenText": "I want a blue fish!",
     "source": "beginner:part2.segments[2].mcqBeats[2].choices[1]"
   },
   "i want a fish!": {
-    "path": "/audio/mcq/de3543e369997c99b410.wav",
+    "path": "/audio/mcq/337602d5dd59af775bde.wav",
     "text": "I want a fish!",
     "spokenText": "I want a fish!",
     "source": "beginner:part2.segments[2].mcqBeats[1].choices[3]"
   },
   "i want coral": {
-    "path": "/audio/mcq/0bbdf5ad5d6c596b0b02.wav",
+    "path": "/audio/mcq/16cf3bcc0077db659ecd.wav",
     "text": "I want coral",
     "spokenText": "I want coral.",
     "source": "beginner:part2.segments[1].mcqBeats[1].choices[2]"
   },
   "i want it in here": {
-    "path": "/audio/mcq/e079d4fe39b3355b859f.wav",
+    "path": "/audio/mcq/3d4850c0360023e38c85.wav",
     "text": "I want it in here",
     "spokenText": "I want it in here.",
     "source": "beginner:part2.segments[5].mcqBeats[1].choices[2]"
   },
   "i want the fish in the tank": {
-    "path": "/audio/mcq/c2c6147b818ba3e5b793.wav",
+    "path": "/audio/mcq/2b0067acb0f70475e604.wav",
     "text": "I want the fish in the tank",
     "spokenText": "I want the fish in the tank.",
     "source": "beginner:part2.segments[5].mcqBeats[0].choices[3]"
   },
   "i want this fish": {
-    "path": "/audio/mcq/a2f388af9262d5c2593c.wav",
+    "path": "/audio/mcq/f892e1a4e680fac6920f.wav",
     "text": "I want this fish",
     "spokenText": "I want this fish.",
     "source": "beginner:part2.segments[2].mcqBeats[3].choices[0]"
   },
   "i'm building a tank": {
-    "path": "/audio/mcq/c4e58516abc452a1f6d1.wav",
+    "path": "/audio/mcq/b3caea151121dac3adb6.wav",
     "text": "I'm building a tank",
     "spokenText": "I'm building a tank.",
     "source": "beginner:part1.segments[6].mcqBeats[1].choices[0]"
   },
   "i'm done!": {
-    "path": "/audio/mcq/259da51fced0e4c1e78e.wav",
+    "path": "/audio/mcq/81ebaa3cfdf52e28bb38.wav",
     "text": "I'm done!",
     "spokenText": "I'm done!",
     "source": "beginner:part1.segments[6].mcqBeats[3].choices[2]"
   },
   "it is a fish!": {
-    "path": "/audio/mcq/ddeeb2d39e7a2247cf86.wav",
+    "path": "/audio/mcq/2858a6bd9db123feddb2.wav",
     "text": "It is a fish!",
     "spokenText": "It is a fish!",
     "source": "beginner:part2.segments[1].mcqBeats[4].choices[3]"
   },
   "it looks cool!": {
-    "path": "/audio/mcq/0772ceb745ed43cad727.wav",
+    "path": "/audio/mcq/1d10866a6814037201bd.wav",
     "text": "It looks cool!",
     "spokenText": "It looks cool!",
     "source": "beginner:part2.segments[1].mcqBeats[4].choices[0]"
   },
   "it looks good!": {
-    "path": "/audio/mcq/a71d2b1a6c4b98ca4dd6.wav",
+    "path": "/audio/mcq/79e8d20a5e7e7b5d52e1.wav",
     "text": "It looks good!",
     "spokenText": "It looks good!",
     "source": "beginner:part1.segments[6].mcqBeats[1].choices[2]"
   },
+  "kelp": {
+    "path": "/audio/mcq/29d42872c9665ba8a612.wav",
+    "text": "Kelp",
+    "spokenText": "Kelp",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[5]"
+  },
   "left": {
-    "path": "/audio/mcq/a5729f20dda47f644872.wav",
+    "path": "/audio/mcq/6ab60f80540387139980.wav",
     "text": "left",
     "spokenText": "left",
     "source": "beginner:part1.segments[2].mcqBeats[1].choices[0]"
   },
   "let's go to the ocean!": {
-    "path": "/audio/mcq/b79ccdf1501d9ae439ae.wav",
+    "path": "/audio/mcq/cbba73da50a70a98df8a.wav",
     "text": "Let's go to the ocean!",
     "spokenText": "Let's go to the ocean!",
     "source": "beginner:part2.segments[2].mcqBeats[0].choices[0]"
   },
   "let's make the ocean!": {
-    "path": "/audio/mcq/3a621c0012d4a1115e11.wav",
+    "path": "/audio/mcq/6dca4ff773150e7c146a.wav",
     "text": "Let's make the ocean!",
     "spokenText": "Let's make the ocean!",
     "source": "beginner:part2.segments[2].mcqBeats[0].choices[1]"
   },
   "look! i made a fish!": {
-    "path": "/audio/mcq/76ead3165a262e1aae6f.wav",
+    "path": "/audio/mcq/718ab1958f17e819d39f.wav",
     "text": "Look! I made a fish!",
     "spokenText": "Look! I made a fish!",
     "source": "beginner:part2.segments[5].mcqBeats[2].choices[2]"
   },
   "look! i need a fish!": {
-    "path": "/audio/mcq/d2f74f99d45e569dcedd.wav",
+    "path": "/audio/mcq/6c4a05121963d1811eb3.wav",
     "text": "Look! I need a fish!",
     "spokenText": "Look! I need a fish!",
     "source": "beginner:part2.segments[5].mcqBeats[2].choices[1]"
   },
   "look! i want glass!": {
-    "path": "/audio/mcq/f3f091b4865e6d38d33d.wav",
+    "path": "/audio/mcq/4eb13bce9287736843ba.wav",
     "text": "Look! I want glass!",
     "spokenText": "Look! I want glass!",
     "source": "beginner:part2.segments[5].mcqBeats[2].choices[3]"
   },
   "look! there's a fish!": {
-    "path": "/audio/mcq/a83b72a6cdbf6e92bc0c.wav",
+    "path": "/audio/mcq/718df41b7125fe335d9d.wav",
     "text": "Look! There's a fish!",
     "spokenText": "Look! There's a fish!",
     "source": "beginner:part2.segments[5].mcqBeats[2].choices[0]"
   },
   "mountains": {
-    "path": "/audio/mcq/63ee022edb2f894fe6da.wav",
+    "path": "/audio/mcq/1163afbb7ef3fd2f1f7a.wav",
     "text": "mountains",
     "spokenText": "mountains",
     "source": "beginner:part1.segments[2].mcqBeats[0].choices[1]"
   },
   "my tank is ready!": {
-    "path": "/audio/mcq/8421e35b7de0992ca3fa.wav",
+    "path": "/audio/mcq/8c05b91b866551bd70b1.wav",
     "text": "My tank is ready!",
     "spokenText": "My tank is ready!",
     "source": "beginner:part1.segments[6].mcqBeats[2].choices[3]"
   },
+  "orange": {
+    "path": "/audio/mcq/93de184203cb1247af98.wav",
+    "text": "orange",
+    "spokenText": "orange",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[4]"
+  },
+  "pink": {
+    "path": "/audio/mcq/183f52a779c9f848daba.wav",
+    "text": "pink",
+    "spokenText": "pink",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[5]"
+  },
+  "pink coral": {
+    "path": "/audio/mcq/5da70ac5ef3231af4b24.wav",
+    "text": "Pink Coral",
+    "spokenText": "Pink Coral",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[2]"
+  },
+  "puffer fish": {
+    "path": "/audio/mcq/dbad5b45d8055bf40dca.wav",
+    "text": "Puffer Fish",
+    "spokenText": "Puffer Fish",
+    "source": "beginner:part3.segments[0].part3Beats[3].choices[3]"
+  },
+  "purple": {
+    "path": "/audio/mcq/0db875e0960031c3f543.wav",
+    "text": "purple",
+    "spokenText": "purple",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[6]"
+  },
+  "purple coral": {
+    "path": "/audio/mcq/fc36accb2757cf286328.wav",
+    "text": "Purple Coral",
+    "spokenText": "Purple Coral",
+    "source": "beginner:part3.segments[0].part3Beats[2].choices[3]"
+  },
+  "red": {
+    "path": "/audio/mcq/f1a2f2aabae3258f4daf.wav",
+    "text": "red",
+    "spokenText": "red",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[1]"
+  },
+  "red coral": {
+    "path": "/audio/mcq/239a647e8827ca6b3dfc.wav",
+    "text": "Red Coral",
+    "spokenText": "Red Coral",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[1]"
+  },
   "right": {
-    "path": "/audio/mcq/ec0666cdb4a51a0c0c63.wav",
+    "path": "/audio/mcq/291af496f3c58451c20f.wav",
     "text": "right",
     "spokenText": "right",
     "source": "beginner:part1.segments[2].mcqBeats[1].choices[1]"
   },
   "river": {
-    "path": "/audio/mcq/e80354fb305b443822cc.wav",
+    "path": "/audio/mcq/30af465f00ae1998fb68.wav",
     "text": "river",
     "spokenText": "river",
     "source": "beginner:part1.segments[2].mcqBeats[0].choices[2]"
   },
+  "salmon": {
+    "path": "/audio/mcq/2eced6067d4fcb13cd6d.wav",
+    "text": "Salmon",
+    "spokenText": "Salmon",
+    "source": "beginner:part3.segments[0].part3Beats[3].choices[1]"
+  },
   "sand": {
-    "path": "/audio/mcq/b68f38a6775ab30931ea.wav",
+    "path": "/audio/mcq/9c0cc82e8c86e650984c.wav",
     "text": "sand",
     "spokenText": "sand",
     "source": "beginner:part1.segments[1].mcqBeats[2].choices[0]"
   },
+  "soul sand": {
+    "path": "/audio/mcq/c622976f95f340ae7180.wav",
+    "text": "Soul Sand",
+    "spokenText": "Soul Sand",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[7]"
+  },
   "stone": {
-    "path": "/audio/mcq/f57aedd8c59bfa49b321.wav",
+    "path": "/audio/mcq/784de73fd55b7c5022c9.wav",
     "text": "stone",
     "spokenText": "stone",
     "source": "beginner:part1.segments[1].mcqBeats[2].choices[3]"
   },
   "straight": {
-    "path": "/audio/mcq/e77cc157fa68998de810.wav",
+    "path": "/audio/mcq/d2c2117ac670ac37a490.wav",
     "text": "straight",
     "spokenText": "straight",
     "source": "beginner:part1.segments[2].mcqBeats[1].choices[2]"
   },
   "there are 11 fish": {
-    "path": "/audio/mcq/2ce8c671e978a001af9e.wav",
+    "path": "/audio/mcq/a35ecc1c1ca4284bb3fd.wav",
     "text": "There are 11 fish",
     "spokenText": "There are 11 fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[2]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[2]"
   },
   "there are eight fish": {
-    "path": "/audio/mcq/d1ad45a04317e01414f2.wav",
+    "path": "/audio/mcq/6197bc12969f3160e28e.wav",
     "text": "There are eight fish",
     "spokenText": "There are eight fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are five fish": {
-    "path": "/audio/mcq/002da1bf87c65f49c027.wav",
+    "path": "/audio/mcq/9879243b72dcea15fc35.wav",
     "text": "There are five fish",
     "spokenText": "There are five fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are four fish": {
-    "path": "/audio/mcq/fb57947d8d45977d4140.wav",
+    "path": "/audio/mcq/606be1a87fceeca526a0.wav",
     "text": "There are four fish",
     "spokenText": "There are four fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are nine fish": {
-    "path": "/audio/mcq/2c081b04d294207d0082.wav",
+    "path": "/audio/mcq/2059335117904d741453.wav",
     "text": "There are nine fish",
     "spokenText": "There are nine fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are seven fish": {
-    "path": "/audio/mcq/ba495da5c49a56b97964.wav",
+    "path": "/audio/mcq/785269735bdb94c265c5.wav",
     "text": "There are seven fish",
     "spokenText": "There are seven fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are six fish": {
-    "path": "/audio/mcq/a9f22c36d67cb5ab677d.wav",
+    "path": "/audio/mcq/603dea51533f2e2be26d.wav",
     "text": "There are six fish",
     "spokenText": "There are six fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are ten fish": {
-    "path": "/audio/mcq/b36f1f38ef5dd249907c.wav",
+    "path": "/audio/mcq/712fe8d44794d52217f7.wav",
     "text": "There are ten fish",
     "spokenText": "There are ten fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are three fish": {
-    "path": "/audio/mcq/450866bd9a0a11b433e8.wav",
+    "path": "/audio/mcq/42a65ff98412f837403c.wav",
     "text": "There are three fish",
     "spokenText": "There are three fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there are two fish": {
-    "path": "/audio/mcq/f7888e9daabb39faa767.wav",
+    "path": "/audio/mcq/2e7b245d77e7eda616c0.wav",
     "text": "There are two fish",
     "spokenText": "There are two fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there is eight fish": {
-    "path": "/audio/mcq/05440b925590a155c44b.wav",
+    "path": "/audio/mcq/cd6d98e5f22b505fff0f.wav",
     "text": "There is eight fish",
     "spokenText": "There is eight fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is five fish": {
-    "path": "/audio/mcq/638b807657e40d315b4a.wav",
+    "path": "/audio/mcq/e819e0d14184d43da9fb.wav",
     "text": "There is five fish",
     "spokenText": "There is five fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is four fish": {
-    "path": "/audio/mcq/58c9dba45a5c33a650ee.wav",
+    "path": "/audio/mcq/3c971412a07465f61d27.wav",
     "text": "There is four fish",
     "spokenText": "There is four fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is nine fish": {
-    "path": "/audio/mcq/be97d4ef3a988ed359f7.wav",
+    "path": "/audio/mcq/4debf282c9ca282d8634.wav",
     "text": "There is nine fish",
     "spokenText": "There is nine fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is one fish": {
-    "path": "/audio/mcq/0877c4ff347ed9a679ba.wav",
+    "path": "/audio/mcq/6e149b70c051059878ec.wav",
     "text": "There is one fish",
     "spokenText": "There is one fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[0]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[0]"
   },
   "there is seven fish": {
-    "path": "/audio/mcq/d48b7334aa77cc9542e4.wav",
+    "path": "/audio/mcq/06b98318f247853aed30.wav",
     "text": "There is seven fish",
     "spokenText": "There is seven fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is six fish": {
-    "path": "/audio/mcq/34cfeb38dddac7b61381.wav",
+    "path": "/audio/mcq/190534c1ab85fb03cb04.wav",
     "text": "There is six fish",
     "spokenText": "There is six fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is ten fish": {
-    "path": "/audio/mcq/7c83af3581d2731fb4ae.wav",
+    "path": "/audio/mcq/d42a51f5786c3d3703f9.wav",
     "text": "There is ten fish",
     "spokenText": "There is ten fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is three fish": {
-    "path": "/audio/mcq/c4d9668d01f2bb9ec25f.wav",
+    "path": "/audio/mcq/17bff13157820176962b.wav",
     "text": "There is three fish",
     "spokenText": "There is three fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
   },
   "there is two fish": {
-    "path": "/audio/mcq/427e3cec871ce3e09fb4.wav",
+    "path": "/audio/mcq/b92cfb6a39f1748c2195.wav",
     "text": "There is two fish",
     "spokenText": "There is two fish.",
-    "source": "beginner:part2.segments[7].mcqBeats[0].choices[3]"
+    "source": "beginner:part2.segments[7].mcqBeats[1].choices[3]"
+  },
+  "this is my aquarium": {
+    "path": "/audio/mcq/a991b46ab1d675dfb227.wav",
+    "text": "This is my aquarium",
+    "spokenText": "This is my aquarium.",
+    "source": "beginner:part3.segments[1].part3Beats[1].choices[0]"
+  },
+  "this is my fish": {
+    "path": "/audio/mcq/33596b8e2cdc378f4a3c.wav",
+    "text": "This is my fish",
+    "spokenText": "This is my fish.",
+    "source": "beginner:part3.segments[1].part3Beats[1].choices[1]"
+  },
+  "tropical fish": {
+    "path": "/audio/mcq/293750ec0fa96e3e40d8.wav",
+    "text": "Tropical Fish",
+    "spokenText": "Tropical Fish",
+    "source": "beginner:part3.segments[0].part3Beats[3].choices[2]"
   },
   "water": {
-    "path": "/audio/mcq/f61ff807742994a52b60.wav",
+    "path": "/audio/mcq/d1f9f0582e09f239429b.wav",
     "text": "water",
     "spokenText": "water",
     "source": "beginner:part1.segments[1].mcqBeats[0].choices[2]"
   },
   "what color did you choose?": {
-    "path": "/audio/mcq/985b7d92519f99e35ca3.wav",
+    "path": "/audio/mcq/bf80ee953e9774e0b2a0.wav",
     "text": "What color did you choose?",
     "spokenText": "What color did you choose?",
     "source": "beginner:part2.segments[8].mcqBeats[0].choices[0]"
   },
   "what do you like about your aquarium?": {
-    "path": "/audio/mcq/36c6764251f2c0a637d9.wav",
+    "path": "/audio/mcq/92d8bc32f822f1356b83.wav",
     "text": "What do you like about your aquarium?",
     "spokenText": "What do you like about your aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[3].choices[0]"
   },
   "what do you need for your aquarium?": {
-    "path": "/audio/mcq/b8e78fd6cecaf7c2f44e.wav",
+    "path": "/audio/mcq/80869ab1925d65e82732.wav",
     "text": "What do you need for your aquarium?",
     "spokenText": "What do you need for your aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[3].choices[1]"
   },
   "what fish are in your tank?": {
-    "path": "/audio/mcq/7515eb9ec209d8219f4f.wav",
+    "path": "/audio/mcq/2747cc5babdf4e7f7c7c.wav",
     "text": "What fish are in your tank?",
     "spokenText": "What fish are in your tank?",
     "source": "beginner:part2.segments[8].mcqBeats[2].choices[1]"
   },
   "what fish did you choose?": {
-    "path": "/audio/mcq/d5461d41b30db35c7f4f.wav",
+    "path": "/audio/mcq/52291919b8ca03e6e893.wav",
     "text": "What fish did you choose?",
     "spokenText": "What fish did you choose?",
     "source": "beginner:part2.segments[8].mcqBeats[0].choices[1]"
   },
   "what fish did you find?": {
-    "path": "/audio/mcq/820e5c25f31a47192051.wav",
+    "path": "/audio/mcq/4afe2eb35dd7544b5fe7.wav",
     "text": "What fish did you find?",
     "spokenText": "What fish did you find?",
     "source": "beginner:part2.segments[8].mcqBeats[1].choices[2]"
   },
   "where is your aquarium?": {
-    "path": "/audio/mcq/7ae372dc49b45cb52115.wav",
+    "path": "/audio/mcq/3f71f68ba0b0f62b87e2.wav",
     "text": "Where is your aquarium?",
     "spokenText": "Where is your aquarium?",
     "source": "beginner:part2.segments[8].mcqBeats[3].choices[2]"
   },
   "where is your tank?": {
-    "path": "/audio/mcq/99beb4d7b82adb9ade57.wav",
+    "path": "/audio/mcq/e855d56f017f00766e47.wav",
     "text": "Where is your tank?",
     "spokenText": "Where is your tank?",
     "source": "beginner:part2.segments[8].mcqBeats[2].choices[2]"
   },
+  "white": {
+    "path": "/audio/mcq/a1fe6d0691f13f1f7a98.wav",
+    "text": "white",
+    "spokenText": "white",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[7]"
+  },
   "wood": {
-    "path": "/audio/mcq/930acf389f0289b43ab9.wav",
+    "path": "/audio/mcq/3a19a420fbd896b5318c.wav",
     "text": "wood",
     "spokenText": "wood",
     "source": "beginner:part1.segments[1].mcqBeats[0].choices[1]"
   },
+  "yellow": {
+    "path": "/audio/mcq/746874cef531a8d308bd.wav",
+    "text": "yellow",
+    "spokenText": "yellow",
+    "source": "beginner:part3.segments[0].part3Beats[0].choices[3]"
+  },
+  "yellow coral": {
+    "path": "/audio/mcq/06974b8d34e494932e9f.wav",
+    "text": "Yellow Coral",
+    "spokenText": "Yellow Coral",
+    "source": "beginner:part3.segments[0].part3Beats[1].choices[4]"
+  },
   "やま / mountains": {
-    "path": "/audio/mcq/63ee022edb2f894fe6da.wav",
+    "path": "/audio/mcq/1163afbb7ef3fd2f1f7a.wav",
     "text": "やま / mountains",
     "spokenText": "mountains",
     "source": "beginner:part1.segments[2].choices[1]"
   },
   "ビーチ / beach": {
-    "path": "/audio/mcq/b9c7a11ae474b8ee209e.wav",
+    "path": "/audio/mcq/f3af3003c2e3554a3bb3.wav",
     "text": "ビーチ / beach",
     "spokenText": "beach",
     "source": "beginner:part1.segments[2].choices[0]"

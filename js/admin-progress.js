@@ -1,9 +1,9 @@
 /**
  * Admin 「学習進捗」dashboard — chapter MCQ click stats, phrase checklist, poke counts.
  */
-import { lessonFor } from "./lessons/lesson-catalog.js?v=20260924-part3";
-import { allLessons } from "./lessons/lesson-catalog.js?v=20260924-part3";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260924-part3";
+import { lessonFor } from "./lessons/lesson-catalog.js?v=20260928-variant-kind";
+import { allLessons } from "./lessons/lesson-catalog.js?v=20260928-variant-kind";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260928-variant-kind";
 import { totalPokeCount } from "./activity-log.js";
 import {
   currentFreetalkStats,
@@ -14,11 +14,40 @@ import {
 } from "./progress-contract.js?v=20260921-admin-part-split";
 import {
   computeAccuracyTier,
+  computePresentationStats,
   highestTierByFamily,
   FAMILY_LABELS_JA,
-  BADGE_FAMILIES,
+  badgeFamiliesForLesson,
   familySlotImage,
-} from "./badge-engine.js?v=20260924-part3";
+} from "./badge-engine.js?v=20260928-variant-kind";
+import {
+  resolvePart3Beat,
+  resolvePart3Text,
+} from "./lessons/aquarium-presentation.js?v=20260928-variant-kind";
+
+const PART_LABELS = { part1: "Part 1", part2: "Part 2", part3: "Part 3" };
+
+/**
+ * Part 3 beats (`part3Beats`, kind "mcq") in the admin MCQ shape, resolved
+ * against the learner's own Chapter 0 answers. Choices whose distractor was
+ * random per session ({otherColor}) are dropped; clicked labels still show.
+ */
+function part3McqBeats(seg, memories = {}) {
+  return (seg.part3Beats || [])
+    .filter((beat) => beat?.kind === "mcq")
+    .map((raw) => {
+      const beat = resolvePart3Beat(raw, memories) || raw;
+      const text = (value) => resolvePart3Text(value || "", memories);
+      return {
+        id: raw.id,
+        learnyEn: text(beat.learnyEn),
+        learnyJa: text(beat.learnyJa),
+        choices: (beat.choices || []).map(text).filter((c) => c && !/\{\w+\}/.test(c)),
+        answer: /\{\w+\}/.test(text(beat.answer)) ? "" : text(beat.answer),
+        patterns: [],
+      };
+    });
+}
 
 const LEVEL_META = [
   { id: "beginner", label: "ビギナー", field: "beginnerProgress" },
@@ -31,8 +60,23 @@ function mcqSegmentsForLesson(lesson) {
   return (lesson?.segments || []).filter(
     (s) =>
       (s.mcqBeats && s.mcqBeats.length) ||
+      (s.part3Beats || []).some((b) => b?.kind === "mcq") ||
       (s.items?.length && (s.type === "quiz" || s.type === "final_challenge"))
   );
+}
+
+function beatsForAdminSegment(seg, memories = {}) {
+  if (seg.part3Beats?.length) return part3McqBeats(seg, memories);
+  if (seg.mcqBeats?.length) return seg.mcqBeats;
+  return (seg.items || []).map((item, i) => ({
+    id: item.id || `item-${i}`,
+    learnyEn: item.promptEn || item.promptJa || item.prompt || item.id || `Q${i + 1}`,
+    learnyJa: item.promptJa || "",
+    choices: item.choices || [],
+    answer: item.answer || "",
+    acceptAnyOf: item.acceptAnyOf || [],
+    patterns: item.patterns || [],
+  }));
 }
 
 export function escapeHtml(text) {
@@ -250,7 +294,8 @@ function renderLessonBadgeRow(user, meta, partKey) {
   const accuracy = computeAccuracyTier(part, lesson);
   const ratePct =
     accuracy.total > 0 ? Math.round(accuracy.rate * 1000) / 10 : null;
-  const chips = BADGE_FAMILIES.map((family) => {
+  const families = badgeFamiliesForLesson(lesson);
+  const chips = families.map((family) => {
     const tier = tiers[family];
     const meta = FAMILY_LABELS_JA[family];
     const src = familySlotImage(tier);
@@ -266,17 +311,28 @@ function renderLessonBadgeRow(user, meta, partKey) {
     ratePct != null
       ? `いっぱつせいかい正解率: <strong>${ratePct}%</strong>（${accuracy.correct}/${accuracy.total}）· 今回判定 ${accuracy.tier || "対象外"} · 章のどのプレイでも初回正解なら加点（コレクションは過去最高を保持）`
       : "バッジ用正解率: まだ4択データなし";
-  const freetalk = currentFreetalkStats(part);
+  let speakingLine = "";
+  if (families.includes("presentation")) {
+    const pres = computePresentationStats(part, lesson);
+    const perChapter = pres.chapters
+      .map((c) => `${c.title} ${c.sets.filter((s) => s.spoken).length}/${c.sets.length}`)
+      .join(" · ");
+    speakingLine = `はっぴょう（じぶんの声で言えた）: 章 ${pres.doneCount}/${pres.total} · ${perChapter} · 2回目で自動で進んだセットは含まない（再プレイ時は1回目の音声で通過・加点）`;
+  }
+  if (families.includes("freetalk")) {
+    const freetalk = currentFreetalkStats(part);
+    speakingLine = `おしまいフリートーク英語: 累計 ${freetalk.total} 文 · 今回 ${freetalk.currentRun} 文 · 前回完了時 ${freetalk.finalRun} 文`;
+  }
   const pendingLine = pendingIds.length
     ? `<p class="progress-badge-rate">受け取り待ち（未獲得）: ${pendingIds
         .map(escapeHtml)
         .join("、")}</p>`
     : "";
-  const partLabel = partKey === "part1" ? "Part 1" : "Part 2";
+  const partLabel = PART_LABELS[partKey] || partKey;
   return `<div class="progress-badge-row" aria-label="${escapeHtml(meta.label)} ${partLabel} バッジ">
     <div class="progress-badge-chip-grid">${chips}</div>
     <p class="progress-badge-rate">${rateLine}</p>
-    <p class="progress-badge-rate">おしまいフリートーク英語: 累計 ${freetalk.total} 文 · 今回 ${freetalk.currentRun} 文 · 前回完了時 ${freetalk.finalRun} 文</p>
+    ${speakingLine ? `<p class="progress-badge-rate">${escapeHtml(speakingLine)}</p>` : ""}
     ${pendingLine}
   </div>`;
 }
@@ -347,11 +403,54 @@ function renderChapterPlayCounts(part, lesson) {
   return `<ul class="progress-chapter-plays" aria-label="章プレイ回数">${items}</ul>`;
 }
 
+const PART3_MEMORY_LABELS = [
+  ["name", "なまえ"],
+  ["glassColor", "ガラスの色"],
+  ["decoration1", "かざり1"],
+  ["decoration2", "かざり2"],
+  ["presentationFish", "さかな"],
+];
+
+/** Part 3: Chapter 0 answers + the learner's own presentation, per-set said status. */
+function renderPart3Details(part, lesson) {
+  const memories = part?.memories || {};
+  const answers = PART3_MEMORY_LABELS.map(
+    ([key, label]) =>
+      `<li><span>${escapeHtml(label)}</span> <strong>${escapeHtml(memories[key] || "—")}</strong></li>`
+  ).join("");
+  const pres = computePresentationStats(part, lesson);
+  const chapters = pres.chapters
+    .map((chapter) => {
+      const seg = (lesson.segments || []).find((s) => s.id === chapter.segmentId);
+      const sets = (seg?.part3Sets || [])
+        .map((set) => {
+          const spoken = chapter.sets.find((s) => s.id === set.id)?.spoken;
+          const lines = (set.lines || [])
+            .map((line) => escapeHtml(resolvePart3Text(line.text, memories)))
+            .join("<br>");
+          return `<li class="progress-chapter-play${spoken ? " is-done" : ""}">
+            <span class="progress-chapter-play-title">${lines}</span>
+            <span class="progress-chapter-play-count">${spoken ? "言えた ✓" : "まだ"}</span>
+          </li>`;
+        })
+        .join("");
+      return `<p class="progress-badge-rate"><strong>${escapeHtml(chapter.title)}</strong>${
+        chapter.done ? " — ぜんぶ言えた" : ""
+      }</p><ul class="progress-chapter-plays">${sets}</ul>`;
+    })
+    .join("");
+  return `<details class="progress-mcq-order">
+    <summary>Part 3 のこたえ・はっぴょう</summary>
+    <ul class="progress-chapter-plays" aria-label="Chapter 0 のこたえ">${answers}</ul>
+    ${chapters}
+  </details>`;
+}
+
 function renderHomeworkParts(meta, raw, user) {
   const p1 = raw?.part1 || {};
   const p2 = raw?.part2 || {};
-  const p3 = raw?.part3 || null;
-  const part3Lesson = meta.id === "beginner" && p3 ? lessonFor(meta.id, "part3") : null;
+  const p3 = raw?.part3 || {};
+  const part3Lesson = meta.id === "beginner" ? lessonFor(meta.id, "part3") : null;
   const partHasAnyProgress = (part) =>
     Boolean(
       part?.complete ||
@@ -375,6 +474,7 @@ function renderHomeworkParts(meta, raw, user) {
       }</p>
       ${renderChapterPlayCounts(part, lesson)}
       ${partKey ? renderLessonBadgeRow(user, meta, partKey) : ""}
+      ${partKey === "part3" ? renderPart3Details(part, lesson) : ""}
     </div>`;
   };
   return `<details class="progress-level-block">
@@ -391,7 +491,7 @@ function renderHomeworkParts(meta, raw, user) {
     <div class="progress-level-content">
       ${row("Part 1", p1, lessonFor(meta.id, "part1"), "part1")}
       ${row("Part 2", p2, lessonFor(meta.id, "part2"), "part2")}
-      ${part3Lesson ? row("Part 3", p3, part3Lesson, null) : ""}
+      ${part3Lesson ? row("Part 3", p3, part3Lesson, "part3") : ""}
     </div>
   </details>`;
 }
@@ -488,18 +588,7 @@ function beatStatsFromPart(part, segmentId, beatId) {
 
 function renderMcqChapterBlock(seg, part) {
   const memories = part?.memories || {};
-  const beats =
-    seg.mcqBeats?.length
-      ? seg.mcqBeats
-      : (seg.items || []).map((item, i) => ({
-          id: item.id || `item-${i}`,
-          learnyEn: item.promptEn || item.promptJa || item.prompt || item.id || `Q${i + 1}`,
-          learnyJa: item.promptJa || "",
-          choices: item.choices || [],
-          answer: item.answer || "",
-          acceptAnyOf: item.acceptAnyOf || [],
-          patterns: item.patterns || [],
-        }));
+  const beats = beatsForAdminSegment(seg, memories);
 
   if (!beats.length) return "";
 
@@ -593,14 +682,13 @@ function renderMcqActivity(user) {
   for (const meta of LEVEL_META) {
     const field = user[meta.field];
     if (!field) continue;
-    for (const partKey of ["part1", "part2"]) {
+    const partKeys = meta.id === "beginner" ? ["part1", "part2", "part3"] : ["part1", "part2"];
+    for (const partKey of partKeys) {
       const segs = mcqSegmentsForLesson(lessonFor(meta.id, partKey));
       const part = field[partKey];
       if (!part) continue;
       const attempts = segs.reduce((sum, seg) => {
-        const beats = seg.mcqBeats?.length
-          ? seg.mcqBeats
-          : (seg.items || []).map((item, i) => ({ id: item.id || `item-${i}` }));
+        const beats = beatsForAdminSegment(seg, part.memories || {});
         return (
           sum +
           beats.reduce((s, beat) => s + (beatStatsFromPart(part, seg.id, beat.id).attempts || 0), 0)
@@ -613,7 +701,7 @@ function renderMcqActivity(user) {
       if (!blocks) continue;
       sections.push(
         `<h4 class="progress-mcq-part-title">${escapeHtml(meta.label)} · ${
-          partKey === "part1" ? "Part 1" : "Part 2"
+          PART_LABELS[partKey] || partKey
         }</h4>
         <div class="progress-mcq-board">${blocks}</div>`
       );

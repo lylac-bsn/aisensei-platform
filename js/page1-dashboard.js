@@ -11,9 +11,9 @@ import {
   getBadgeCatalogForLesson,
   getSegmentChapterMeta,
   formatSegmentChapter,
-} from "./lesson-engine.js?v=20260924-part3";
+} from "./lesson-engine.js?v=20260928-variant-kind";
 import {
-  BADGE_FAMILIES,
+  badgeFamiliesForLesson,
   FAMILY_LABELS_JA,
   highestTierByFamily,
   familySlotImage,
@@ -24,8 +24,9 @@ import {
   segmentNeedsAccuracyReplay,
   evaluateAndAwardBadges,
   evaluateAndAwardBadgesForAllParts,
-} from "./badge-engine.js?v=20260924-part3";
+} from "./badge-engine.js?v=20260928-variant-kind";
 import { QuestSfx } from "./quest-sfx.js";
+import { part3PhraseJa } from "./lessons/aquarium-presentation.js?v=20260928-variant-kind";
 
 const PANEL_LABELS = {
   instructions: "使い方",
@@ -120,6 +121,26 @@ const BADGE_GUIDE_JA = Object.freeze({
     hint: "🥉 50%より おおく　🥈 75%より おおく　🥇 ぜんぶ せいかい（どの回のプレイでもOK）",
   },
 });
+
+/** Part 3 overrides (its own chapters, and はっぴょう instead of フリートーク). */
+const PART3_BADGE_GUIDE_JA = Object.freeze({
+  chapter: {
+    meaning: BADGE_GUIDE_JA.chapter.meaning,
+    hint: "🥉 Chapter 0をクリア　🥈 ミニクイズまでクリア　🥇 さいごまでクリア",
+  },
+  presentation: {
+    meaning: "はっぴょうれんしゅう（Chapter 6・Chapter 7・ファイナル）を じぶんの こえで いえた きろくだよ。2かいめで じどうで すすんだ ところは かぞえないよ。2かいめ いこうの プレイでは、こえに だして いえば かぞえるよ。",
+    hint: "🥉 1つの章を ぜんぶ いえた　🥈 2つの章　🥇 3つ ぜんぶ",
+  },
+});
+
+function badgeGuideFor(family) {
+  return (activeLessonId === "part3" && PART3_BADGE_GUIDE_JA[family]) || BADGE_GUIDE_JA[family];
+}
+
+function activeBadgeFamilies() {
+  return badgeFamiliesForLesson(getLesson(activeLessonId));
+}
 
 function escapeHtml(text) {
   return String(text ?? "")
@@ -291,7 +312,11 @@ const receivedBadgeIdsThisSession = new Set();
 
 function useBadgeShelf() {
   const arch = getLesson(activeLessonId)?.architecture;
-  return arch === "beginner-part1-v1" || arch === "beginner-part2-v1";
+  return (
+    arch === "beginner-part1-v1" ||
+    arch === "beginner-part2-v1" ||
+    arch === "beginner-part3-v1"
+  );
 }
 
 function activeBadgePrefix() {
@@ -413,11 +438,12 @@ function refreshDashboardChrome() {
   if (shelf) shelf.hidden = false;
 
   if (useBadgeShelf()) {
+    const families = activeBadgeFamilies();
     const tiers = highestTierByFamily(allBadges, activeBadgePrefix());
-    const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
-    if (badgeCount) badgeCount.textContent = `${earnedFamilies}/3`;
+    const earnedFamilies = families.filter((f) => tiers[f]).length;
+    if (badgeCount) badgeCount.textContent = `${earnedFamilies}/${families.length}`;
     if (slots) {
-      slots.innerHTML = `<div class="trophy-shelf__group trophy-shelf__group--main">${BADGE_FAMILIES.map(
+      slots.innerHTML = `<div class="trophy-shelf__group trophy-shelf__group--main">${families.map(
         (family) => {
           const tier = tiers[family];
           const meta = FAMILY_LABELS_JA[family];
@@ -436,7 +462,6 @@ function refreshDashboardChrome() {
   }
 
   const catalog = getBadgeCatalogForLesson(activeLessonId);
-  // Part 3 has no badges — hide the shelf instead of showing 0/0.
   if (shelf && !catalog.length) shelf.hidden = true;
   const catalogIds = new Set(catalog.map((b) => b.id));
   const earned = allBadges.filter((id) => catalogIds.has(id));
@@ -538,7 +563,9 @@ function renderWords(container) {
     .map((p) => {
       const english = typeof p === "string" ? p : p?.english || "";
       const japanese =
-        (typeof p === "object" && p?.japanese) || phraseTranslationJa(english);
+        (typeof p === "object" && p?.japanese) ||
+        (activeLessonId === "part3" && part3PhraseJa(english)) ||
+        phraseTranslationJa(english);
       return `<li class="dashboard-phrase-item">
         <span class="dashboard-phrase-en">${escapeHtml(english)}</span>
         ${japanese ? `<span class="dashboard-phrase-ja">${escapeHtml(japanese)}</span>` : ""}
@@ -549,17 +576,18 @@ function renderWords(container) {
 
 function renderBadges(container) {
   if (useBadgeShelf()) {
+    const families = activeBadgeFamilies();
     const tiers = highestTierByFamily(
       displayedEarnedBadges(),
       activeBadgePrefix()
     );
-    const earnedFamilies = BADGE_FAMILIES.filter((f) => tiers[f]).length;
+    const earnedFamilies = families.filter((f) => tiers[f]).length;
     container.innerHTML = `
     <div class="dashboard-badge-board">
-      <p class="dashboard-badge-board-desc">${getLesson(activeLessonId).title} のバッジ（${earnedFamilies} / 3）</p>
+      <p class="dashboard-badge-board-desc">${getLesson(activeLessonId).title} のバッジ（${earnedFamilies} / ${families.length}）</p>
       <p class="dashboard-badge-help">バッジは がんばった きろく！ じょうけんを クリアすると、ブロンズ → シルバー → ゴールドに ランクアップするよ。</p>
       <div class="dashboard-badge-grid dashboard-badge-grid--main" role="list">
-        ${BADGE_FAMILIES.map((family) => {
+        ${families.map((family) => {
           const tier = tiers[family];
           const meta = FAMILY_LABELS_JA[family];
           const src = familySlotImage(tier);
@@ -574,9 +602,9 @@ function renderBadges(container) {
         }).join("")}
       </div>
       <div class="dashboard-badge-guide" aria-label="バッジのとりかた">
-        ${BADGE_FAMILIES.map((family) => {
+        ${families.map((family) => {
           const meta = FAMILY_LABELS_JA[family];
-          const guide = BADGE_GUIDE_JA[family];
+          const guide = badgeGuideFor(family);
           return `<section class="dashboard-badge-guide-item">
             <h3>${meta.label}</h3>
             <p>${guide.meaning}</p>
@@ -753,7 +781,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
   refreshDashboardChrome();
   if (useBadgeShelf()) {
-    // Re-score Part 1 and Part 2 so sticky best / mcqLog awards both prefixes.
+    // Re-score every part so sticky best / mcqLog awards all prefixes.
     const { newlyEarned } = evaluateAndAwardBadgesForAllParts();
     queueBadgeReceipts([
       ...loadPendingLessonBadges(),
@@ -776,7 +804,8 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
 
 /** Pick highest newly earned tier per family (bronze+silver in one burst → show silver). */
 function awardsFromNewlyEarned(newlyEarned) {
-  const best = { chapter: null, freetalk: null, accuracy: null };
+  const families = activeBadgeFamilies();
+  const best = {};
   const prefix = activeBadgePrefix();
   for (const id of newlyEarned || []) {
     const parsed = parseBadgeId(id);
@@ -785,7 +814,7 @@ function awardsFromNewlyEarned(newlyEarned) {
     const cur = best[parsed.family];
     if (!cur || rank > (TIER_RANK[cur] || 0)) best[parsed.family] = parsed.tier;
   }
-  return BADGE_FAMILIES.filter((f) => best[f]).map((family) => ({
+  return families.filter((f) => best[f]).map((family) => ({
     family,
     tier: best[family],
   }));

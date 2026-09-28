@@ -12,7 +12,7 @@ import {
   loadBadgeRevocations,
   saveEarnedLessonBadges,
   savePendingLessonBadges,
-} from "./lesson-engine.js?v=20260924-part3";
+} from "./lesson-engine.js?v=20260928-variant-kind";
 import {
   normalizeIdList,
   resolveClaimedBadgeIds,
@@ -168,7 +168,7 @@ export function scheduleProgressSync(db, userId) {
 
 function badgePrefixOf(badgeId) {
   const m = String(badgeId || "").match(
-    /^(.*?)_(chapter|freetalk|accuracy)_(bronze|silver|gold)$/
+    /^(.*?)_(chapter|freetalk|presentation|accuracy)_(bronze|silver|gold)$/
   );
   return m ? m[1] : "";
 }

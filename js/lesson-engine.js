@@ -8,7 +8,7 @@ import {
   PART2_CH5_BEAT1_SPEAK,
   PART2_CH6_BEAT1_SPEAK,
 } from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
-import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260924-part3";
+import { lessonFor, allLessons } from "./lessons/lesson-catalog.js?v=20260928-variant-kind";
 import { normalizeAllowedFavoriteColor } from "./mcq-audio-config.js?v=20260916-part2-audio";
 import {
   buildPartReporting,
@@ -163,13 +163,17 @@ export function usesBeginnerPart3Architecture(
   return getLesson(lessonId, levelId)?.architecture === "beginner-part3-v1";
 }
 
-/** Returns true for any beginner architecture (Part 1 or Part 2). */
+/** Returns true for any beginner architecture with badges (Part 1, 2 or 3). */
 export function usesBeginnerArchitecture(
   lessonId = ACTIVE_LESSON_ID,
   levelId = ACTIVE_LEVEL_ID
 ) {
   const arch = getLesson(lessonId, levelId)?.architecture;
-  return arch === "beginner-part1-v1" || arch === "beginner-part2-v1";
+  return (
+    arch === "beginner-part1-v1" ||
+    arch === "beginner-part2-v1" ||
+    arch === "beginner-part3-v1"
+  );
 }
 
 function storageKey(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
@@ -202,6 +206,8 @@ export function emptyState(lessonId = ACTIVE_LESSON_ID) {
     mcqBadgeFirstTry: {},
     /** Sticky: beat ever first-click correct on any play (いっぱつせいかい). */
     mcqBadgeFirstTryBest: {},
+    /** Sticky (Part 3): seg.set ever said by the learner (not skipped) in presentation practice. */
+    presentationSpokenBest: {},
     /** English sentences spoken during ending free-talk only. */
     endingFreetalkEnglishCount: 0,
     /** Ending free-talk sentence counts keyed by ending chapter play id. */
@@ -231,6 +237,7 @@ function sanitizeLessonState(raw, lessonId) {
   state.mcqBadgePlay = objectOrEmpty(state.mcqBadgePlay);
   state.mcqBadgeFirstTry = objectOrEmpty(state.mcqBadgeFirstTry);
   state.mcqBadgeFirstTryBest = objectOrEmpty(state.mcqBadgeFirstTryBest);
+  state.presentationSpokenBest = objectOrEmpty(state.presentationSpokenBest);
   state.endingFreetalkEnglishByPlay = objectOrEmpty(
     state.endingFreetalkEnglishByPlay
   );
@@ -310,6 +317,7 @@ export function partHasProgress(part) {
     Object.keys(part.chapterPlayCounts || {}).length > 0 ||
     Object.keys(part.mcqBadgeFirstTry || {}).length > 0 ||
     Object.keys(part.mcqBadgeFirstTryBest || {}).length > 0 ||
+    Object.keys(part.presentationSpokenBest || {}).length > 0 ||
     (Array.isArray(part.phrasesSpoken) && part.phrasesSpoken.length > 0) ||
     Number(part.endingFreetalkEnglishCount) > 0 ||
     Number(part.segmentIndex) > 0
@@ -387,6 +395,10 @@ export function resolvePartForSync(lessonId, levelId, cloudPart) {
       local.mcqBadgeFirstTryBest,
       cloud.mcqBadgeFirstTryBest
     ),
+    presentationSpokenBest: mergeBestFirstTryMaps(
+      local.presentationSpokenBest,
+      cloud.presentationSpokenBest
+    ),
     mcqLog: mergeMcqLogs(local.mcqLog, cloud.mcqLog),
     endingFreetalkEnglishCount: Math.max(
       Number(local.endingFreetalkEnglishCount) || 0,
@@ -417,7 +429,8 @@ function looksLikeLessonWipe(incoming, existing) {
     (existing.completedSegmentIds || []).length > 0 ||
     (existing.mcqLog || []).length > 0 ||
     Object.keys(existing.chapterPlayCounts || {}).length > 0 ||
-    Object.keys(existing.mcqBadgeFirstTry || {}).length > 0;
+    Object.keys(existing.mcqBadgeFirstTry || {}).length > 0 ||
+    Object.keys(existing.presentationSpokenBest || {}).length > 0;
   return incomingEmpty && existingHadProgress;
 }
 
@@ -447,6 +460,10 @@ export function saveLessonStateFor(state, lessonId, levelId = ACTIVE_LEVEL_ID) {
             mcqBadgeFirstTryBest: mergeBestFirstTryMaps(
               incoming.mcqBadgeFirstTryBest,
               existing.mcqBadgeFirstTryBest
+            ),
+            presentationSpokenBest: mergeBestFirstTryMaps(
+              incoming.presentationSpokenBest,
+              existing.presentationSpokenBest
             ),
           };
         }
@@ -598,7 +615,7 @@ export function ensureChapterPlayCounted(segmentId, lessonId = ACTIVE_LESSON_ID,
 
 function emitBadgeAwardsIfNeeded(lessonId = ACTIVE_LESSON_ID, levelId = ACTIVE_LEVEL_ID) {
   if (!usesBeginnerArchitecture(lessonId, levelId)) return;
-  import("./badge-engine.js?v=20260924-part3")
+  import("./badge-engine.js?v=20260928-variant-kind")
     .then((m) => {
       const { newlyEarned } = m.evaluateAndAwardBadges(lessonId, levelId);
       if (newlyEarned?.length) {

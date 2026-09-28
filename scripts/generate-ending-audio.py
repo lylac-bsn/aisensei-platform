@@ -61,7 +61,7 @@ def valid_wav(path: Path) -> bool:
                 audio.getnchannels() == CHANNELS
                 and audio.getsampwidth() == SAMPLE_WIDTH
                 and audio.getframerate() == SAMPLE_RATE
-                and audio.getnframes() > SAMPLE_RATE
+                and audio.getnframes() > SAMPLE_RATE // 4
             )
             if not format_ok:
                 return False
@@ -116,9 +116,22 @@ def generate_one(client, item: dict) -> dict:
             return {**item, "filename": filename, "cached": False}
         except Exception as error:  # SDK exceptions vary by API status.
             last_error = error
+            if is_quota_error(error):
+                break
             if attempt < 2:
                 time.sleep(2**attempt)
-    raise RuntimeError(f"Failed to generate {item['key']!r}: {last_error}")
+    raise GenerationError(f"Failed to generate {item['key']!r}: {last_error}", quota=is_quota_error(last_error))
+
+
+class GenerationError(RuntimeError):
+    def __init__(self, message: str, quota: bool = False):
+        super().__init__(message)
+        self.quota = quota
+
+
+def is_quota_error(error) -> bool:
+    text = str(error or "")
+    return "429" in text or "RESOURCE_EXHAUSTED" in text or "Rate limit exceeded" in text
 
 
 def manifest_source(results: list[dict]) -> str:
@@ -214,12 +227,33 @@ def main() -> None:
 
         client = genai.Client(api_key=api_key)
     results = []
+    failed = []
+    quota_hit = False
     for index, item in enumerate(items, 1):
-        result = generate_one(client, item)
+        if quota_hit:
+            filename = f"{audio_id(item)}.wav"
+            if valid_wav(OUTPUT_DIR / filename):
+                results.append({**item, "filename": filename, "cached": True})
+            else:
+                failed.append(item["key"])
+            continue
+        try:
+            result = generate_one(client, item)
+        except GenerationError as error:
+            print(f"[{index}/{len(items)}] FAILED: {error}", file=sys.stderr)
+            failed.append(item["key"])
+            quota_hit = error.quota
+            continue
         results.append(result)
         state = "cached" if result["cached"] else "generated"
         print(f"[{index}/{len(items)}] {state}: {result['key']}")
+    # The runtime falls back to Live for keys missing here, so a partial run is still usable.
     MANIFEST_PATH.write_text(manifest_source(results), encoding="utf-8")
+    if failed:
+        reason = "API quota reached" if quota_hit else "generation errors"
+        raise RuntimeError(
+            f"Wrote {len(results)}/{len(items)} clips; {len(failed)} still missing ({reason}). Re-run to continue."
+        )
     validate(items)
 
 
