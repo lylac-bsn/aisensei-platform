@@ -192,8 +192,8 @@ assert.match(voice, /geminiClient\.inputTranscriptionVocabulary = part3Presentat
 assert.match(geminiApi, /transcription\.language_codes = this\.inputTranscriptionLanguageCodes/);
 assert.match(geminiApi, /transcription\.custom_vocabulary = this\.inputTranscriptionVocabulary/);
 
-// Presentation: the 2nd attempt always passes, but isn't recorded as fully spoken.
-assert.match(voice, /const PART3_PRESENTATION_PASS_AFTER_TRIES = 2;/);
+// Presentation: the 3rd attempt always passes, but isn't recorded as fully spoken.
+assert.match(voice, /const PART3_PRESENTATION_PASS_AFTER_TRIES = 3;/);
 assert.match(voice, /part3AdvancePresentation\(segment, cur, said, \{ record: false \}\)/);
 assert.match(voice, /if \(said && record\) recordPresentationSpoken/);
 

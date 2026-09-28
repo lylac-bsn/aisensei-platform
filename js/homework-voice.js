@@ -465,7 +465,7 @@ const PART3_HANDOFF_AFTER = new Set([
   "p3final",
 ]);
 const PART3_REQUIRED_MEMORIES = ["glassColor", "decoration1", "decoration2", "fishType", "presentationFish"];
-const PART3_PRESENTATION_PASS_AFTER_TRIES = 2;
+const PART3_PRESENTATION_PASS_AFTER_TRIES = 3;
 const PART3_REPLAY_MIN_PLAY = 2;
 const PART3_SPEECH_SETTLE_MS = 1500;
 const PART3_SPEECH_FAIL_GRACE_MS = 2500;
@@ -10546,7 +10546,7 @@ function part3EvaluatePresentation({ typed = false } = {}) {
       part3AdvancePresentation(segment, cur, said);
       return;
     }
-    // Second attempt always passes — kids shouldn't get stuck on STT misses.
+    // Third attempt always passes — kids shouldn't get stuck on STT misses.
     // Not recorded as fully spoken, so presentation badges stay honest.
     if (part3State.tries + 1 >= PART3_PRESENTATION_PASS_AFTER_TRIES) {
       part3State.feedback = null;

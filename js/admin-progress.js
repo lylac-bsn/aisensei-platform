@@ -283,7 +283,7 @@ function renderLessonBadgeRow(user, meta, partKey) {
     const perChapter = pres.chapters
       .map((c) => `${c.title} ${c.sets.filter((s) => s.spoken).length}/${c.sets.length}`)
       .join(" · ");
-    speakingLine = `はっぴょう（じぶんの声で言えた）: 章 ${pres.doneCount}/${pres.total} · ${perChapter} · 2回目で自動で進んだセットは含まない（再プレイ時は1回目の音声で通過・加点）`;
+    speakingLine = `はっぴょう（じぶんの声で言えた）: 章 ${pres.doneCount}/${pres.total} · ${perChapter} · 3回目で自動で進んだセットは含まない（再プレイ時は1回目の音声で通過・加点）`;
   }
   if (families.includes("freetalk")) {
     const freetalk = currentFreetalkStats(part);
