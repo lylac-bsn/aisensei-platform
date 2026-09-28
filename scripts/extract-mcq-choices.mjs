@@ -15,6 +15,7 @@ import {
   PART3_FISH_COLORS,
   PART3_DECORATION1_CHOICES,
   PART3_DECORATION2_POOL,
+  PART3_FISH_CHOICES,
   resolvePart3Text,
 } from "../js/lessons/aquarium-presentation.js";
 
@@ -27,6 +28,11 @@ const PART3_TOKEN_VALUES = {
   decoration1: PART3_DECORATION1_CHOICES,
   decoration2: PART3_DECORATION2_POOL,
   fishColor: PART3_FISH_COLORS,
+  // Presentation line "I chose {presentationFishWithArticle}." — value is memories.presentationFish.
+  presentationFishWithArticle: [
+    ...PART3_FISH_CHOICES.map((f) => f.toLowerCase()).filter((f) => f !== "tropical fish"),
+    ...PART3_FISH_COLORS.map((c) => `${c} tropical fish`),
+  ],
 };
 
 function expandPart3Template(template) {
@@ -39,8 +45,12 @@ function expandPart3Template(template) {
     if (!values) throw new Error(`Unknown Part 3 choice token {${token}} in "${template}"`);
     combos = combos.flatMap((combo) => values.map((value) => ({ ...combo, [token]: value })));
   }
-  return combos.map(({ otherColor, ...memories }) =>
-    resolvePart3Text(template, memories, { otherColor })
+  return combos.map(({ otherColor, presentationFishWithArticle, ...memories }) =>
+    resolvePart3Text(
+      template,
+      presentationFishWithArticle ? { ...memories, presentationFish: presentationFishWithArticle } : memories,
+      { otherColor }
+    )
   );
 }
 
@@ -109,6 +119,10 @@ function visit(value, path = "lesson") {
               : "";
         addLabel(label, `${childPath}[${index}]`);
       });
+    }
+    // Part 3 presentation cards: each line gets a speaker like an MCQ choice.
+    if (key === "lines" && Array.isArray(child)) {
+      child.forEach((line, index) => addLabel(line?.text, `${childPath}[${index}]`));
     }
     visit(child, childPath);
   }

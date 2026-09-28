@@ -801,8 +801,9 @@
         }
         .part3-presentation-line {
             display: flex;
-            align-items: baseline;
+            align-items: center;
             gap: 8px;
+            min-height: 28px;
             margin: 0;
             color: #1b5e20;
             font-size: 1.02rem;
@@ -810,6 +811,18 @@
             line-height: 1.35;
             overflow-wrap: anywhere;
         }
+        .part3-presentation-text { flex: 0 1 auto; }
+        .lesson-choice-speaker.part3-presentation-speaker {
+            flex: 0 0 auto;
+            align-self: center;
+            min-width: 30px;
+            min-height: 28px;
+            width: 30px;
+            height: 28px;
+            border-radius: 9px;
+            border-width: 1.5px;
+        }
+        .lesson-choice-speaker.part3-presentation-speaker svg { width: 16px; height: 16px; }
         .part3-presentation-num {
             flex: 0 0 auto;
             min-width: 1.35em;
@@ -1990,6 +2003,6 @@
         </div>
     </div>
 
-    <script type="module" src="./js/homework-voice.js?v=20260928-variant-kind"></script>
+    <script type="module" src="./js/homework-voice.js?v=20260928-line-audio"></script>
 </body>
 </html>

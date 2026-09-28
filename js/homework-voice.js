@@ -44,7 +44,7 @@ import {
   buildPart3LessonInstructions,
   jumpToSegment,
   recordChapterPlay,
-} from "./lesson-engine.js?v=20260928-variant-kind";
+} from "./lesson-engine.js?v=20260928-admin-sync";
 import { resolveProxyUrl } from "./proxy-config.js";
 import { PART1_ELICIT_JA, CH6_BEAT1_SPEAK } from "./lessons/aquarium-part1.js?v=20260921-retry-variety";
 import { PART2_ELICIT_JA, PART2_CH1_BEAT1_SPEAK, PART2_CH2_BEAT1_SPEAK, PART2_CH3_BEAT1_SPEAK, PART2_CH4_BEAT1_SPEAK, PART2_CH5_BEAT1_SPEAK, PART2_CH6_BEAT1_SPEAK, PART2_ENDING_INTRO_SPEAK, PART2_ENDING_FINALE_SPEAK, PART2_ENDING_TURN_A_SPEAK, PART2_ENDING_TURN_B_SPEAK, PART2_ENDING_TURN_C_SPEAK, part2McqBeatSpeak } from "./lessons/aquarium-part2.js?v=20260922-part2-intro-tts";
@@ -85,7 +85,7 @@ import {
   normalizeMcqChoice,
   getShuffledChoiceLabels,
   clearShuffledChoiceCache,
-} from "./mcq-engine.js?v=20260928-variant-kind";
+} from "./mcq-engine.js?v=20260928-admin-sync";
 import {
   MCQ_AUDIO_COLORS,
   MCQ_AUDIO_FISH_COUNTS,
@@ -9438,6 +9438,9 @@ export function updateLessonBanner() {
 
 let activeChoiceSpeechButton = null;
 let activeChoiceAudioSource = null;
+/** Speaker playback can leak into the open mic; Part 3 ignores STT near it. */
+let choiceSpeechLastActiveAt = 0;
+const CHOICE_SPEECH_MIC_TAIL_MS = 900;
 let activeChoiceAudioRequest = null;
 let choiceAudioContext = null;
 let choiceSpeechRequestId = 0;
@@ -9589,8 +9592,16 @@ function setChoiceSpeakerState(button, state = "") {
   button?.setAttribute("aria-pressed", state === "speaking" ? "true" : "false");
 }
 
+function choiceSpeechNearMic() {
+  return (
+    Boolean(activeChoiceSpeechButton) ||
+    Date.now() - choiceSpeechLastActiveAt < CHOICE_SPEECH_MIC_TAIL_MS
+  );
+}
+
 function finishChoiceSpeech(button, source) {
   if (activeChoiceAudioSource !== source) return;
+  choiceSpeechLastActiveAt = Date.now();
   setChoiceSpeakerState(button);
   button?.setAttribute("aria-pressed", "false");
   activeChoiceSpeechButton = null;
@@ -9598,6 +9609,7 @@ function finishChoiceSpeech(button, source) {
 }
 
 function stopChoiceSpeech() {
+  if (activeChoiceSpeechButton) choiceSpeechLastActiveAt = Date.now();
   choiceSpeechRequestId += 1;
   activeChoiceAudioRequest?.abort();
   activeChoiceAudioRequest = null;
@@ -10552,6 +10564,10 @@ function part3EvaluatePresentation({ typed = false } = {}) {
 }
 
 function part3HandleVoiceTranscript(text) {
+  if (choiceSpeechNearMic()) {
+    dbg("part3 drop STT during line audio", String(text || "").slice(0, 40));
+    return;
+  }
   part3NoteChildSpeech();
   if (!part3IsPresentationSegment() || !part3CurrentSet()) return;
   part3State.transcript = mergeTranscriptChunk(part3State.transcript, text).trim();
@@ -10624,7 +10640,8 @@ function renderPart3PresentationCard(segment, { show }) {
       p.classList.add(ok ? "is-heard" : "is-missed");
       p.title = ok ? "きこえたよ" : "きこえなかったよ";
     }
-    let text = resolvePart3Text(line.text, memories);
+    const fullText = resolvePart3Text(line.text, memories);
+    let text = fullText;
     const blank = resolvePart3Text(line.blank, memories);
     if (cloze && blank) {
       const at = text.toLowerCase().indexOf(blank.toLowerCase());
@@ -10634,7 +10651,26 @@ function renderPart3PresentationCard(segment, { show }) {
     num.className = "part3-presentation-num";
     num.textContent = String(index + 1);
     num.setAttribute("aria-hidden", "true");
-    p.append(num, text);
+    const label = document.createElement("span");
+    label.className = "part3-presentation-text";
+    label.textContent = text;
+    p.append(num, label);
+    // Blanked lines stay silent so the audio doesn't give away the answer.
+    if (text === fullText) {
+      const speaker = document.createElement("button");
+      speaker.type = "button";
+      speaker.className = "lesson-choice-speaker part3-presentation-speaker";
+      speaker.innerHTML = CHOICE_SPEAKER_ICON;
+      speaker.title = `この ぶんを 英語で聞く：${fullText}`;
+      speaker.setAttribute("aria-label", `この ぶんを 英語で聞く：${fullText}`);
+      speaker.setAttribute("aria-pressed", "false");
+      speaker.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        speakChoiceLabel(formatChoiceLabel(fullText), speaker);
+      });
+      p.appendChild(speaker);
+    }
     card.appendChild(p);
   });
   choiceBar.appendChild(card);

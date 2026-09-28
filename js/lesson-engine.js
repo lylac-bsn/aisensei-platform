@@ -26,6 +26,9 @@ const LEVEL_META = {
   advanced: { id: "advanced", headerLabel: "上級", firestoreField: "advancedProgress" },
 };
 
+/** Every writer and the cloud merge must share this cap, or admin drops rows the child still sees. */
+export const PHRASES_SPOKEN_MAX = 200;
+
 export const LESSON_BADGES_KEY = "gc_homework_lessonBadges";
 export const PENDING_LESSON_BADGES_KEY = "gc_homework_pendingLessonBadges";
 export const BADGE_REVOCATIONS_KEY = "gc_hw_badge_revocations";
@@ -381,7 +384,7 @@ export function resolvePartForSync(lessonId, levelId, cloudPart) {
         ...(Array.isArray(cloud.phrasesSpoken) ? cloud.phrasesSpoken : []),
         ...(Array.isArray(local.phrasesSpoken) ? local.phrasesSpoken : []),
       ]),
-    ].slice(-80),
+    ].slice(-PHRASES_SPOKEN_MAX),
     chapterPlayCounts: mergeMaxCountMap(
       local.chapterPlayCounts,
       cloud.chapterPlayCounts
@@ -816,7 +819,7 @@ export function recordPhrase(phrase) {
   if (!p) return loadLessonState();
   const state = loadLessonState();
   if (!state.phrasesSpoken.includes(p)) {
-    state.phrasesSpoken = [...state.phrasesSpoken, p].slice(-80);
+    state.phrasesSpoken = [...state.phrasesSpoken, p].slice(-PHRASES_SPOKEN_MAX);
     saveLessonState(state);
   }
   return state;
@@ -911,7 +914,7 @@ export function completeSegment(segmentId, { userQuote = "", saidTogether = fals
   }
   if (quote && /[a-zA-Z]/.test(quote)) {
     if (!state.phrasesSpoken.includes(quote.trim())) {
-      state.phrasesSpoken = [...state.phrasesSpoken, quote.trim()].slice(-80);
+      state.phrasesSpoken = [...state.phrasesSpoken, quote.trim()].slice(-PHRASES_SPOKEN_MAX);
     }
   }
 

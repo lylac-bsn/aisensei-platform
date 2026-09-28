@@ -16,7 +16,7 @@ import {
   saveBadgeRevocations,
   saveLessonState,
   usesBeginnerArchitecture,
-} from "./lesson-engine.js?v=20260928-variant-kind";
+} from "./lesson-engine.js?v=20260928-admin-sync";
 
 export const BADGE_IMAGES = Object.freeze({
   bronze: "images/completion-badge-bronze.png",

@@ -259,11 +259,40 @@ assert.match(voice, /function part3SpeakStatic\(/);
 assert.match(voice, /part3KickOpening\(\{ staticOnly: true \}\)/);
 assert.match(voice, /part3Speak\(\[nextBeat\.noPraise \? "" : reaction, script\]/);
 assert.match(voice, /function usesPart3Architecture\(/);
-assert.match(voice, /lesson-engine\.js\?v=20260928-variant-kind/);
-assert.doesNotMatch(voice, /lesson-engine\.js\?v=(?!20260928-variant-kind)/);
+assert.match(voice, /lesson-engine\.js\?v=20260928-admin-sync/);
+assert.doesNotMatch(voice, /lesson-engine\.js\?v=(?!20260928-admin-sync)/);
 assert.match(page1, /id="iframe-part3"/);
 assert.match(page1, /voice-tab\.html\?level=beginner&lesson=part3/);
 assert.match(voiceTab, /\.part3-presentation-card/);
+
+// Every presentation line (except the per-learner name line) has a hosted speaker clip.
+{
+  const { MCQ_AUDIO_MANIFEST } = await import("../audio/mcq/manifest.js");
+  const { normalizeMcqAudioLabel } = await import("../js/mcq-audio-config.js");
+  const { formatChoiceLabel } = await import("../js/mcq-engine.js");
+  const fishes = ["cod", "salmon", "puffer fish", ...PART3_FISH_COLORS.map((c) => `${c} tropical fish`)];
+  for (const seg of AQUARIUM_PART3.segments.filter((s) => s.part3Sets)) {
+    for (const line of seg.part3Sets.flatMap((set) => set.lines)) {
+      if (line.text.includes("{name}")) continue;
+      for (const glassColor of PART3_GLASS_COLORS)
+        for (const decoration of PART3_DECORATION2_POOL)
+          for (const presentationFish of fishes) {
+            const text = resolvePart3Text(line.text, {
+              glassColor,
+              decoration1: decoration,
+              decoration2: decoration,
+              presentationFish,
+            });
+            assert.ok(
+              MCQ_AUDIO_MANIFEST[normalizeMcqAudioLabel(formatChoiceLabel(text))],
+              `presentation line audio missing: ${text}`
+            );
+          }
+    }
+  }
+}
+assert.match(voice, /part3-presentation-speaker/);
+assert.match(voice, /function part3HandleVoiceTranscript\(text\) \{\n  if \(choiceSpeechNearMic\(\)\)/);
 
 // Fish-variant beats must stay scored MCQs, or taps never reach recordMcqAttempt.
 for (const fishType of ["salmon", "cod", "puffer fish", "tropical fish"]) {

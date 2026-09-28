@@ -3,7 +3,7 @@
  */
 import { lessonFor } from "./lessons/lesson-catalog.js?v=20260928-variant-kind";
 import { allLessons } from "./lessons/lesson-catalog.js?v=20260928-variant-kind";
-import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260928-variant-kind";
+import { normalizeMcqChoice, formatChoiceLabel } from "./mcq-engine.js?v=20260928-admin-sync";
 import { totalPokeCount } from "./activity-log.js";
 import {
   currentFreetalkStats,
@@ -24,6 +24,10 @@ import {
   resolvePart3Beat,
   resolvePart3Text,
 } from "./lessons/aquarium-presentation.js?v=20260928-variant-kind";
+import {
+  phrasesForChildDisplay,
+  phraseRowForDisplay,
+} from "./phrase-display.js?v=20260928-admin-sync";
 
 const PART_LABELS = { part1: "Part 1", part2: "Part 2", part3: "Part 3" };
 
@@ -241,44 +245,6 @@ function summarizeUserMcqFromParts(user) {
   return { correct, incorrect, attempts };
 }
 
-export function normalizeLevelProgress(raw) {
-  if (!raw || typeof raw !== "object") {
-    return {
-      hasData: false,
-      part1Complete: false,
-      phraseCount: 0,
-      phrases: [],
-      lessonBadges: [],
-    };
-  }
-  const p1 = raw.part1 || {};
-  const p2 = raw.part2 || {};
-  const phrases = [
-    ...(Array.isArray(p1.phrasesSpoken) ? p1.phrasesSpoken : []),
-    ...(Array.isArray(p2.phrasesSpoken) ? p2.phrasesSpoken : []),
-  ];
-  return {
-    hasData: true,
-    part1Complete: Boolean(raw.part1Complete || p1.complete),
-    part2Complete: Boolean(p2.complete),
-    phraseCount: phrases.length,
-    phrases,
-    lessonBadges: Array.isArray(raw.lessonBadges) ? raw.lessonBadges : [],
-    part1,
-    part2,
-  };
-}
-
-/** @deprecated */
-export function normalizeStudentProgress(user) {
-  const p = normalizeLevelProgress(user.beginnerProgress);
-  return {
-    ...p,
-    badgeCount: 0,
-    updatedLabel: formatProgressTimestamp(user.progressUpdatedAt),
-  };
-}
-
 export function collectUserBadges(user, levelField = null) {
   return resolveClaimedBadgeIds(user, levelField);
 }
@@ -403,6 +369,33 @@ function renderChapterPlayCounts(part, lesson) {
   return `<ul class="progress-chapter-plays" aria-label="章プレイ回数">${items}</ul>`;
 }
 
+/** Same list the student sees in 「覚えたフレーズ」 for this part. */
+export function learnedPhrasesForPart(part, lesson, partKey) {
+  return phrasesForChildDisplay(part || {}, {
+    reconcileSearchPlace: lesson?.architecture === "beginner-part1-v1",
+  }).map((p) => phraseRowForDisplay(p, partKey));
+}
+
+function renderLearnedPhrases(part, lesson, partKey) {
+  const rows = learnedPhrasesForPart(part, lesson, partKey);
+  const items = rows.length
+    ? `<ul class="progress-phrases-list">${rows
+        .map(
+          (r) => `<li class="earned">
+            <span class="progress-phrase-mark" aria-hidden="true">✓</span>
+            <strong>${escapeHtml(r.english)}</strong>${
+              r.japanese ? ` <span class="progress-phrase-ja">${escapeHtml(r.japanese)}</span>` : ""
+            }
+          </li>`
+        )
+        .join("")}</ul>`
+    : '<p class="progress-empty-inline">まだフレーズがありません</p>';
+  return `<details class="progress-mcq-order">
+    <summary>生徒画面の「覚えたフレーズ」(${rows.length})</summary>
+    ${items}
+  </details>`;
+}
+
 const PART3_MEMORY_LABELS = [
   ["name", "なまえ"],
   ["glassColor", "ガラスの色"],
@@ -474,6 +467,7 @@ function renderHomeworkParts(meta, raw, user) {
       }</p>
       ${renderChapterPlayCounts(part, lesson)}
       ${partKey ? renderLessonBadgeRow(user, meta, partKey) : ""}
+      ${renderLearnedPhrases(part, lesson, partKey)}
       ${partKey === "part3" ? renderPart3Details(part, lesson) : ""}
     </div>`;
   };

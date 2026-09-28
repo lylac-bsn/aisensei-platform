@@ -12,7 +12,7 @@ import {
   loadBadgeRevocations,
   saveEarnedLessonBadges,
   savePendingLessonBadges,
-} from "./lesson-engine.js?v=20260928-variant-kind";
+} from "./lesson-engine.js?v=20260928-admin-sync";
 import {
   normalizeIdList,
   resolveClaimedBadgeIds,

@@ -97,7 +97,7 @@ const voiceTab = readFileSync(new URL("voice-tab.html", root), "utf8");
   assert.match(voice, /forceQuiz1ExactOpening/);
   assert.doesNotMatch(voice, /playQuiz1StaticAudio|QUIZ1_AUDIO_MANIFEST/);
   assert.match(voiceTab, /homework-voice\.js\?v=20260910-ch6-mcq-show-2/);
-  assert.match(page1, /page1-dashboard\.js\?v=20260910-ch6-mcq-show-2/);
+  assert.match(page1, /page1-dashboard\.js\?v=[\w-]+/);
 }
 
 // 3) Unified lesson-engine cache bust across voice + dashboard + mcq

@@ -3,7 +3,7 @@
  * Stats persist in lesson state for admin analysis.
  */
 
-import { loadLessonState, saveLessonState, getCurrentSegment } from "./lesson-engine.js?v=20260928-variant-kind";
+import { loadLessonState, saveLessonState, getCurrentSegment, PHRASES_SPOKEN_MAX } from "./lesson-engine.js?v=20260928-admin-sync";
 import {
   isBadgeEnabledScope,
   maybeRecordBadgeFirstTry,
@@ -201,7 +201,7 @@ export function recordMcqAttempt({
       const list = Array.isArray(state.phrasesSpoken) ? state.phrasesSpoken.slice() : [];
       if (!list.some((p) => String(typeof p === "string" ? p : p?.english || "").trim() === spoken)) {
         list.push(spoken);
-        state.phrasesSpoken = list.slice(-200);
+        state.phrasesSpoken = list.slice(-PHRASES_SPOKEN_MAX);
       }
     }
   }
