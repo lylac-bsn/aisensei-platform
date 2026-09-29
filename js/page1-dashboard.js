@@ -26,6 +26,8 @@ import {
   evaluateAndAwardBadgesForAllParts,
 } from "./badge-engine.js?v=20260928-variant-kind";
 import { QuestSfx } from "./quest-sfx.js";
+import { MCQ_AUDIO_MANIFEST } from "../audio/mcq/manifest.js?v=20260927-mcq-v2";
+import { normalizeMcqAudioLabel } from "./mcq-audio-config.js";
 import {
   phrasesForChildDisplay,
   phraseRowForDisplay,
@@ -388,12 +390,64 @@ function renderWords(container) {
   container.innerHTML = `<ul class="dashboard-phrase-list">${phrases
     .map((p) => {
       const { english, japanese } = phraseRowForDisplay(p, activeLessonId);
+      const clip = MCQ_AUDIO_MANIFEST[normalizeMcqAudioLabel(english)];
+      const speaker = clip
+        ? `<button type="button" class="dashboard-phrase-speaker" data-phrase-audio="${escapeHtml(clip.path)}" aria-pressed="false" aria-label="英語で聞く：${escapeHtml(english)}" title="英語で聞く">${PHRASE_SPEAKER_ICON}</button>`
+        : "";
       return `<li class="dashboard-phrase-item">
-        <span class="dashboard-phrase-en">${escapeHtml(english)}</span>
-        ${japanese ? `<span class="dashboard-phrase-ja">${escapeHtml(japanese)}</span>` : ""}
+        <div class="dashboard-phrase-text">
+          <span class="dashboard-phrase-en">${escapeHtml(english)}</span>
+          ${japanese ? `<span class="dashboard-phrase-ja">${escapeHtml(japanese)}</span>` : ""}
+        </div>
+        ${speaker}
       </li>`;
     })
     .join("")}</ul>`;
+  container.querySelectorAll(".dashboard-phrase-speaker").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePhraseAudio(button);
+    });
+  });
+}
+
+const PHRASE_SPEAKER_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>';
+
+let phraseAudio = null;
+let phraseAudioButton = null;
+
+function stopPhraseAudio() {
+  if (phraseAudio) {
+    phraseAudio.onended = null;
+    phraseAudio.onerror = null;
+    phraseAudio.pause();
+  }
+  phraseAudioButton?.classList.remove("is-speaking");
+  phraseAudioButton?.setAttribute("aria-pressed", "false");
+  phraseAudio = null;
+  phraseAudioButton = null;
+}
+
+function togglePhraseAudio(button) {
+  const wasActive = phraseAudioButton === button;
+  stopPhraseAudio();
+  if (wasActive) return;
+  const audio = new Audio(button.dataset.phraseAudio);
+  phraseAudio = audio;
+  phraseAudioButton = button;
+  button.classList.add("is-speaking");
+  button.setAttribute("aria-pressed", "true");
+  audio.onended = () => {
+    if (phraseAudio === audio) stopPhraseAudio();
+  };
+  audio.onerror = () => {
+    if (phraseAudio === audio) stopPhraseAudio();
+  };
+  audio.play().catch(() => {
+    if (phraseAudio === audio) stopPhraseAudio();
+  });
 }
 
 function renderBadges(container) {
@@ -486,6 +540,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   }
 
   function openPanel(name) {
+    stopPhraseAudio();
     activePanel = name;
     panel.hidden = false;
     panel.classList.toggle("dashboard-panel--instructions", name === "instructions");
@@ -503,6 +558,7 @@ export function initPage1Dashboard({ isVoiceTab = true } = {}) {
   }
 
   function closePanel() {
+    stopPhraseAudio();
     activePanel = null;
     panel.hidden = true;
     buttons.forEach((b) => b.setAttribute("aria-expanded", "false"));

@@ -432,6 +432,15 @@ let handoffOpeningLiveStt = "";
 let handoffOpeningMissingEnRepairSent = false;
 /** Seeded mid-chapter MCQ beat line — keep chat on that exact script until the child answers. */
 let mcqBeatDisplayLocked = false;
+/**
+ * Answer taps open this long after the question appears / Learny starts speaking,
+ * even if she is still talking (the English part is done by then; JP gloss follows).
+ */
+const MCQ_EARLY_TAP_MS = 3000;
+let assistantSpeechStartedAt = 0;
+let mcqQuestionKey = "";
+let mcqQuestionShownAt = 0;
+let mcqEarlyTapTimerId = null;
 /** Full bubble text (praise + exact elicit). */
 let mcqBeatSeededScript = "";
 /** Exact elicit only (no praise) — used to match Live STT. */
@@ -1299,6 +1308,7 @@ async function playHostedStaticAudio(manifest, key) {
       source.connect(endingAudioGainNode || context.destination);
       activeEndingAudioSource = source;
       activeEndingAudioResolve = resolve;
+      noteAssistantSpeechChunk();
       endingAudioPlaybackEndAt = Date.now() + buffer.duration * 1000;
       source.onended = () => {
         if (activeEndingAudioSource !== source) return;
@@ -10980,7 +10990,12 @@ function renderChoiceBar(segment) {
 
   const appendChoices = (labels, onClick, titleText, question, { withSpeakers = true } = {}) => {
     show();
+    noteMcqQuestionShown(
+      [segment?.id, titleText, question?.en, question?.ja, ...labels].join("\u241f")
+    );
     const locked = choicesLocked();
+    const speakersLocked = choicesLocked({ allowEarlyTap: false });
+    if (locked) scheduleMcqEarlyTapUnlock();
     const titleRow = document.createElement("div");
     titleRow.className = "lesson-choice-title-row";
     const title = document.createElement("p");
@@ -11044,6 +11059,17 @@ function renderChoiceBar(segment) {
         settlePresentedActionableMcq("choice-click");
         if (choicesLocked()) return;
         stopChoiceSpeech();
+        if (assistantIsSpeaking()) {
+          dbg("mcq early tap cuts Learny", label);
+          stopEndingStaticAudio();
+          prepareForUserOutbound();
+          // A cut hosted clip never resumes the mic itself; the reply clip usually
+          // does, but not every answer path plays one.
+          setTimeout(() => {
+            if (activeEndingAudioSource || activeEndingAudioRequest) return;
+            resumeMicAfterEndingStaticAudio();
+          }, 600);
+        }
         onClick(label);
       });
       if (withSpeakers) {
@@ -11054,12 +11080,12 @@ function renderChoiceBar(segment) {
         speaker.title = `この答えを英語で聞く：${label}`;
         speaker.setAttribute("aria-label", `この答えを英語で聞く：${label}`);
         speaker.setAttribute("aria-pressed", "false");
-        speaker.disabled = locked;
+        speaker.disabled = speakersLocked;
         speaker.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
           settlePresentedActionableMcq("choice-audio-click");
-          if (choicesLocked()) return;
+          if (choicesLocked({ allowEarlyTap: false })) return;
           speakChoiceLabel(label, speaker);
         });
         option.append(btn, speaker);
@@ -11113,7 +11139,8 @@ function renderChoiceBar(segment) {
       return;
     }
     // Keep the panel open after a tap — show the next (or same-on-retry) cue
-    // while Learny speaks. Buttons stay locked via choicesLocked() until idle.
+    // while Learny speaks. Buttons stay locked via choicesLocked() until idle
+    // or the early-tap window (MCQ_EARLY_TAP_MS) opens.
     appendChoices(
       getShuffledChoiceLabels(
         `final1:${item.id || item.answer || "item"}`,
@@ -15328,8 +15355,39 @@ function scheduleMcqChoiceUnlock(reason = "unlock") {
   attempt(0);
 }
 
-function choicesLocked() {
-  if (assistantIsSpeaking()) return true;
+function noteAssistantSpeechChunk() {
+  if (assistantIsSpeaking()) return;
+  assistantSpeechStartedAt = Date.now();
+  if (choiceBar && !choiceBar.hidden) scheduleMcqEarlyTapUnlock();
+}
+
+function noteMcqQuestionShown(key) {
+  if (key === mcqQuestionKey) return;
+  mcqQuestionKey = key;
+  mcqQuestionShownAt = Date.now();
+}
+
+function mcqEarlyTapAt() {
+  if (!mcqQuestionShownAt) return Infinity;
+  return Math.max(mcqQuestionShownAt, assistantSpeechStartedAt) + MCQ_EARLY_TAP_MS;
+}
+
+/** Buttons are rendered disabled; re-render once the early-tap window opens. */
+function scheduleMcqEarlyTapUnlock() {
+  if (mcqEarlyTapTimerId) clearTimeout(mcqEarlyTapTimerId);
+  mcqEarlyTapTimerId = null;
+  const wait = mcqEarlyTapAt() - Date.now();
+  if (!Number.isFinite(wait)) return;
+  mcqEarlyTapTimerId = setTimeout(() => {
+    mcqEarlyTapTimerId = null;
+    if (actionState !== "active" || !assistantIsSpeaking()) return;
+    if (!choiceBar || choiceBar.hidden) return;
+    renderChoiceBar(getCurrentSegment());
+  }, Math.max(50, wait + 30));
+}
+
+function choicesLocked({ allowEarlyTap = true } = {}) {
+  if (assistantIsSpeaking() && !(allowEarlyTap && Date.now() >= mcqEarlyTapAt())) return true;
   if (!awaitingAssistantReply) return false;
   if (actionableMcqPresentedSinceUserTurn()) return false;
   // Seeded mid-chapter beat is already on screen — let kids tap while auto-つつく
@@ -17650,6 +17708,7 @@ function handleMessage(message) {
         // cut the buffered ending of 選んでね！
         break;
       }
+      noteAssistantSpeechChunk();
       lastAssistantAudioAt = Date.now();
       lastAssistantProgressAt = lastAssistantAudioAt;
       updateLearnyThinkingUI();
