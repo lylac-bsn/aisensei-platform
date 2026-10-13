@@ -20,6 +20,7 @@ from websockets.exceptions import ConnectionClosed
 # Google auth imports
 import google.auth
 from google.auth.transport.requests import Request
+from http import HTTPStatus
 
 DEBUG = False  # Set to True for verbose logging
 WS_PORT = int(os.environ.get("PORT", 8080))    # Port for WebSocket server (Cloud Run uses PORT env var)
@@ -114,6 +115,84 @@ def check_origin(origin: str) -> bool:
         return True
 
     return o in _allowed_origin_set()
+
+
+# Native (iOS) clients have no trustworthy Origin. They connect to NATIVE_PATH and must present
+# a Firebase ID token (X-Firebase-ID-Token, or Authorization: Bearer) and an App Check token
+# (X-Firebase-AppCheck). Cloud Run's front end drops an Authorization header that carries a
+# Google-signed token, so real clients must use X-Firebase-ID-Token.
+NATIVE_PATH = "/native"
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "ai-sensei-8849b")
+_firebase_app = None
+
+
+def _allowed_app_check_app_ids():
+    raw = os.environ.get("NATIVE_APP_CHECK_APP_IDS", "").strip()
+    return {x.strip() for x in raw.split(",") if x.strip()}
+
+
+def _get_firebase_app():
+    global _firebase_app
+    if _firebase_app is None:
+        import firebase_admin
+        _firebase_app = firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
+    return _firebase_app
+
+
+def verify_firebase_id_token(token: str) -> dict:
+    from firebase_admin import auth
+    return auth.verify_id_token(token, app=_get_firebase_app(), check_revoked=True)
+
+
+def verify_app_check_token(token: str) -> dict:
+    from firebase_admin import app_check
+    return app_check.verify_token(token, app=_get_firebase_app())
+
+
+def _bearer(headers) -> str:
+    value = (headers.get("Authorization") or "").strip()
+    if value[:7].lower() != "bearer ":
+        return ""
+    return value[7:].strip()
+
+
+async def authenticate_native_request(headers) -> tuple:
+    """Returns (uid, None) on success or (None, reason) on failure. Never trusts Origin."""
+    id_token = (headers.get("X-Firebase-ID-Token") or "").strip() or _bearer(headers)
+    app_check_token = (headers.get("X-Firebase-AppCheck") or "").strip()
+    if not id_token or not app_check_token:
+        return None, "missing credentials"
+    try:
+        app_check_claims = await asyncio.to_thread(verify_app_check_token, app_check_token)
+    except Exception as e:
+        return None, f"app check rejected ({type(e).__name__})"
+    allowed_ids = _allowed_app_check_app_ids()
+    if allowed_ids and app_check_claims.get("app_id") not in allowed_ids:
+        return None, "app check app_id not allowed"
+    try:
+        id_claims = await asyncio.to_thread(verify_firebase_id_token, id_token)
+    except Exception as e:
+        return None, f"id token rejected ({type(e).__name__})"
+    uid = id_claims.get("uid") or id_claims.get("sub")
+    if not uid:
+        return None, "id token has no uid"
+    return uid, None
+
+
+def _request_path(request) -> str:
+    return urlparse(getattr(request, "path", "") or "").path or "/"
+
+
+async def process_request(connection, request):
+    """Pre-upgrade gate. Web paths are untouched; the native path is rejected with 401 unless verified."""
+    if _request_path(request) != NATIVE_PATH:
+        return None
+    uid, reason = await authenticate_native_request(request.headers)
+    if not uid:
+        print(f"❌ Rejected native connection: {reason}")
+        return connection.respond(HTTPStatus.UNAUTHORIZED, "Unauthorized\n")
+    connection.native_uid = uid
+    return None
 
 
 def get_origin(websocket) -> str:
@@ -241,14 +320,22 @@ async def handle_websocket_client(client_websocket) -> None:
     Handles a new WebSocket client connection.
     Expects first message with optional bearer_token and service_url.
     """
-    # Origin check (compatible with websockets 13+)
-    origin = get_origin(client_websocket)
-    if not check_origin(origin):
-        print(f"❌ Rejected connection from disallowed origin: {origin}")
-        await client_websocket.close(code=1008, reason="Origin not allowed")
-        return
+    request = getattr(client_websocket, "request", None)
+    is_native = request is not None and _request_path(request) == NATIVE_PATH
+    if is_native:
+        if not getattr(client_websocket, "native_uid", None):
+            await client_websocket.close(code=1008, reason="Unauthorized")
+            return
+        print("🔌 New native WebSocket client connection (verified)")
+    else:
+        # Origin check (compatible with websockets 13+)
+        origin = get_origin(client_websocket)
+        if not check_origin(origin):
+            print(f"❌ Rejected connection from disallowed origin: {origin}")
+            await client_websocket.close(code=1008, reason="Origin not allowed")
+            return
 
-    print(f"🔌 New WebSocket client connection from origin: {origin}")
+        print(f"🔌 New WebSocket client connection from origin: {origin}")
     try:
         # Wait for the first message from the client
         service_setup_message = await asyncio.wait_for(
@@ -256,7 +343,8 @@ async def handle_websocket_client(client_websocket) -> None:
         )
         service_setup_message_data = json.loads(service_setup_message)
 
-        bearer_token = service_setup_message_data.get("bearer_token")
+        # Native clients never supply upstream Google credentials.
+        bearer_token = None if is_native else service_setup_message_data.get("bearer_token")
         service_url = service_setup_message_data.get("service_url")
 
         # If no bearer token provided, generate one using default credentials
@@ -309,6 +397,7 @@ async def start_websocket_server():
         handle_websocket_client,
         host,
         WS_PORT,
+        process_request=process_request,
         max_size=MAX_MESSAGE_SIZE,
         ping_timeout=PING_TIMEOUT,
         close_timeout=CLOSE_TIMEOUT,
