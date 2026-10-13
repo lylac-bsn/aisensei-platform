@@ -1,4 +1,7 @@
 const COST_PROJECT_ID = "ai-sensei-8849b";
+// Project of the Gemini API key used to pre-generate lesson audio (TTS).
+const AUDIO_KEY_PROJECT_ID = "gen-lang-client-0524969604";
+const AUDIO_KEY_SUFFIX = "（音声生成キー）";
 const BILLING_TABLE =
   process.env.BILLING_EXPORT_TABLE ||
   "ai-sensei-8849b.billing_export.gcp_billing_export_v1_0117ED_8AA7E1_647954";
@@ -55,13 +58,14 @@ function billingQuery(table = BILLING_TABLE) {
   return `
     SELECT
       FORMAT_DATE('%Y-%m-%d', DATE(usage_start_time, '${COST_TIME_ZONE}')) AS day,
-      service.description AS service,
+      IF(project.id = @projectId, service.description,
+         CONCAT(service.description, '${AUDIO_KEY_SUFFIX}')) AS service,
       SUM(cost) AS cost,
       SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) AS credits,
       ANY_VALUE(currency) AS currency,
       MAX(export_time) AS lastExport
     FROM \`${table}\`
-    WHERE project.id = @projectId
+    WHERE project.id IN (@projectId, @audioKeyProjectId)
       AND _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP(@startDate), INTERVAL 5 DAY)
       AND DATE(usage_start_time, '${COST_TIME_ZONE}') BETWEEN @startDate AND @endDate
     GROUP BY day, service
@@ -220,6 +224,7 @@ function validateCostEntry(input) {
 
 module.exports = {
   COST_PROJECT_ID,
+  AUDIO_KEY_PROJECT_ID,
   BILLING_TABLE,
   billingQuery,
   clampDays,

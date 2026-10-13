@@ -4,6 +4,7 @@ const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const {
   COST_PROJECT_ID,
+  AUDIO_KEY_PROJECT_ID,
   billingQuery,
   costRange,
   summarizeCosts,
@@ -133,8 +134,9 @@ async function listCostEntries() {
 /**
  * getCostSummary
  *
- * Admin-only. Google Cloud costs for ai-sensei-8849b from the BigQuery billing
- * export (net of credits) plus manual cost entries, bucketed by day or month.
+ * Admin-only. Google Cloud costs for ai-sensei-8849b and the audio-generation
+ * Gemini API key's project, from the BigQuery billing export (net of credits),
+ * plus manual cost entries, bucketed by day or month.
  *
  * @param {number} data.days - Range length in days (7–400, default 30)
  */
@@ -151,6 +153,7 @@ exports.getCostSummary = onCall(
         query: billingQuery(),
         params: {
           projectId: COST_PROJECT_ID,
+          audioKeyProjectId: AUDIO_KEY_PROJECT_ID,
           startDate: bigquery.date(range.startDate),
           endDate: bigquery.date(range.endDate),
         },
