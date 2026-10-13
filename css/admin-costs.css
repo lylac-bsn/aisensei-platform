@@ -1,0 +1,203 @@
+.cost-panel {
+  background: var(--bg-white);
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  margin-bottom: 1.5rem;
+}
+
+.cost-panel h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.cost-panel-desc,
+.cost-meta,
+.cost-empty {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.cost-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.cost-range-btn,
+.cost-btn-small {
+  padding: 0.4rem 0.9rem;
+  border: 2px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-white);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cost-range-btn.active {
+  background: var(--primary-red);
+  border-color: transparent;
+  color: #fff;
+}
+
+.cost-btn-small {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.cost-btn-danger {
+  color: #d32f2f;
+}
+
+.cost-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.cost-card {
+  background: var(--beige);
+  border: 1px solid var(--beige-dark);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
+.cost-card-label {
+  font-size: 0.8rem;
+  color: #888;
+  font-weight: 700;
+}
+
+.cost-card-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.cost-card-sub {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.cost-meta {
+  margin-bottom: 0.75rem;
+}
+
+.cost-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cost-grid {
+  stroke: #eee;
+  stroke-width: 1;
+}
+
+.cost-axis {
+  font-size: 11px;
+  fill: #888;
+}
+
+.cost-hover {
+  fill: transparent;
+}
+
+.cost-hover:hover {
+  fill: rgba(0, 0, 0, 0.04);
+}
+
+.cost-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  font-size: 0.82rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.cost-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cost-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.cost-subhead {
+  font-size: 1.05rem;
+  margin: 0.5rem 0;
+}
+
+.cost-table td,
+.cost-table th {
+  font-size: 0.85rem;
+}
+
+.cost-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cost-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.cost-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+  align-items: end;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 14px;
+}
+
+.cost-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.cost-form input,
+.cost-form select {
+  padding: 0.5rem 0.6rem;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.cost-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cost-form-actions button {
+  padding: 0.55rem 1rem;
+  border-radius: 10px;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--accent-green);
+  color: #fff;
+}
+
+.cost-form-actions button[type="button"] {
+  background: #eee;
+  color: var(--text-dark);
+}

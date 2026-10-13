@@ -6,6 +6,7 @@
     <title>Gamecollege - Admin Panel</title>
     <link rel="icon" href="images/tab-logo.png" type="image/png">
     <link rel="stylesheet" href="css/admin.css?v=20260910-mcq-errors">
+    <link rel="stylesheet" href="css/admin-costs.css?v=20261013-costs">
     <style>
         :root {
             --bg-main: #FFF8F0;
@@ -1474,6 +1475,7 @@
         <div class="admin-tabs" role="tablist">
             <button type="button" class="admin-tab active" data-tab="time" role="tab" aria-selected="true">時間管理</button>
             <button type="button" class="admin-tab" data-tab="progress" role="tab" aria-selected="false">学習進捗</button>
+            <button type="button" class="admin-tab" data-tab="costs" role="tab" aria-selected="false">コスト</button>
         </div>
 
         <div id="tab-time" class="admin-tab-panel" role="tabpanel">
@@ -1613,6 +1615,30 @@
                 </div>
             </div>
         </div>
+
+        <div id="tab-costs" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="cost-panel">
+                <h2>コスト</h2>
+                <p class="cost-panel-desc">Google Cloud（ai-sensei-8849b）の課金データと、手入力のその他のコストです。</p>
+                <div class="cost-toolbar" id="cost-ranges"></div>
+                <div id="cost-dashboard">
+                    <p class="cost-empty"><span class="spinner"></span> 読み込み中...</p>
+                </div>
+                <form id="cost-form" class="cost-form">
+                    <input type="hidden" id="cost-id">
+                    <label>項目<input type="text" id="cost-label" maxlength="60" required placeholder="例: ドメイン"></label>
+                    <label>金額（円）<input type="number" id="cost-amount" min="1" step="any" required></label>
+                    <label>種類<select id="cost-kind"><option value="once">1回</option><option value="monthly">毎月</option></select></label>
+                    <label>日付<input type="date" id="cost-start" required></label>
+                    <label>終了日（毎月のみ）<input type="date" id="cost-end"></label>
+                    <label>メモ<input type="text" id="cost-note" maxlength="200"></label>
+                    <div class="cost-form-actions">
+                        <button type="submit" id="cost-submit">追加</button>
+                        <button type="button" id="cost-cancel" hidden>キャンセル</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- Toast -->
@@ -1626,6 +1652,7 @@
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-functions.js";
         import { renderProgressDashboard, renderActivityTimeline } from "./js/admin-progress.js?v=20260928-pass-third";
         import { fetchUserActivity } from "./js/activity-log.js";
+        import { COST_RANGES, renderCostSummary } from "./js/admin-costs.js?v=20261013-costs";
 
         const firebaseConfig = {
             apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -1822,9 +1849,108 @@
             });
             document.getElementById('tab-time').hidden = tabName !== 'time';
             document.getElementById('tab-progress').hidden = tabName !== 'progress';
-            document.getElementById('admin-view').classList.toggle('admin-view--wide', tabName === 'progress');
+            document.getElementById('tab-costs').hidden = tabName !== 'costs';
+            document.getElementById('admin-view').classList.toggle('admin-view--wide', tabName === 'progress' || tabName === 'costs');
             if (tabName === 'progress') renderProgressPanel();
+            if (tabName === 'costs' && !costSummary) loadCosts();
         }
+
+        // ============================================
+        // Costs
+        // ============================================
+        let costDays = COST_RANGES[0].days;
+        let costSummary = null;
+        let costLoadSeq = 0;
+
+        function renderCostRanges() {
+            document.getElementById('cost-ranges').innerHTML = COST_RANGES.map(r =>
+                `<button type="button" class="cost-range-btn${r.days === costDays ? ' active' : ''}" data-days="${r.days}">${r.label}</button>`
+            ).join('') + '<button type="button" class="cost-range-btn" data-cost-refresh="1">更新</button>';
+        }
+
+        async function loadCosts() {
+            renderCostRanges();
+            const mount = document.getElementById('cost-dashboard');
+            mount.innerHTML = '<p class="cost-empty"><span class="spinner"></span> 読み込み中...</p>';
+            const seq = ++costLoadSeq;
+            try {
+                const res = await httpsCallable(functions, 'getCostSummary')({ days: costDays });
+                if (seq !== costLoadSeq) return;
+                costSummary = res.data;
+                mount.innerHTML = renderCostSummary(costSummary);
+            } catch (err) {
+                if (seq !== costLoadSeq) return;
+                mount.innerHTML = `<p class="cost-empty">${escapeHtml(err.message || 'コストの読み込みに失敗しました。')}</p>`;
+            }
+        }
+
+        function resetCostForm() {
+            document.getElementById('cost-form').reset();
+            document.getElementById('cost-id').value = '';
+            document.getElementById('cost-submit').textContent = '追加';
+            document.getElementById('cost-cancel').hidden = true;
+        }
+
+        document.getElementById('cost-ranges').addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            if (btn.dataset.days) costDays = Number(btn.dataset.days);
+            loadCosts();
+        });
+
+        document.getElementById('cost-dashboard').addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-cost-action]');
+            if (!btn || !costSummary) return;
+            const entry = (costSummary.entries || []).find(x => x.id === btn.dataset.id);
+            if (!entry) return;
+            if (btn.dataset.costAction === 'edit') {
+                document.getElementById('cost-id').value = entry.id;
+                document.getElementById('cost-label').value = entry.label;
+                document.getElementById('cost-amount').value = entry.amount;
+                document.getElementById('cost-kind').value = entry.kind;
+                document.getElementById('cost-start').value = entry.startDate;
+                document.getElementById('cost-end').value = entry.endDate || '';
+                document.getElementById('cost-note').value = entry.note || '';
+                document.getElementById('cost-submit').textContent = '保存';
+                document.getElementById('cost-cancel').hidden = false;
+                document.getElementById('cost-label').focus();
+                return;
+            }
+            if (!confirm(`「${entry.label}」を削除しますか？`)) return;
+            try {
+                await httpsCallable(functions, 'deleteCostEntry')({ id: entry.id });
+                showToast('削除しました。');
+                loadCosts();
+            } catch (err) {
+                showToast(err.message || '削除に失敗しました。', 'error');
+            }
+        });
+
+        document.getElementById('cost-cancel').addEventListener('click', resetCostForm);
+
+        document.getElementById('cost-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submit = document.getElementById('cost-submit');
+            submit.disabled = true;
+            try {
+                await httpsCallable(functions, 'saveCostEntry')({
+                    id: document.getElementById('cost-id').value || null,
+                    label: document.getElementById('cost-label').value,
+                    amount: Number(document.getElementById('cost-amount').value),
+                    kind: document.getElementById('cost-kind').value,
+                    startDate: document.getElementById('cost-start').value,
+                    endDate: document.getElementById('cost-end').value,
+                    note: document.getElementById('cost-note').value,
+                });
+                showToast('保存しました。');
+                resetCostForm();
+                loadCosts();
+            } catch (err) {
+                showToast(err.message || '保存に失敗しました。', 'error');
+            } finally {
+                submit.disabled = false;
+            }
+        });
 
         document.querySelectorAll('.admin-tab').forEach(btn => {
             btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab));

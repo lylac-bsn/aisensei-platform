@@ -1,7 +1,16 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const {
+  COST_PROJECT_ID,
+  billingQuery,
+  costRange,
+  summarizeCosts,
+  validateCostEntry,
+} = require("./cost-summary");
+
+const COST_ENTRIES = "adminCostEntries";
 
 // Initialize Firebase Admin SDK
 initializeApp();
@@ -92,5 +101,118 @@ exports.deleteUserAccount = onCall(
       success: true,
       message: "アカウントを完全に削除しました。",
     };
+  }
+);
+
+async function requireAdmin(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "ログインが必要です。");
+  }
+  const callerDoc = await getFirestore().collection("users").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data().role !== "admin") {
+    throw new HttpsError("permission-denied", "管理者権限がありません。");
+  }
+}
+
+async function listCostEntries() {
+  const snap = await getFirestore().collection(COST_ENTRIES).orderBy("startDate", "desc").get();
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      label: data.label,
+      amount: data.amount,
+      kind: data.kind,
+      startDate: data.startDate,
+      endDate: data.endDate || "",
+      note: data.note || "",
+    };
+  });
+}
+
+/**
+ * getCostSummary
+ *
+ * Admin-only. Google Cloud costs for ai-sensei-8849b from the BigQuery billing
+ * export (net of credits) plus manual cost entries, bucketed by day or month.
+ *
+ * @param {number} data.days - Range length in days (7–400, default 30)
+ */
+exports.getCostSummary = onCall(
+  { region: "asia-northeast1" },
+  async (request) => {
+    await requireAdmin(request);
+    const range = costRange(request.data?.days);
+    const { BigQuery } = require("@google-cloud/bigquery");
+    const bigquery = new BigQuery({ projectId: COST_PROJECT_ID });
+    let rows;
+    try {
+      [rows] = await bigquery.query({
+        query: billingQuery(),
+        params: {
+          projectId: COST_PROJECT_ID,
+          startDate: bigquery.date(range.startDate),
+          endDate: bigquery.date(range.endDate),
+        },
+        location: "US",
+      });
+    } catch (err) {
+      console.error("billing query failed", err);
+      throw new HttpsError("internal", "課金データの取得に失敗しました。");
+    }
+    const entries = await listCostEntries();
+    return { ...summarizeCosts(rows, entries, range), days: range.days, entries };
+  }
+);
+
+/**
+ * saveCostEntry
+ *
+ * Admin-only. Creates or updates a manual cost entry (non-Google-Cloud costs
+ * such as subscriptions or domains).
+ */
+exports.saveCostEntry = onCall(
+  { region: "asia-northeast1" },
+  async (request) => {
+    await requireAdmin(request);
+    const { entry, error } = validateCostEntry(request.data);
+    if (error) throw new HttpsError("invalid-argument", error);
+    const col = getFirestore().collection(COST_ENTRIES);
+    const id = request.data?.id;
+    if (id !== undefined && id !== null && id !== "") {
+      if (typeof id !== "string" || !/^[a-zA-Z0-9]{1,128}$/.test(id)) {
+        throw new HttpsError("invalid-argument", "無効なIDです。");
+      }
+      const ref = col.doc(id);
+      if (!(await ref.get()).exists) {
+        throw new HttpsError("not-found", "項目が見つかりません。");
+      }
+      await ref.update({ ...entry, updatedAt: FieldValue.serverTimestamp(), updatedBy: request.auth.uid });
+      return { id };
+    }
+    const ref = await col.add({
+      ...entry,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: request.auth.uid,
+    });
+    return { id: ref.id };
+  }
+);
+
+/**
+ * deleteCostEntry
+ *
+ * Admin-only. Deletes a manual cost entry.
+ */
+exports.deleteCostEntry = onCall(
+  { region: "asia-northeast1" },
+  async (request) => {
+    await requireAdmin(request);
+    const id = request.data?.id;
+    if (typeof id !== "string" || !/^[a-zA-Z0-9]{1,128}$/.test(id)) {
+      throw new HttpsError("invalid-argument", "無効なIDです。");
+    }
+    await getFirestore().collection(COST_ENTRIES).doc(id).delete();
+    return { success: true };
   }
 );
