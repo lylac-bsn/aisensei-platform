@@ -1475,7 +1475,7 @@
         <div class="admin-tabs" role="tablist">
             <button type="button" class="admin-tab active" data-tab="time" role="tab" aria-selected="true">時間管理</button>
             <button type="button" class="admin-tab" data-tab="progress" role="tab" aria-selected="false">学習進捗</button>
-            <button type="button" class="admin-tab" data-tab="costs" role="tab" aria-selected="false">コスト</button>
+            <button type="button" class="admin-tab" data-tab="costs" id="tab-costs-btn" role="tab" aria-selected="false" hidden>コスト</button>
         </div>
 
         <div id="tab-time" class="admin-tab-panel" role="tabpanel">
@@ -1620,7 +1620,12 @@
             <div class="cost-panel">
                 <h2>コスト</h2>
                 <p class="cost-panel-desc">Google Cloud（ai-sensei-8849b と音声生成用 Gemini API キーのプロジェクト）の課金データと、手入力のその他のコストです。</p>
-                <div class="cost-toolbar" id="cost-ranges"></div>
+                <div class="cost-toolbar">
+                    <div id="cost-ranges"></div>
+                    <label class="cost-period">開始<input type="date" id="cost-from"></label>
+                    <label class="cost-period">終了<input type="date" id="cost-to"></label>
+                    <button type="button" class="cost-range-btn" id="cost-apply-period">この期間</button>
+                </div>
                 <div id="cost-dashboard">
                     <p class="cost-empty"><span class="spinner"></span> 読み込み中...</p>
                 </div>
@@ -1676,6 +1681,8 @@
         let usersData = []; // { id, displayName, email, remainingTime, beginnerProgress, ... }
         let bulkMode = 'set'; // 'set' or 'add'
         let activeAdminTab = 'time';
+        let isOwnerAdmin = false;
+        const OWNER_EMAIL = 'growbuddy@gc.com';
 
         // ============================================
         // Auth
@@ -1686,16 +1693,24 @@
                 const userRef = doc(db, "users", user.uid);
                 const snap = await getDoc(userRef);
 
-                if (!snap.exists() || snap.data().role !== 'admin') {
+                const profile = snap.exists() ? snap.data() : null;
+                const email = String(profile?.email || user.email || '').trim().toLowerCase();
+                isOwnerAdmin = profile?.role === 'owner' && email === OWNER_EMAIL;
+                const isAdmin = profile?.role === 'admin' || isOwnerAdmin;
+                if (!isAdmin) {
                     showToast('管理者権限がありません。', 'error');
                     await signOut(auth);
                     return;
                 }
 
+                document.getElementById('tab-costs-btn').hidden = !isOwnerAdmin;
+                if (!isOwnerAdmin && activeAdminTab === 'costs') switchAdminTab('time');
                 document.getElementById('login-view').style.display = 'none';
                 document.getElementById('admin-view').style.display = 'block';
                 loadUsers();
             } else {
+                isOwnerAdmin = false;
+                document.getElementById('tab-costs-btn').hidden = true;
                 document.getElementById('login-view').style.display = 'flex';
                 document.getElementById('admin-view').style.display = 'none';
             }
@@ -1749,8 +1764,9 @@
 
                 // Sort: admin last, then alphabetically
                 usersData.sort((a, b) => {
-                    if (a.role === 'admin' && b.role !== 'admin') return 1;
-                    if (a.role !== 'admin' && b.role === 'admin') return -1;
+                    const staff = (role) => role === 'admin' || role === 'owner';
+                    if (staff(a.role) && !staff(b.role)) return 1;
+                    if (!staff(a.role) && staff(b.role)) return -1;
                     return (a.displayName || a.email).localeCompare(b.displayName || b.email);
                 });
 
@@ -1841,6 +1857,7 @@
         });
 
         function switchAdminTab(tabName) {
+            if (tabName === 'costs' && !isOwnerAdmin) return;
             activeAdminTab = tabName;
             document.querySelectorAll('.admin-tab').forEach(btn => {
                 const active = btn.dataset.tab === tabName;
@@ -1859,22 +1876,30 @@
         // Costs
         // ============================================
         let costDays = COST_RANGES[0].days;
+        let costFrom = '';
+        let costTo = '';
         let costSummary = null;
         let costLoadSeq = 0;
 
         function renderCostRanges() {
+            const custom = Boolean(costFrom && costTo);
             document.getElementById('cost-ranges').innerHTML = COST_RANGES.map(r =>
-                `<button type="button" class="cost-range-btn${r.days === costDays ? ' active' : ''}" data-days="${r.days}">${r.label}</button>`
+                `<button type="button" class="cost-range-btn${!custom && r.days === costDays ? ' active' : ''}" data-days="${r.days}">${r.label}</button>`
             ).join('') + '<button type="button" class="cost-range-btn" data-cost-refresh="1">更新</button>';
+            document.getElementById('cost-apply-period').classList.toggle('active', custom);
         }
 
         async function loadCosts() {
+            if (!isOwnerAdmin) return;
             renderCostRanges();
             const mount = document.getElementById('cost-dashboard');
             mount.innerHTML = '<p class="cost-empty"><span class="spinner"></span> 読み込み中...</p>';
             const seq = ++costLoadSeq;
+            const payload = costFrom && costTo
+                ? { startDate: costFrom, endDate: costTo }
+                : { days: costDays };
             try {
-                const res = await httpsCallable(functions, 'getCostSummary')({ days: costDays });
+                const res = await httpsCallable(functions, 'getCostSummary')(payload);
                 if (seq !== costLoadSeq) return;
                 costSummary = res.data;
                 mount.innerHTML = renderCostSummary(costSummary);
@@ -1894,7 +1919,23 @@
         document.getElementById('cost-ranges').addEventListener('click', (e) => {
             const btn = e.target.closest('button');
             if (!btn) return;
-            if (btn.dataset.days) costDays = Number(btn.dataset.days);
+            if (btn.dataset.days) {
+                costDays = Number(btn.dataset.days);
+                costFrom = '';
+                costTo = '';
+            }
+            loadCosts();
+        });
+
+        document.getElementById('cost-apply-period').addEventListener('click', () => {
+            const from = document.getElementById('cost-from').value;
+            const to = document.getElementById('cost-to').value;
+            if (!from || !to) {
+                showToast('開始日と終了日を選んでください。', 'error');
+                return;
+            }
+            costFrom = from;
+            costTo = to;
             loadCosts();
         });
 
@@ -1998,9 +2039,13 @@
                 if (u.remainingTime <= 0) timeClass = 'time-zero';
                 else if (u.remainingTime < 600) timeClass = 'time-low';
 
-                const roleTag = u.role === 'admin' ? ' <span style="font-size:0.7rem; background:#e3f2fd; color:#1565c0; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">ADMIN</span>' : '';
+                const roleTag = u.role === 'owner'
+                    ? ' <span style="font-size:0.7rem; background:#fde8e8; color:#b71c1c; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">オーナー</span>'
+                    : u.role === 'admin'
+                        ? ' <span style="font-size:0.7rem; background:#e3f2fd; color:#1565c0; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">ADMIN</span>'
+                        : '';
 
-                const deleteBtn = u.role !== 'admin'
+                const deleteBtn = u.role !== 'admin' && u.role !== 'owner'
                     ? `<button class="btn-delete-user" onclick="deleteUser(${idx})">削除</button>`
                     : '';
 
@@ -2035,6 +2080,10 @@
         // ============================================
         window.saveUser = async function(idx) {
             const u = usersData[idx];
+            if (u.role === 'owner') {
+                showToast('オーナーの時間は変更できません。', 'error');
+                return;
+            }
             const h = parseInt(document.getElementById(`edit-h-${idx}`).value, 10) || 0;
             const m = parseInt(document.getElementById(`edit-m-${idx}`).value, 10) || 0;
             const s = parseInt(document.getElementById(`edit-s-${idx}`).value, 10) || 0;
@@ -2102,7 +2151,9 @@
                     const batch = writeBatch(db);
                     const slice = usersData.slice(i, i + batchSize);
 
+                    let writes = 0;
                     slice.forEach(u => {
+                        if (u.role === 'owner') return;
                         const ref = doc(db, 'users', u.id);
                         let newTime;
                         if (bulkMode === 'set') {
@@ -2115,9 +2166,10 @@
                             updatedAt: serverTimestamp()
                         });
                         u.remainingTime = newTime;
+                        writes++;
                     });
 
-                    await batch.commit();
+                    if (writes > 0) await batch.commit();
                 }
 
                 renderUsers();
@@ -2382,6 +2434,7 @@
                     const lastAutoSet = userData.lastAutoSet ? userData.lastAutoSet.toDate() : new Date(0);
                     const lastSetJST = new Date(lastAutoSet.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
 
+                    if (userData.role === 'owner') return;
                     if (resetDate > lastSetJST) {
                         pendingCount++;
                     }
@@ -2420,6 +2473,7 @@
                     const lastAutoSet = userData.lastAutoSet ? userData.lastAutoSet.toDate() : new Date(0);
                     const lastSetJST = new Date(lastAutoSet.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
 
+                    if (userData.role === 'owner') return;
                     if (resetDate > lastSetJST) {
                         batch.update(doc(db, 'users', docSnap.id), {
                             remainingTime: config.resetSeconds,
@@ -2481,8 +2535,9 @@
             });
 
             usersData.sort((a, b) => {
-                if (a.role === 'admin' && b.role !== 'admin') return 1;
-                if (a.role !== 'admin' && b.role === 'admin') return -1;
+                const staff = (role) => role === 'admin' || role === 'owner';
+                if (staff(a.role) && !staff(b.role)) return 1;
+                if (!staff(a.role) && staff(b.role)) return -1;
                 return (a.displayName || a.email).localeCompare(b.displayName || b.email);
             });
 

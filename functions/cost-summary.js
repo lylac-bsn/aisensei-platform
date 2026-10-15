@@ -11,6 +11,7 @@ const MAX_DAYS = 400;
 const DEFAULT_DAYS = 30;
 const MONTHLY_FROM_DAYS = 120;
 const ENTRY_KINDS = ["once", "monthly"];
+const OWNER_EMAIL = "growbuddy@gc.com";
 const MAX_LABEL = 60;
 const MAX_NOTE = 200;
 const MAX_AMOUNT = 100000000;
@@ -50,6 +51,43 @@ function costRange(days, now = new Date()) {
     endDate,
     granularity: span >= MONTHLY_FROM_DAYS ? "month" : "day",
   };
+}
+
+function isDateString(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && isoDate(d) === value;
+}
+
+function periodDays(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function costPeriod(input, now = new Date()) {
+  const startDate = input?.startDate;
+  const endDate = input?.endDate;
+  if (!startDate && !endDate) return costRange(input?.days, now);
+  if (!isDateString(startDate) || !isDateString(endDate)) {
+    throw new Error("期間の日付が不正です。");
+  }
+  if (startDate > endDate) throw new Error("開始日は終了日より前にしてください。");
+  if (endDate > todayInTokyo(now)) throw new Error("終了日は今日までにしてください。");
+  const days = periodDays(startDate, endDate);
+  if (days > MAX_DAYS) throw new Error("期間は400日以内にしてください。");
+  return {
+    days,
+    startDate,
+    endDate,
+    granularity: days >= MONTHLY_FROM_DAYS ? "month" : "day",
+  };
+}
+
+function callerIsOwner(user, tokenEmail) {
+  const email = String(user?.email || "").trim().toLowerCase();
+  const token = String(tokenEmail || "").trim().toLowerCase();
+  return user?.role === "owner" && email === OWNER_EMAIL && token === OWNER_EMAIL;
 }
 
 // Billing rows land in the partition of their export time, which can trail
@@ -185,12 +223,6 @@ function summarizeCosts(rows, entries, range) {
   };
 }
 
-function isDateString(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && isoDate(d) === value;
-}
-
 // Returns { entry } or { error } (Japanese message for the admin UI).
 function validateCostEntry(input) {
   const data = input || {};
@@ -227,8 +259,11 @@ module.exports = {
   AUDIO_KEY_PROJECT_ID,
   BILLING_TABLE,
   billingQuery,
+  OWNER_EMAIL,
   clampDays,
   costRange,
+  costPeriod,
+  callerIsOwner,
   expandEntry,
   summarizeCosts,
   validateCostEntry,

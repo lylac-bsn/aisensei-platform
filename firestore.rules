@@ -47,8 +47,13 @@ service cloud.firestore {
       // Users cannot create or delete their own documents
       allow create, delete: if false;
 
-      // --- Admin: full read/write ---
-      allow read, write: if isAdmin();
+      // Staff can manage ordinary accounts. Clients cannot create, edit, or delete the owner.
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.get('role', '') != 'owner';
+      allow update: if isAdmin()
+        && resource.data.get('role', '') != 'owner'
+        && request.resource.data.get('role', '') != 'owner';
+      allow delete: if isAdmin() && resource.data.get('role', '') != 'owner';
 
       // Activity feed: skips, stars, badges, resets
       match /activity/{eventId} {
@@ -92,7 +97,7 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'owner'];
     }
 
     // =========================================

@@ -1,8 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  OWNER_EMAIL,
   clampDays,
   costRange,
+  costPeriod,
+  callerIsOwner,
   expandEntry,
   summarizeCosts,
   validateCostEntry,
@@ -17,6 +20,27 @@ test("range is clamped and uses Tokyo dates", () => {
   assert.equal(r.startDate, "2026-09-14");
   assert.equal(r.granularity, "day");
   assert.equal(costRange(365).granularity, "month");
+});
+
+test("custom period uses the chosen dates and rejects a bad span", () => {
+  const now = new Date("2026-10-12T16:30:00Z");
+  const r = costPeriod({ startDate: "2026-10-01", endDate: "2026-10-13" }, now);
+  assert.equal(r.startDate, "2026-10-01");
+  assert.equal(r.endDate, "2026-10-13");
+  assert.equal(r.granularity, "day");
+  assert.equal(costPeriod({ days: 30 }, now).startDate, "2026-09-14");
+  assert.equal(costPeriod({ startDate: "2026-01-01", endDate: "2026-06-01" }, now).granularity, "month");
+  assert.throws(() => costPeriod({ startDate: "2026-10-10", endDate: "2026-10-01" }, now), /開始日/);
+  assert.throws(() => costPeriod({ startDate: "2026-10-01", endDate: "2026-10-20" }, now), /今日まで/);
+  assert.throws(() => costPeriod({ startDate: "2024-01-01", endDate: "2026-01-01" }, now), /400日/);
+  assert.throws(() => costPeriod({ startDate: "2026-02-30", endDate: "2026-03-01" }, now), /不正/);
+});
+
+test("only the locked owner email counts as owner", () => {
+  assert.equal(callerIsOwner({ role: "owner", email: OWNER_EMAIL }, OWNER_EMAIL), true);
+  assert.equal(callerIsOwner({ role: "owner", email: "other@gc.com" }, "other@gc.com"), false);
+  assert.equal(callerIsOwner({ role: "admin", email: OWNER_EMAIL }, OWNER_EMAIL), false);
+  assert.equal(callerIsOwner({ role: "owner", email: OWNER_EMAIL }, "admin@example.com"), false);
 });
 
 test("monthly entries repeat on the same day, clamped to month end", () => {

@@ -6,7 +6,8 @@ const {
   COST_PROJECT_ID,
   AUDIO_KEY_PROJECT_ID,
   billingQuery,
-  costRange,
+  costPeriod,
+  callerIsOwner,
   summarizeCosts,
   validateCostEntry,
 } = require("./cost-summary");
@@ -54,7 +55,8 @@ exports.deleteUserAccount = onCall(
     const db = getFirestore();
     const callerDoc = await db.collection("users").doc(callerUid).get();
 
-    if (!callerDoc.exists || callerDoc.data().role !== "admin") {
+    const caller = callerDoc.exists ? callerDoc.data() : null;
+    if (!caller || (caller.role !== "admin" && !callerIsOwner(caller, request.auth.token?.email))) {
       throw new HttpsError("permission-denied", "管理者権限がありません。");
     }
 
@@ -68,7 +70,8 @@ exports.deleteUserAccount = onCall(
 
     // 4. Prevent deleting other admins
     const targetDoc = await db.collection("users").doc(targetUid).get();
-    if (targetDoc.exists && targetDoc.data().role === "admin") {
+    const targetRole = targetDoc.exists ? targetDoc.data().role : "";
+    if (targetRole === "admin" || targetRole === "owner") {
       throw new HttpsError(
         "failed-precondition",
         "管理者アカウントは削除できません。"
@@ -105,13 +108,14 @@ exports.deleteUserAccount = onCall(
   }
 );
 
-async function requireAdmin(request) {
+async function requireOwner(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "ログインが必要です。");
   }
   const callerDoc = await getFirestore().collection("users").doc(request.auth.uid).get();
-  if (!callerDoc.exists || callerDoc.data().role !== "admin") {
-    throw new HttpsError("permission-denied", "管理者権限がありません。");
+  const caller = callerDoc.exists ? callerDoc.data() : null;
+  if (!callerIsOwner(caller, request.auth.token?.email)) {
+    throw new HttpsError("permission-denied", "この画面はオーナーだけが開けます。");
   }
 }
 
@@ -134,7 +138,7 @@ async function listCostEntries() {
 /**
  * getCostSummary
  *
- * Admin-only. Google Cloud costs for ai-sensei-8849b and the audio-generation
+ * Owner-only. Google Cloud costs for ai-sensei-8849b and the audio-generation
  * Gemini API key's project, from the BigQuery billing export (net of credits),
  * plus manual cost entries, bucketed by day or month.
  *
@@ -143,8 +147,13 @@ async function listCostEntries() {
 exports.getCostSummary = onCall(
   { region: "asia-northeast1" },
   async (request) => {
-    await requireAdmin(request);
-    const range = costRange(request.data?.days);
+    await requireOwner(request);
+    let range;
+    try {
+      range = costPeriod(request.data);
+    } catch (err) {
+      throw new HttpsError("invalid-argument", err.message);
+    }
     const { BigQuery } = require("@google-cloud/bigquery");
     const bigquery = new BigQuery({ projectId: COST_PROJECT_ID });
     let rows;
@@ -171,13 +180,13 @@ exports.getCostSummary = onCall(
 /**
  * saveCostEntry
  *
- * Admin-only. Creates or updates a manual cost entry (non-Google-Cloud costs
+ * Owner-only. Creates or updates a manual cost entry (non-Google-Cloud costs
  * such as subscriptions or domains).
  */
 exports.saveCostEntry = onCall(
   { region: "asia-northeast1" },
   async (request) => {
-    await requireAdmin(request);
+    await requireOwner(request);
     const { entry, error } = validateCostEntry(request.data);
     if (error) throw new HttpsError("invalid-argument", error);
     const col = getFirestore().collection(COST_ENTRIES);
@@ -205,12 +214,12 @@ exports.saveCostEntry = onCall(
 /**
  * deleteCostEntry
  *
- * Admin-only. Deletes a manual cost entry.
+ * Owner-only. Deletes a manual cost entry.
  */
 exports.deleteCostEntry = onCall(
   { region: "asia-northeast1" },
   async (request) => {
-    await requireAdmin(request);
+    await requireOwner(request);
     const id = request.data?.id;
     if (typeof id !== "string" || !/^[a-zA-Z0-9]{1,128}$/.test(id)) {
       throw new HttpsError("invalid-argument", "無効なIDです。");
