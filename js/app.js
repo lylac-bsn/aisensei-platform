@@ -5,6 +5,7 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
+import { renderSchoolPanel } from "./platform-school.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -155,6 +156,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hubPlaceholder) hubPlaceholder.hidden = true;
             document.getElementById('hub-panel-platform')?.setAttribute('hidden', '');
             if (hubHomework) hubHomework.hidden = false;
+            return;
+        }
+        if (action === 'family' || action === 'children' || action === 'inbox' || action === 'attendance' || action === 'assign-homework' || action === 'my-homework' || action === 'quiz') {
+            if (hubPlaceholder) hubPlaceholder.hidden = true;
+            if (hubHomework) hubHomework.hidden = true;
+            const panel = document.getElementById('hub-panel-platform');
+            if (panel) {
+                panel.hidden = false;
+                renderSchoolPanel(panel, action).catch((error) => {
+                    panel.textContent = error.message;
+                });
+            }
             return;
         }
         if (action === 'book' || action === 'publish-class' || action === 'tickets' || action === 'ticket-settings') {

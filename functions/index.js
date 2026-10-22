@@ -238,3 +238,18 @@ exports.deleteCostEntry = onCall(
   exports.grantMonthlyTicketsNow = booking.grantMonthlyTicketsNow;
   exports.grantMonthlyTickets = booking.grantMonthlyTickets;
 }
+
+{
+  const school = require("./school");
+  exports.ensureLinkCode = school.ensureLinkCode;
+  exports.linkChild = school.linkChild;
+  exports.setAttendance = school.setAttendance;
+  exports.publishReport = school.publishReport;
+  exports.publishHomework = school.publishHomework;
+  exports.submitHomework = school.submitHomework;
+  exports.createQuiz = school.createQuiz;
+  exports.joinQuiz = school.joinQuiz;
+  exports.advanceQuiz = school.advanceQuiz;
+  exports.submitQuizAnswer = school.submitQuizAnswer;
+  exports.markInboxRead = school.markInboxRead;
+}

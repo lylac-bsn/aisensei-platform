@@ -42,7 +42,12 @@ service cloud.firestore {
         && (!('mcqStats' in request.resource.data)
             || request.resource.data.mcqStats is map)
         && (!('pokeStats' in request.resource.data)
-            || request.resource.data.pokeStats is map);
+            || request.resource.data.pokeStats is map)
+        && request.resource.data.get('linkedStudentIds', []) == resource.data.get('linkedStudentIds', [])
+        && request.resource.data.get('linkedParentIds', []) == resource.data.get('linkedParentIds', [])
+        && request.resource.data.get('linkedChildren', []) == resource.data.get('linkedChildren', [])
+        && request.resource.data.get('linkCode', '') == resource.data.get('linkCode', '')
+        && request.resource.data.get('xp', 0) == resource.data.get('xp', 0);
 
       // Users cannot create or delete their own documents
       allow create, delete: if false;
@@ -111,8 +116,67 @@ service cloud.firestore {
 
     match /ticketBalances/{studentId} {
       allow read: if request.auth != null
-        && (request.auth.uid == studentId || isAdmin());
+        && (request.auth.uid == studentId || isAdmin() || linkedParentOf(studentId));
       allow write: if false;
+    }
+
+    match /attendance/{classId} {
+      allow read: if request.auth != null
+        && (resource.data.teacherId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    match /classReports/{reportId} {
+      allow read: if request.auth != null && (
+        resource.data.teacherId == request.auth.uid
+        || request.auth.uid in resource.data.get('attendeeIds', [])
+        || isAdmin()
+      );
+      allow write: if false;
+    }
+
+    match /homeworkAssignments/{assignmentId} {
+      allow read: if request.auth != null && (
+        request.auth.uid in resource.data.get('assigneeIds', [])
+        || resource.data.teacherId == request.auth.uid
+        || isAdmin()
+      );
+      allow write: if false;
+    }
+
+    match /studentHomework/{studentId}/items/{itemId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == studentId || isAdmin() || linkedParentOf(studentId));
+      allow write: if false;
+    }
+
+    match /homeworkProgress/{progressId} {
+      allow read: if request.auth != null
+        && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    match /inbox/{userId}/items/{itemId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if false;
+    }
+
+    match /quizRooms/{roomId} {
+      allow get: if request.auth != null && (
+        resource.data.hostId == request.auth.uid
+        || exists(/databases/$(database)/documents/quizRooms/$(roomId)/players/$(request.auth.uid))
+        || isAdmin()
+      );
+      allow list, write: if false;
+
+      match /players/{playerId} {
+        allow read: if request.auth != null && (
+          request.auth.uid == playerId
+          || isQuizHost(roomId)
+          || isAdmin()
+        );
+        allow write: if false;
+      }
     }
 
     match /slotHolds/{holdId} {
@@ -126,6 +190,17 @@ service cloud.firestore {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'owner'];
+    }
+
+    function linkedParentOf(studentId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && studentId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('linkedStudentIds', []);
+    }
+
+    function isQuizHost(roomId) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/quizRooms/$(roomId)).data.hostId == request.auth.uid;
     }
 
     function isOwner() {

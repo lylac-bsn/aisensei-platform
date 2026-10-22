@@ -81,6 +81,7 @@ export async function renderPlatformPanel(root, action, role) {
         <select id="class-level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
         <label>開始 <input id="class-start" type="datetime-local"></label>
         <label>終了 <input id="class-end" type="datetime-local"></label>
+        <label>毎週の回数 <input id="class-weeks" type="number" min="1" max="12" value="1"></label>
         <button type="button" id="class-publish">公開する</button>
         <p id="class-status"></p>
         <div id="class-list"></div>`;
@@ -94,6 +95,7 @@ export async function renderPlatformPanel(root, action, role) {
             startsAt: new Date(root.querySelector("#class-start").value).getTime(),
             endsAt: new Date(root.querySelector("#class-end").value).getTime(),
             capacity: 6,
+            weeks: Number(root.querySelector("#class-weeks").value || 1),
           });
           status.textContent = "公開しました。";
           await paintClasses(root.querySelector("#class-list"), false);
@@ -104,7 +106,13 @@ export async function renderPlatformPanel(root, action, role) {
       await paintClasses(root.querySelector("#class-list"), false);
       return;
     }
-    root.innerHTML = `<h2>講座を予約</h2><div id="class-list"></div>`;
+    let childPicker = "";
+    if (role === "parent") {
+      const me = await getDoc(doc(db, "users", getAuth().currentUser.uid));
+      const kids = me.data()?.linkedChildren || [];
+      childPicker = `<label>子ども <select id="book-child">${kids.map((kid) => `<option value="${escapeHtml(kid.id)}">${escapeHtml(kid.name)}</option>`).join("")}</select></label>`;
+    }
+    root.innerHTML = `<h2>講座を予約</h2>${childPicker}<div id="class-list"></div>`;
     await paintClasses(root.querySelector("#class-list"), role !== "admin" && role !== "owner");
   } catch (error) {
     root.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
@@ -132,7 +140,8 @@ async function paintClasses(list, canBook) {
       button.disabled = seats <= 0;
       button.onclick = async () => {
         try {
-          await callFunction("bookClass", { classId: item.id });
+          const studentId = document.getElementById("book-child")?.value;
+          await callFunction("bookClass", studentId ? { classId: item.id, studentId } : { classId: item.id });
           button.textContent = "予約しました";
           button.disabled = true;
         } catch (error) {

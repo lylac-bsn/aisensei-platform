@@ -128,29 +128,36 @@ exports.publishClass = onCall({ region: REGION }, async (request) => {
   const startsAtMs = Number(request.data?.startsAt);
   const endsAtMs = Number(request.data?.endsAt);
   const capacity = clampInt(request.data?.capacity, MAX_CAPACITY, 1, MAX_CAPACITY);
+  const weeks = clampInt(request.data?.weeks, 1, 1, 12);
   if (!title || !GAMES.has(game) || !LEVELS.has(difficulty)) {
     throw new HttpsError("invalid-argument", "タイトル、ゲーム、レベルを確認してください。");
   }
   if (!Number.isFinite(startsAtMs) || !Number.isFinite(endsAtMs) || endsAtMs <= startsAtMs) {
     throw new HttpsError("invalid-argument", "開始と終了の時刻を確認してください。");
   }
-  const startsAt = new Date(startsAtMs);
-  const ref = db().collection("classes").doc();
-  await ref.set({
-    teacherId: user.uid,
-    teacherName: String(user.displayName || user.email || "先生").slice(0, 50),
-    title,
-    game,
-    difficulty,
-    startsAt: Timestamp.fromDate(startsAt),
-    endsAt: Timestamp.fromDate(new Date(endsAtMs)),
-    slotKey: slotKeyFromDate(startsAt),
-    capacity,
-    bookedCount: 0,
-    status: "open",
-    createdAt: FieldValue.serverTimestamp(),
-  });
-  return { id: ref.id };
+  const ids = [];
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  for (let week = 0; week < weeks; week += 1) {
+    const startsAt = new Date(startsAtMs + week * weekMs);
+    const ref = db().collection("classes").doc();
+    await ref.set({
+      teacherId: user.uid,
+      teacherName: String(user.displayName || user.email || "先生").slice(0, 50),
+      title: weeks > 1 ? `${title} (${week + 1}/${weeks})` : title,
+      game,
+      difficulty,
+      startsAt: Timestamp.fromDate(startsAt),
+      endsAt: Timestamp.fromDate(new Date(endsAtMs + week * weekMs)),
+      slotKey: slotKeyFromDate(startsAt),
+      capacity,
+      bookedCount: 0,
+      status: "open",
+      seriesWeeks: weeks,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    ids.push(ref.id);
+  }
+  return { id: ids[0], ids };
 });
 
 exports.bookClass = onCall({ region: REGION }, async (request) => {
