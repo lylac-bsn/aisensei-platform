@@ -228,3 +228,13 @@ exports.deleteCostEntry = onCall(
     return { success: true };
   }
 );
+
+{
+  const booking = require("./booking");
+  exports.publishClass = booking.publishClass;
+  exports.bookClass = booking.bookClass;
+  exports.cancelBooking = booking.cancelBooking;
+  exports.setTicketPolicy = booking.setTicketPolicy;
+  exports.grantMonthlyTicketsNow = booking.grantMonthlyTicketsNow;
+  exports.grantMonthlyTickets = booking.grantMonthlyTickets;
+}

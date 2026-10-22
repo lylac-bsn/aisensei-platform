@@ -5,6 +5,8 @@
       "firebase.json",
       "firestore.rules",
       "**/.*",
+      "**/.venv-tts/**",
+      ".venv-tts/**",
       "**/node_modules/**",
       "proxy-server/**",
       "functions/**",

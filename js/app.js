@@ -4,6 +4,7 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { renderPlatformPanel } from "./platform-booking.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hubStudent = document.getElementById('hub-student');
     const hubParent = document.getElementById('hub-parent');
     const hubTeacher = document.getElementById('hub-teacher');
+    let currentHubRole = 'student';
 
     function normalizeRole(role) {
         return String(role || '').trim().toLowerCase();
@@ -65,10 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hubPanel) hubPanel.hidden = true;
         if (hubPlaceholder) hubPlaceholder.hidden = true;
         if (hubHomework) hubHomework.hidden = true;
+        const platformPanel = document.getElementById('hub-panel-platform');
+        if (platformPanel) platformPanel.hidden = true;
     }
 
     function showHub(role, displayName) {
         const value = normalizeRole(role);
+        currentHubRole = value || 'student';
         const name = String(displayName || '').trim();
         loginView.style.display = 'none';
         hideLevelPicker();
@@ -85,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hubStudent) hubStudent.hidden = value === 'parent' || value === 'admin' || value === 'owner';
         if (hubParent) hubParent.hidden = value !== 'parent';
         if (hubTeacher) hubTeacher.hidden = value !== 'admin' && value !== 'owner';
+        const ticketSettings = document.getElementById('hub-ticket-settings');
+        if (ticketSettings) ticketSettings.hidden = value !== 'owner';
         showHubMenu();
     }
 
@@ -146,9 +153,21 @@ document.addEventListener('DOMContentLoaded', () => {
         hubPanel.hidden = false;
         if (action === 'aquarium-homework') {
             if (hubPlaceholder) hubPlaceholder.hidden = true;
+            document.getElementById('hub-panel-platform')?.setAttribute('hidden', '');
             if (hubHomework) hubHomework.hidden = false;
             return;
         }
+        if (action === 'book' || action === 'publish-class' || action === 'tickets' || action === 'ticket-settings') {
+            if (hubPlaceholder) hubPlaceholder.hidden = true;
+            if (hubHomework) hubHomework.hidden = true;
+            const panel = document.getElementById('hub-panel-platform');
+            if (panel) {
+                panel.hidden = false;
+                renderPlatformPanel(panel, action, currentHubRole);
+            }
+            return;
+        }
+        document.getElementById('hub-panel-platform')?.setAttribute('hidden', '');
         if (hubHomework) hubHomework.hidden = true;
         if (hubPlaceholder) hubPlaceholder.hidden = false;
         if (hubPlaceholderTitle) {

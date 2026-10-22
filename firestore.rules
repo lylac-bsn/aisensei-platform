@@ -87,8 +87,36 @@ service cloud.firestore {
       // Any authenticated user can read settings (needed for auto-reset check)
       allow read: if request.auth != null;
 
-      // Only admins can write settings
-      allow write: if isAdmin();
+      // Ticket amounts are changed only by the platform owner. Other settings stay with staff.
+      allow write: if settingId == 'ticketPolicy'
+        ? isOwner()
+        : isAdmin();
+    }
+
+    // Classes, bookings and tickets are written only by Cloud Functions (Admin SDK).
+    match /classes/{classId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null && (
+        resource.data.studentId == request.auth.uid
+        || resource.data.bookedBy == request.auth.uid
+        || resource.data.teacherId == request.auth.uid
+        || isAdmin()
+      );
+      allow write: if false;
+    }
+
+    match /ticketBalances/{studentId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == studentId || isAdmin());
+      allow write: if false;
+    }
+
+    match /slotHolds/{holdId} {
+      allow read, write: if false;
     }
 
     // =========================================
@@ -98,6 +126,13 @@ service cloud.firestore {
       return request.auth != null
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'owner'];
+    }
+
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'growbuddy@gc.com'
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
     }
 
     // =========================================

@@ -9892,6 +9892,7 @@ function part3NameChoiceLabels() {
 }
 
 function part3EnsureNameAudio() {
+  if (liveSessionsRetired()) return;
   const labels = part3NameChoiceLabels();
   if (!labels.length) return;
   const kana = String(part3State.displayName || "")
@@ -10068,6 +10069,12 @@ function part3Speak(script, { childLabel = "", opening = false, keepPrompt = fal
   if (!exact) return false;
   const keys = part3StaticAudioKeys(parts);
   if (keys) return part3SpeakStatic(exact, keys, { childLabel, opening, keepPrompt });
+  if (liveSessionsRetired()) {
+    chatMessages.push({ type: "assistant", text: exact });
+    lastAssistantBubbleAt = Date.now();
+    scheduleRenderChat();
+    return true;
+  }
   return part3SpeakLive(exact, { childLabel, opening, keepPrompt });
 }
 
@@ -10113,6 +10120,7 @@ function part3SpeakStatic(exact, keys, { childLabel = "", opening = false, keepP
   };
 
   const fallback = async (error) => {
+    if (liveSessionsRetired()) return settle(null);
     nativeConsole.warn("Static part3 line failed; using Gemini Live", error);
     stopEndingStaticAudio();
     await resumeMicAfterEndingStaticAudio();
@@ -10694,22 +10702,38 @@ function renderPart3PresentationCard(segment, { show }) {
 
   const hint = document.createElement("p");
   hint.className = "part3-presentation-hint";
-  hint.textContent = isMuted
-    ? "マイクを オンにして、つづけて いってみよう！"
-    : "マイク オン！ つづけて いってみよう！";
+  hint.textContent = liveSessionsRetired()
+    ? "スピーカーで きいて、声に だしてみよう"
+    : isMuted
+      ? "マイクを オンにして、つづけて いってみよう！"
+      : "マイク オン！ つづけて いってみよう！";
   choiceBar.appendChild(hint);
 
   const actions = document.createElement("div");
   actions.className = "part3-presentation-actions";
   const mic = document.createElement("button");
   mic.type = "button";
-  mic.className = `part3-presentation-btn${isMuted ? "" : " is-mic-on"}`;
-  mic.innerHTML = `${isMuted ? ICON_MIC_OFF : ICON_MIC}<span>${isMuted ? "マイクを オンにする" : "マイクを オフにする"}</span>`;
-  mic.disabled = actionState !== "active";
-  mic.addEventListener("click", async () => {
-    await toggleMute();
-    refreshChoiceBarIfNeeded();
-  });
+  if (liveSessionsRetired()) {
+    mic.className = "part3-presentation-btn is-mic-on";
+    mic.textContent = "この ぶんを いったよ";
+    mic.disabled = actionState !== "active";
+    mic.addEventListener("click", () => {
+      const memories = part3Memories();
+      const said = (cur.set.lines || [])
+        .map((line) => resolvePart3Text(line.text, memories))
+        .join(" ");
+      part3State.transcript = said;
+      part3EvaluatePresentation({ typed: true });
+    });
+  } else {
+    mic.className = `part3-presentation-btn${isMuted ? "" : " is-mic-on"}`;
+    mic.innerHTML = `${isMuted ? ICON_MIC_OFF : ICON_MIC}<span>${isMuted ? "マイクを オンにする" : "マイクを オフにする"}</span>`;
+    mic.disabled = actionState !== "active";
+    mic.addEventListener("click", async () => {
+      await toggleMute();
+      refreshChoiceBarIfNeeded();
+    });
+  }
   actions.appendChild(mic);
   if (cur.set.cloze) {
     const full = document.createElement("button");
@@ -15387,6 +15411,7 @@ function scheduleMcqEarlyTapUnlock() {
 }
 
 function choicesLocked({ allowEarlyTap = true } = {}) {
+  if (liveSessionsRetired()) return false;
   if (assistantIsSpeaking() && !(allowEarlyTap && Date.now() >= mcqEarlyTapAt())) return true;
   if (!awaitingAssistantReply) return false;
   if (actionableMcqPresentedSinceUserTurn()) return false;
@@ -17873,7 +17898,63 @@ function attachClientHandlers(geminiClient) {
   };
 }
 
+/** Student lessons no longer open Gemini Live. Questions stay on screen and use saved clips. */
+const STUDENT_LIVE_DISABLED = true;
+
+function liveSessionsRetired() {
+  return STUDENT_LIVE_DISABLED;
+}
+
+async function skipRetiredConversation() {
+  for (let guard = 0; guard < 8; guard += 1) {
+    const seg = getCurrentSegment();
+    if (!seg) return;
+    if (seg.id === "ch2" && ch2Search.phase === "chat") {
+      ch2Search.phase = "waiting";
+      persistCh2SearchState();
+      return;
+    }
+    const conversation =
+      seg.type === "warmup" || seg.type === "daily_english" || seg.id === "daily1";
+    const ending = seg.id === "ending1";
+    if (!conversation && !ending) return;
+    if (ending) {
+      const intro = usesPart2Architecture() ? "beginner-part2-intro" : "beginner-part1-turn-a";
+      const finale = usesPart2Architecture() ? "beginner-part2-finale" : "beginner-part1-turn-c";
+      try {
+        await playEndingStaticAudio(intro);
+        await playEndingStaticAudio(finale);
+      } catch {
+        // The recorded ending is optional; the chapter still finishes.
+      }
+    }
+    const result = completeSegment(seg.id, { userQuote: "", saidTogether: true });
+    if (!result?.ok || result.alreadyDone || result.lessonComplete) return;
+  }
+}
+
+async function startClipOnlyLesson() {
+  actionState = "active";
+  isMuted = true;
+  awaitingAssistantReply = false;
+  connected = false;
+  client = null;
+  await skipRetiredConversation();
+  const seg = getCurrentSegment();
+  if (seg?.id) ensureChapterPlayCounted(seg.id);
+  restoreChapterUiFromLessonState();
+  renderChoiceBar(seg);
+  updateLessonBanner();
+  updateActionUI();
+  addMessage("もんだいを タップして こたえよう。", "system");
+}
+
 async function connectAPI() {
+  if (liveSessionsRetired()) {
+    connected = false;
+    client = null;
+    return;
+  }
   client = new GeminiLiveAPI(activeProxyUrl, projectId, model);
   configureGeminiClient(client);
   attachClientHandlers(client);
@@ -18114,6 +18195,10 @@ async function applyChapterJumpFromParent({ lessonId, segmentId: _segmentId } = 
     }
     audioPlayer.setVolume(volumeLevel / 100);
     await connectAPI();
+    if (liveSessionsRetired()) {
+      await startClipOnlyLesson();
+      return;
+    }
     if (audioStreamer) {
       audioStreamer.updateClient(client);
       bindVoiceGateActivity();
@@ -18713,6 +18798,11 @@ async function handoffToCurrentSegment({ reason = "handoff", lastQuote = "" } = 
     audioPlayer.setVolume(volumeLevel / 100);
 
     await connectAPI();
+    if (liveSessionsRetired()) {
+      await startClipOnlyLesson();
+      updateActionUI();
+      return true;
+    }
     if (audioStreamer) {
       audioStreamer.updateClient(client);
       bindVoiceGateActivity();
@@ -18889,6 +18979,7 @@ function disconnectAPI() {
 }
 
 async function resumeSessionAfterDrop() {
+  if (liveSessionsRetired()) return;
   if (isAutoReconnecting || isHandoffRunning || isChapterHandoff) return;
   const pendingRecovery = capturePendingRecovery();
   clearPendingReplyWatch("reconnect");
@@ -18993,6 +19084,10 @@ async function handleActionButton() {
     }
     await getEndingAudioContext().catch(() => null);
     await questSfx.ensureContext();
+    if (liveSessionsRetired()) {
+      await startClipOnlyLesson();
+      return;
+    }
     await connectAPI();
     audioStreamer.updateClient(client);
     bindVoiceGateActivity();

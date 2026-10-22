@@ -81,7 +81,7 @@
 
             <div id="hub-menu">
                 <div id="hub-student" class="hub-grid" hidden>
-                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="placeholder" data-hub-label="講座を予約">
+                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="book" data-hub-label="講座を予約">
                         <span class="hub-btn__label">講座を予約</span>
                         <span class="hub-btn__hint">準備中</span>
                     </button>
@@ -96,7 +96,7 @@
                 </div>
 
                 <div id="hub-parent" class="hub-grid" hidden>
-                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="placeholder" data-hub-label="講座を予約">
+                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="book" data-hub-label="講座を予約">
                         <span class="hub-btn__label">講座を予約</span>
                         <span class="hub-btn__hint">準備中</span>
                     </button>
@@ -104,7 +104,7 @@
                         <span class="hub-btn__label">子ども</span>
                         <span class="hub-btn__hint">準備中</span>
                     </button>
-                    <button type="button" class="hub-btn hub-btn--tickets" data-hub-action="placeholder" data-hub-label="チケット">
+                    <button type="button" class="hub-btn hub-btn--tickets" data-hub-action="tickets" data-hub-label="チケット">
                         <span class="hub-btn__label">チケット</span>
                         <span class="hub-btn__hint">準備中</span>
                     </button>
@@ -115,7 +115,7 @@
                 </div>
 
                 <div id="hub-teacher" class="hub-grid" hidden>
-                    <button type="button" class="hub-btn hub-btn--classes" data-hub-action="placeholder" data-hub-label="クラス">
+                    <button type="button" class="hub-btn hub-btn--classes" data-hub-action="publish-class" data-hub-label="クラス">
                         <span class="hub-btn__label">クラス</span>
                         <span class="hub-btn__hint">準備中</span>
                     </button>
@@ -126,6 +126,10 @@
                     <button type="button" class="hub-btn hub-btn--teacher-homework" data-hub-action="placeholder" data-hub-label="宿題">
                         <span class="hub-btn__label">宿題</span>
                         <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" id="hub-ticket-settings" class="hub-btn hub-btn--tickets" data-hub-action="ticket-settings" data-hub-label="チケット設定" hidden>
+                        <span class="hub-btn__label">チケット設定</span>
+                        <span class="hub-btn__hint">毎月の枚数</span>
                     </button>
                     <a class="hub-btn hub-btn--admin" href="admin.html">
                         <span class="hub-btn__label">管理画面</span>
@@ -140,6 +144,7 @@
                     <h2 id="hub-placeholder-title"></h2>
                     <p class="hub-preparing">準備中</p>
                 </div>
+                <div id="hub-panel-platform" hidden></div>
                 <div id="hub-panel-homework" hidden>
                     <h2>アクアリウムの宿題</h2>
                     <p>ビギナーのレッスンで、アクアリウムの宿題をすすめます。</p>
