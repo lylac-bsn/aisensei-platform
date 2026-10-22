@@ -68,6 +68,90 @@
         </div>
     </div>
 
+    <main id="platform-hub" class="platform-hub" hidden>
+        <div class="platform-hub__card">
+            <header class="platform-hub__top">
+                <div>
+                    <p class="platform-hub__brand">Gamecollege</p>
+                    <h1 id="hub-greeting">おかえりなさい</h1>
+                    <p id="hub-role-label" class="platform-hub__role"></p>
+                </div>
+                <button type="button" id="hub-logout" class="platform-hub__logout">ログアウト</button>
+            </header>
+
+            <div id="hub-menu">
+                <div id="hub-student" class="hub-grid" hidden>
+                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="placeholder" data-hub-label="講座を予約">
+                        <span class="hub-btn__label">講座を予約</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--homework" data-hub-action="aquarium-homework" data-hub-label="宿題">
+                        <span class="hub-btn__label">宿題</span>
+                        <span class="hub-btn__hint">アクアリウムの宿題</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--game" data-hub-action="placeholder" data-hub-label="ゲーム">
+                        <span class="hub-btn__label">ゲーム</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                </div>
+
+                <div id="hub-parent" class="hub-grid" hidden>
+                    <button type="button" class="hub-btn hub-btn--book" data-hub-action="placeholder" data-hub-label="講座を予約">
+                        <span class="hub-btn__label">講座を予約</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--children" data-hub-action="placeholder" data-hub-label="子ども">
+                        <span class="hub-btn__label">子ども</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--tickets" data-hub-action="placeholder" data-hub-label="チケット">
+                        <span class="hub-btn__label">チケット</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--inbox" data-hub-action="placeholder" data-hub-label="受信箱">
+                        <span class="hub-btn__label">受信箱</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                </div>
+
+                <div id="hub-teacher" class="hub-grid" hidden>
+                    <button type="button" class="hub-btn hub-btn--classes" data-hub-action="placeholder" data-hub-label="クラス">
+                        <span class="hub-btn__label">クラス</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--attendance" data-hub-action="placeholder" data-hub-label="出席">
+                        <span class="hub-btn__label">出席</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <button type="button" class="hub-btn hub-btn--teacher-homework" data-hub-action="placeholder" data-hub-label="宿題">
+                        <span class="hub-btn__label">宿題</span>
+                        <span class="hub-btn__hint">準備中</span>
+                    </button>
+                    <a class="hub-btn hub-btn--admin" href="admin.html">
+                        <span class="hub-btn__label">管理画面</span>
+                        <span class="hub-btn__hint">既存の管理ページ</span>
+                    </a>
+                </div>
+            </div>
+
+            <section id="hub-panel" class="platform-hub__panel" hidden>
+                <button type="button" id="hub-back" class="platform-hub__back">もどる</button>
+                <div id="hub-panel-placeholder" hidden>
+                    <h2 id="hub-placeholder-title"></h2>
+                    <p class="hub-preparing">準備中</p>
+                </div>
+                <div id="hub-panel-homework" hidden>
+                    <h2>アクアリウムの宿題</h2>
+                    <p>ビギナーのレッスンで、アクアリウムの宿題をすすめます。</p>
+                    <a class="hub-btn hub-btn--homework" href="page1.html">
+                        <span class="hub-btn__label">レッスンをはじめる</span>
+                        <span class="hub-btn__hint">ビギナー</span>
+                    </a>
+                </div>
+            </section>
+        </div>
+    </main>
+
     <div id="level-selection-overlay" class="level-selection-overlay" hidden></div>
 
     <script type="module" src="js/app.js"></script>

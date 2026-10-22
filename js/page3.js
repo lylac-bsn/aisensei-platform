@@ -2,7 +2,7 @@
 // 1. Firebaseの初期設定
 // =================================================
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { initProgressSync, scheduleProgressSync } from "./progress-sync.js?v=20260928-variant-kind";
 import { logUserActivity } from "./activity-log.js";
@@ -32,15 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutButton = document.getElementById('logout-button');
     const levelSwitcherBtn = document.getElementById('level-switcher-btn');
     const userEmailDisplay = document.getElementById('user-email');
-    const timerDisplay = document.getElementById('timer-display');
     const appContent = document.getElementById('app-content');
     const timeUpOverlay = document.getElementById('time-up-overlay');
 
     let mainTimerInterval = null;
     let saveTimerInterval = null;
     let currentUser = null;
-    let currentUserRole = '';  // 'admin' | 'user' | '' — used to avoid overwriting admin's time with 0 on save
-    let currentRemainingTime = 0;
 
     // =================================================
     // 3. ログイン状態の監視
@@ -61,17 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // User is logged in, proceed
             currentUser = user;
-            currentUserRole = userData.role || '';
             appView.style.display = 'block';
             timeUpOverlay.style.display = 'none';
             if (appContent) appContent.style.pointerEvents = 'auto';
             userEmailDisplay.textContent = userData.displayName || user.email || "";
             syncVoiceUserProfile(userData.displayName || user.email || "");
-
-            // Check for monthly auto-set before starting timer (skip for admin — do not overwrite their time)
-            if (userData.role !== 'admin') {
-                await checkMonthlyAutoSet(user.uid);
-            }
 
             const timerData = userData?.timer || null;
             startTimerForUser(user.uid, timerData);
@@ -79,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
             initProgressSync(db, user.uid);
         } else {
             // Not logged in - redirect to login page
-            currentUserRole = '';
             try { await saveTime(true); } catch {}
             currentUser = null;
             window.location.href = 'index.html';
@@ -149,16 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function endAllVoiceCalls() {
-        document.querySelectorAll('#iframe-part1, #iframe-part2').forEach((frame) => {
-            try {
-                frame.contentWindow?.postMessage({ type: 'gc_end_call' }, '*');
-            } catch {
-                // ignore
-            }
-        });
-    }
-
     window.addEventListener('learny-progress-changed', () => {
         if (currentUser) {
             scheduleProgressSync(db, currentUser.uid);
@@ -176,51 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // =================================================
-    // 5.5 Monthly Auto-Set Check (1st of month, 00:00 JST)
-    // =================================================
-    function getNowInJST() {
-        const now = new Date();
-        const jstStr = now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' });
-        return new Date(jstStr);
-    }
-
-    async function checkMonthlyAutoSet(userId) {
-        try {
-            const configSnap = await getDoc(doc(db, 'settings', 'monthlyAutoSet'));
-            if (!configSnap.exists()) return;
-
-            const config = configSnap.data();
-            const nowJST = getNowInJST();
-
-            // Most recent 1st of month at 00:00 JST
-            const resetDate = new Date(nowJST.getFullYear(), nowJST.getMonth(), 1, 0, 0, 0);
-            if (resetDate > nowJST) {
-                resetDate.setMonth(resetDate.getMonth() - 1);
-            }
-
-            // Check user's last auto-set timestamp
-            const userRef = doc(db, 'users', userId);
-            const userSnap = await getDoc(userRef);
-            if (!userSnap.exists()) return;
-
-            const userData = userSnap.data();
-            const lastAutoSet = userData.lastAutoSet ? userData.lastAutoSet.toDate() : new Date(0);
-            const lastSetJST = new Date(lastAutoSet.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-
-            if (resetDate > lastSetJST) {
-                // Auto-set triggered silently
-                await updateDoc(userRef, {
-                    remainingTime: config.resetSeconds,
-                    lastAutoSet: resetDate,
-                    updatedAt: serverTimestamp()
-                });
-            }
-        } catch (err) {
-            // auto-set check failed silently
-        }
-    }
-
-    // =================================================
     // 6. HELPER FUNCTIONS
     // =================================================
     function clearAllIntervals() {
@@ -230,77 +165,25 @@ document.addEventListener('DOMContentLoaded', () => {
         saveTimerInterval = null;
     }
 
-    function saveTime(isFinalSave = false) {
-        if (!currentUser || isNaN(currentRemainingTime)) return;
-        // Do not overwrite Firestore with 0 for admin (e.g. after they set time in Firebase and reload)
-        if (currentUserRole === 'admin' && currentRemainingTime === 0) return;
-
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        updateDoc(userDocRef, { 
-            remainingTime: currentRemainingTime, 
-            updatedAt: serverTimestamp()
-        });
-        
-        // Time saved silently
+    function saveTime() {
+        // Usage timer no longer writes remainingTime. The field stays in Firestore.
     }
 
     // =================================================
     // 7. タイマー機能
     // =================================================
-    async function startTimerForUser(userId) {
+    async function startTimerForUser() {
         clearAllIntervals();
-        const userDocRef = doc(db, 'users', userId);
-
-        try {
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists() || docSnap.data().remainingTime === undefined) {
-                lockApp("エラー: ユーザーデータが見つかりません。");
-                return;
-            }
-
-            currentRemainingTime = parseInt(docSnap.data().remainingTime, 10) || 0;
-            updateTimerDisplay(currentRemainingTime);
-
-            if (currentRemainingTime <= 0) {
-                lockApp("利用時間が終了しました。");
-                return;
-            }
-
-            mainTimerInterval = setInterval(() => {
-                currentRemainingTime--;
-                updateTimerDisplay(currentRemainingTime);
-                if (currentRemainingTime <= 0) {
-                    lockApp("利用時間が終了しました。");
-                }
-            }, 1000);
-
-            saveTimerInterval = setInterval(() => saveTime(false), 30000);
-
-        } catch (error) {
-            // timer error handled silently
-            lockApp("エラーが発生しました。");
-        }
+        const timerPill = document.querySelector('.header-status-pill--timer');
+        if (timerPill) timerPill.hidden = true;
+        if (timeUpOverlay) timeUpOverlay.style.display = 'none';
+        if (appContent) appContent.style.pointerEvents = 'auto';
     }
 
-    function updateTimerDisplay(seconds) {
-        if (isNaN(seconds) || seconds < 0) seconds = 0;
-        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
-        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-        const s = (seconds % 60).toString().padStart(2, '0');
-        timerDisplay.textContent = `${h}:${m}:${s}`;
-    }
-
-    function lockApp(message) {
-        endAllVoiceCalls();
-        currentRemainingTime = 0;
-        saveTime(true);
+    function lockApp() {
         clearAllIntervals();
-        updateTimerDisplay(0);
-        timerDisplay.textContent = message;
-        timeUpOverlay.style.display = 'flex';
-        if (appContent) {
-            appContent.style.pointerEvents = 'none';
-        }
+        if (timeUpOverlay) timeUpOverlay.style.display = 'none';
+        if (appContent) appContent.style.pointerEvents = 'auto';
     }
 });
 

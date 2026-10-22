@@ -4,7 +4,6 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { mountLevelPicker } from "./level-picker.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -30,6 +29,74 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginError = document.getElementById('login-error');
     const loginSubmitBtn = document.getElementById('login-submit-btn');
     const levelSelectionOverlay = document.getElementById('level-selection-overlay');
+    const platformHub = document.getElementById('platform-hub');
+    const hubMenu = document.getElementById('hub-menu');
+    const hubPanel = document.getElementById('hub-panel');
+    const hubPlaceholder = document.getElementById('hub-panel-placeholder');
+    const hubPlaceholderTitle = document.getElementById('hub-placeholder-title');
+    const hubHomework = document.getElementById('hub-panel-homework');
+    const hubGreeting = document.getElementById('hub-greeting');
+    const hubRoleLabel = document.getElementById('hub-role-label');
+    const hubStudent = document.getElementById('hub-student');
+    const hubParent = document.getElementById('hub-parent');
+    const hubTeacher = document.getElementById('hub-teacher');
+
+    function normalizeRole(role) {
+        return String(role || '').trim().toLowerCase();
+    }
+
+    function roleLabel(role) {
+        const value = normalizeRole(role);
+        if (value === 'parent') return '保護者';
+        if (value === 'owner') return 'オーナー';
+        if (value === 'admin') return '先生';
+        return '生徒';
+    }
+
+    function hideLevelPicker() {
+        if (!levelSelectionOverlay) return;
+        levelSelectionOverlay.hidden = true;
+        levelSelectionOverlay.classList.remove('is-open');
+        levelSelectionOverlay.innerHTML = '';
+    }
+
+    function showHubMenu() {
+        if (hubMenu) hubMenu.hidden = false;
+        if (hubPanel) hubPanel.hidden = true;
+        if (hubPlaceholder) hubPlaceholder.hidden = true;
+        if (hubHomework) hubHomework.hidden = true;
+    }
+
+    function showHub(role, displayName) {
+        const value = normalizeRole(role);
+        const name = String(displayName || '').trim();
+        loginView.style.display = 'none';
+        hideLevelPicker();
+        document.body.classList.add('hub-open');
+        document.title = 'Gamecollege';
+        if (platformHub) {
+            platformHub.hidden = false;
+            platformHub.dataset.role = value || 'student';
+        }
+        if (hubGreeting) {
+            hubGreeting.textContent = name ? `おかえりなさい、${name}さん` : 'おかえりなさい';
+        }
+        if (hubRoleLabel) hubRoleLabel.textContent = roleLabel(value);
+        if (hubStudent) hubStudent.hidden = value === 'parent' || value === 'admin' || value === 'owner';
+        if (hubParent) hubParent.hidden = value !== 'parent';
+        if (hubTeacher) hubTeacher.hidden = value !== 'admin' && value !== 'owner';
+        showHubMenu();
+    }
+
+    function showLogin() {
+        if (platformHub) platformHub.hidden = true;
+        document.body.classList.remove('hub-open');
+        document.title = 'Gamecollege - ログイン';
+        hideLevelPicker();
+        showHubMenu();
+        loginView.style.display = 'grid';
+        setLoginLoading(false);
+    }
 
     function setLoginLoading(loading) {
         if (!loginSubmitBtn) return;
@@ -51,23 +118,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            loginView.style.display = 'none';
-            mountLevelPicker(levelSelectionOverlay, {
-                onNavigate: (page) => {
-                    window.location.href = page;
-                },
-                onLogout: async () => {
-                    await signOut(auth);
-                    levelSelectionOverlay.hidden = true;
-                    levelSelectionOverlay.classList.remove('is-open');
-                    loginView.style.display = 'grid';
-                },
-            });
+            const userData = snap.data() || {};
+            const typedName = displayNameInput.value.trim();
+            showHub(userData.role, typedName || userData.displayName || '');
         } else {
-            loginView.style.display = 'grid';
-            levelSelectionOverlay.hidden = true;
-            levelSelectionOverlay.classList.remove('is-open');
-            setLoginLoading(false);
+            showLogin();
+        }
+    });
+
+    document.getElementById('hub-logout')?.addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+        } catch {
+            showLogin();
+        }
+    });
+
+    platformHub?.addEventListener('click', (event) => {
+        if (event.target.closest('#hub-back')) {
+            showHubMenu();
+            return;
+        }
+        const actionBtn = event.target.closest('[data-hub-action]');
+        if (!actionBtn || !hubPanel) return;
+        const action = actionBtn.getAttribute('data-hub-action');
+        if (hubMenu) hubMenu.hidden = true;
+        hubPanel.hidden = false;
+        if (action === 'aquarium-homework') {
+            if (hubPlaceholder) hubPlaceholder.hidden = true;
+            if (hubHomework) hubHomework.hidden = false;
+            return;
+        }
+        if (hubHomework) hubHomework.hidden = true;
+        if (hubPlaceholder) hubPlaceholder.hidden = false;
+        if (hubPlaceholderTitle) {
+            hubPlaceholderTitle.textContent = actionBtn.getAttribute('data-hub-label') || '';
         }
     });
 
