@@ -7,6 +7,8 @@
       "**/.*",
       "**/.venv-tts/**",
       ".venv-tts/**",
+      "**/.venv/**",
+      ".venv/**",
       "**/node_modules/**",
       "proxy-server/**",
       "functions/**",
