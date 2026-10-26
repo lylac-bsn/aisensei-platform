@@ -60,6 +60,10 @@ service cloud.firestore {
         && request.resource.data.get('role', '') != 'owner';
       allow delete: if isAdmin() && resource.data.get('role', '') != 'owner';
 
+      match /pushTokens/{tokenId} {
+        allow read, write: if false;
+      }
+
       // Activity feed: skips, stars, badges, resets
       match /activity/{eventId} {
         allow read: if isAdmin()
@@ -109,6 +113,7 @@ service cloud.firestore {
         resource.data.studentId == request.auth.uid
         || resource.data.bookedBy == request.auth.uid
         || resource.data.teacherId == request.auth.uid
+        || linkedParentOf(resource.data.studentId)
         || isAdmin()
       );
       allow write: if false;
@@ -158,6 +163,11 @@ service cloud.firestore {
 
     match /inbox/{userId}/items/{itemId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if false;
+    }
+
+    match /quizTemplates/{templateId} {
+      allow get, list: if request.auth != null && resource.data.ownerId == request.auth.uid;
       allow write: if false;
     }
 

@@ -5,7 +5,8 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel } from "./platform-school.js";
+import { renderSchoolPanel, stopNotificationWatch, watchNotifications } from "./platform-school.js";
+import { renderHome } from "./platform-home.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -20,6 +21,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+document.addEventListener("click", (event) => {
+    const dialog = event.target;
+    if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains("gc-modal") || !dialog.open) return;
+    const box = dialog.getBoundingClientRect();
+    const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+    if (outside) dialog.close();
+});
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -70,9 +79,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hubHomework) hubHomework.hidden = true;
         const platformPanel = document.getElementById('hub-panel-platform');
         if (platformPanel) platformPanel.hidden = true;
+        const pageTitle = document.getElementById('hub-page-title');
+        if (pageTitle) pageTitle.textContent = 'ホーム';
+        platformHub?.classList.remove('is-nav-open');
+        platformHub?.querySelectorAll('.gc-nav.is-current').forEach((item) => item.classList.remove('is-current'));
     }
 
-    function showHub(role, displayName) {
+    function showHub(role, displayName, uid) {
         const value = normalizeRole(role);
         currentHubRole = value || 'student';
         const name = String(displayName || '').trim();
@@ -87,13 +100,62 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hubGreeting) {
             hubGreeting.textContent = name ? `おかえりなさい、${name}さん` : 'おかえりなさい';
         }
+        const userName = document.getElementById('hub-user-name');
+        if (userName) userName.textContent = name || 'アカウント';
+        const hubDate = document.getElementById('hub-date');
+        if (hubDate) {
+            hubDate.textContent = new Date().toLocaleDateString('ja-JP', { dateStyle: 'full', timeZone: 'Asia/Tokyo' });
+        }
         if (hubRoleLabel) hubRoleLabel.textContent = roleLabel(value);
         if (hubStudent) hubStudent.hidden = value === 'parent' || value === 'admin' || value === 'owner';
         if (hubParent) hubParent.hidden = value !== 'parent';
         if (hubTeacher) hubTeacher.hidden = value !== 'admin' && value !== 'owner';
         const ticketSettings = document.getElementById('hub-ticket-settings');
         if (ticketSettings) ticketSettings.hidden = value !== 'owner';
+        document.querySelectorAll('.gc-owner-only').forEach((item) => {
+            item.hidden = value !== 'owner';
+        });
+        decorateNav();
+        paintDashboard();
         showHubMenu();
+        watchNotifications(uid, currentHubRole);
+    }
+
+    const navIcons = {
+        home: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/>',
+        book: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/>',
+        'my-homework': '<path d="M6 4h9l3 3v13H6z"/><path d="M15 4v3h3M8 12h8M8 16h6"/>',
+        quiz: '<circle cx="12" cy="12" r="8"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 1-1 1.7M12 17h.01"/>',
+        family: '<circle cx="8" cy="9" r="2"/><circle cx="16" cy="9" r="2"/><path d="M4 18c.6-2 2.2-3 4-3s3.4 1 4 3M12 18c.6-2 2.2-3 4-3s3.4 1 4 3"/>',
+        children: '<circle cx="12" cy="8" r="3"/><path d="M6 19c1-3 3-4.5 6-4.5S17 16 18 19"/>',
+        tickets: '<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/>',
+        inbox: '<path d="M4 6h16v12H4z"/><path d="m4 8 8 5 8-5"/>',
+        'publish-class': '<path d="M5 19V7l7-3 7 3v12"/><path d="M9 19v-6h6v6"/>',
+        attendance: '<circle cx="12" cy="8" r="3"/><path d="M6 19c1-3 3-4.5 6-4.5 1.2 0 2.2.3 3.1.8"/><path d="m15 16 2 2 4-4"/>',
+        'assign-homework': '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9 12h6M9 16h4"/>',
+        'ticket-settings': '<path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/>',
+        admin: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+    };
+
+    function navSvg(action) {
+        return `<svg viewBox="0 0 24 24" aria-hidden="true">${navIcons[action] || navIcons.home}</svg>`;
+    }
+
+    function decorateNav() {
+        document.querySelectorAll('.gc-nav').forEach((item) => {
+            if (item.querySelector('svg')) return;
+            const action = item.dataset.hubAction || (item.id === 'hub-home' ? 'home' : 'admin');
+            item.insertAdjacentHTML('afterbegin', navSvg(action));
+        });
+    }
+
+    function paintDashboard() {
+        const dash = document.getElementById('hub-dash');
+        if (!dash) return;
+        const name = document.getElementById('hub-user-name')?.textContent || '';
+        renderHome(dash, currentHubRole, name === 'アカウント' ? '' : name).catch((error) => {
+            dash.textContent = error.message;
+        });
     }
 
     function showLogin() {
@@ -102,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.title = 'Gamecollege - ログイン';
         hideLevelPicker();
         showHubMenu();
+        stopNotificationWatch();
         loginView.style.display = 'grid';
         setLoginLoading(false);
     }
@@ -128,13 +191,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const userData = snap.data() || {};
             const typedName = displayNameInput.value.trim();
-            showHub(userData.role, typedName || userData.displayName || '');
+            showHub(userData.role, typedName || userData.displayName || '', user.uid);
         } else {
             showLogin();
         }
     });
 
     document.getElementById('hub-logout')?.addEventListener('click', async () => {
+        const panel = document.getElementById('hub-panel-platform');
+        if (panel?._confirmLeave && !panel._confirmLeave()) return;
         try {
             await signOut(auth);
         } catch {
@@ -142,14 +207,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.getElementById('gc-menu')?.addEventListener('click', () => {
+        platformHub?.classList.toggle('is-nav-open');
+    });
+
+    const discardAttendanceEdits = () => {
+        const panel = document.getElementById('hub-panel-platform');
+        if (!panel || typeof panel._confirmLeave !== 'function') return true;
+        return panel._confirmLeave();
+    };
+
     platformHub?.addEventListener('click', (event) => {
-        if (event.target.closest('#hub-back')) {
+        if (event.target.closest('[data-hub-home]')) {
+            if (!discardAttendanceEdits()) return;
             showHubMenu();
             return;
         }
         const actionBtn = event.target.closest('[data-hub-action]');
         if (!actionBtn || !hubPanel) return;
+        if (!discardAttendanceEdits()) return;
         const action = actionBtn.getAttribute('data-hub-action');
+        const pageTitle = document.getElementById('hub-page-title');
+        if (pageTitle) pageTitle.textContent = actionBtn.getAttribute('data-hub-label') || 'Gamecollege';
+        platformHub.classList.remove('is-nav-open');
+        platformHub.querySelectorAll('.gc-nav').forEach((item) => {
+            item.classList.toggle('is-current', item.getAttribute('data-hub-action') === action);
+        });
         if (hubMenu) hubMenu.hidden = true;
         hubPanel.hidden = false;
         if (action === 'aquarium-homework') {

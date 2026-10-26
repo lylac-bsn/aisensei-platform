@@ -3546,7 +3546,7 @@ body.login-page.hub-open {
 }
 
 .platform-hub {
-    width: min(560px, calc(100% - 2rem));
+    width: min(640px, calc(100% - 2rem));
     margin: 1.5rem auto 5rem;
 }
 
@@ -3606,6 +3606,7 @@ header.platform-hub__top {
 
 .platform-hub__logout,
 .platform-hub__back {
+    align-self: flex-start;
     font-family: inherit;
     font-size: var(--text-sm);
     font-weight: 700;
@@ -3711,18 +3712,343 @@ header.platform-hub__top {
 }
 
 .platform-hub__panel h2 {
-    margin: 0.85rem 0 0.4rem;
+    margin: 0.35rem 0 0.15rem;
     font-size: var(--text-2xl);
     color: var(--text-dark);
 }
 
+.platform-hub__panel h3 {
+    margin: 0;
+    font-size: var(--text-lg);
+    color: var(--text-dark);
+}
+
 .platform-hub__panel p {
-    margin: 0 0 1rem;
+    margin: 0;
     color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.platform-hub__panel,
+.hub-form,
+.hub-stack,
+.ticket-block,
+.ticket-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.platform-hub__panel label {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 800;
+}
+
+.platform-hub__panel label:has(input[type="checkbox"]) {
+    flex-direction: row;
+    align-items: center;
+}
+
+.platform-hub__panel input,
+.platform-hub__panel select,
+.platform-hub__panel textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.85rem;
+    padding: 0.7rem 0.85rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--beige);
+    color: var(--text-dark);
+    font: inherit;
+    font-weight: 700;
+}
+
+.platform-hub__panel textarea {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.platform-hub__panel input[type="checkbox"] {
+    width: 1.15rem;
+    min-height: 1.15rem;
+    padding: 0;
+}
+
+.hub-action,
+.hub-quiet {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.85rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: var(--text-base);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.hub-action {
+    background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-red-dark) 100%);
+    color: white;
+}
+
+.hub-quiet {
+    background: var(--beige-dark);
+    color: var(--text-dark);
+}
+
+.hub-action:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.hub-choice {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.85rem;
+    padding: 0.75rem 0.9rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 14px;
+    background: white;
+    color: var(--text-dark);
+    font-family: inherit;
+    font-size: var(--text-base);
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
+}
+
+.hub-choice:hover,
+.ticket-person:hover {
+    border-color: var(--primary-red);
+}
+
+.hub-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 1rem;
+    border-radius: 18px;
+    background: var(--beige);
 }
 
 .hub-preparing {
     font-size: var(--text-xl);
     font-weight: 800;
     color: var(--text-dark);
+}
+
+.book-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.book-switch,
+.book-nav button,
+.book-card button,
+.roster-row {
+    font-family: inherit;
+}
+
+.book-switch {
+    min-height: 2.75rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--beige-dark);
+    color: var(--text-dark);
+    font-size: var(--text-base);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.book-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.book-nav strong {
+    font-size: var(--text-xl);
+}
+
+.book-nav button,
+.book-card button {
+    min-height: 2.75rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--primary-red);
+    color: white;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.book-nav button {
+    width: 2.75rem;
+    background: var(--beige-dark);
+    color: var(--text-dark);
+}
+
+.book-week,
+.book-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem;
+}
+
+.book-week span,
+.book-grid button {
+    text-align: center;
+    font-weight: 800;
+}
+
+.book-week span {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
+
+.book-grid button {
+    aspect-ratio: 1;
+    min-height: 2.6rem;
+    border: 1.5px solid transparent;
+    border-radius: 12px;
+    background: var(--bg-white);
+    color: var(--text-dark);
+    cursor: pointer;
+}
+
+.book-grid button.has-class {
+    box-shadow: inset 0 -0.45rem 0 #43A047;
+}
+
+.book-grid button.is-today {
+    border-color: var(--primary-red);
+}
+
+.book-grid button.is-selected {
+    background: var(--primary-red);
+    color: white;
+}
+
+.book-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.1rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--beige);
+    box-shadow: none;
+}
+
+.hub-section input,
+.hub-section select,
+.hub-section textarea,
+.ticket-editor input,
+.ticket-editor select,
+.ticket-editor textarea {
+    background: var(--beige);
+}
+
+.book-card h3,
+.book-card p {
+    margin: 0 0 0.35rem;
+}
+
+.book-card__teacher {
+    color: var(--text-dark);
+    font-size: var(--text-lg);
+    font-weight: 800;
+}
+
+.book-card .booked-note {
+    display: inline-block;
+    margin: 0.2rem 0 0;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: #E8F5E9;
+    color: #2E7D32;
+    font-weight: 800;
+}
+
+.roster-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 2.75rem;
+    font-weight: 800;
+}
+
+.ticket-editor {
+    padding: 1rem;
+    border-radius: 18px;
+    background: white;
+}
+
+.ticket-people {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    max-height: 18rem;
+    overflow: auto;
+}
+
+.ticket-person {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.1rem 0.75rem;
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 14px;
+    background: white;
+    color: var(--text-dark);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ticket-person strong {
+    font-size: var(--text-base);
+}
+
+.ticket-person span {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 700;
+}
+
+.ticket-person em {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.ticket-person.is-selected {
+    border-color: var(--primary-red);
+    background: #FFF3E0;
+}
+
+.ticket-lot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.ticket-lot .hub-quiet,
+.ticket-actions .hub-quiet {
+    width: auto;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.8rem;
 }
