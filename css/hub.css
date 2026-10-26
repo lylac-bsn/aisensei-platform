@@ -255,11 +255,13 @@ button.gc-note-card:hover { background: #FFF5EA; }
 
 .gc-workspace {
     overflow: auto;
-    padding: 1.5rem;
+    padding: clamp(0.75rem, 2vw, 1.5rem);
 }
 
 .gc-workspace > * {
-    width: min(1120px, 100%);
+    box-sizing: border-box;
+    width: min(100%, 76rem);
+    min-width: 0;
     margin: 0 auto;
 }
 
@@ -534,6 +536,30 @@ button.gc-note-card:hover { background: #FFF5EA; }
     border: none;
     background: transparent;
     color: #786962;
+}
+
+.gc-sfx {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid #E9E1D8;
+    border-radius: 12px;
+    background: #fff;
+    color: #E64618;
+    cursor: pointer;
+}
+
+.gc-sfx svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+}
+
+.gc-sfx[aria-pressed="false"] {
+    color: #B7AAA4;
 }
 
 .gc-primary,

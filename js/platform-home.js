@@ -186,7 +186,11 @@ export async function renderHome(dash, role, displayName) {
   dash.appendChild(loading);
   try {
     const db = getFirestore();
-    const uid = getAuth().currentUser.uid;
+    const uid = getAuth().currentUser?.uid;
+    if (!uid) {
+      dash.replaceChildren();
+      return;
+    }
     const todayKey = jstKey(new Date());
     const now = Date.now();
     const classes = (await classesForRole(db, role, uid))

@@ -5,8 +5,9 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel, stopNotificationWatch, watchNotifications } from "./platform-school.js";
+import { renderSchoolPanel, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261026-retry";
 import { renderHome } from "./platform-home.js";
+import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261026-sfx";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -30,7 +31,21 @@ document.addEventListener("click", (event) => {
     if (outside) dialog.close();
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+    const sfxButton = document.getElementById('hub-sfx');
+    const paintSfx = () => {
+        if (!sfxButton) return;
+        const on = sfxEnabled();
+        sfxButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+        sfxButton.setAttribute('aria-label', on ? '効果音オン' : '効果音オフ');
+    };
+    paintSfx();
+    sfxButton?.addEventListener('click', () => {
+        setSfxEnabled(!sfxEnabled());
+        paintSfx();
+    });
+    window.addEventListener('learny-sfx', paintSfx);
+
+    document.addEventListener('DOMContentLoaded', () => {
 
     const loginView = document.getElementById('login-view');
     const loginForm = document.getElementById('login-form');
@@ -93,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideLevelPicker();
         document.body.classList.add('hub-open');
         document.title = 'Gamecollege';
+        preloadHomeworkSfx();
         if (platformHub) {
             platformHub.hidden = false;
             platformHub.dataset.role = value || 'student';
@@ -178,7 +194,50 @@ document.addEventListener('DOMContentLoaded', () => {
         if (label) label.textContent = loading ? 'ログイン中…' : 'ログイン';
     }
 
+    const homeworkLab = new URLSearchParams(location.search).get('hwlab') === '1'
+        && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
+    async function openHomeworkLab() {
+        showHub('admin', 'プレビュー', 'lab');
+        if (hubMenu) hubMenu.hidden = true;
+        if (hubPanel) hubPanel.hidden = false;
+        const panel = document.getElementById('hub-panel-platform');
+        if (!panel) return;
+        panel.hidden = false;
+        const packs = new Map();
+        const { mountTeacherHomework } = await import('./homework-studio.js?v=20261026-retry');
+        await mountTeacherHomework(panel, {
+            lab: true,
+            callFunction: async (name, data) => {
+                if (name === 'saveHomeworkPack') {
+                    const id = data.id || `lab${packs.size + 1}`;
+                    packs.set(id, { ...data, id, status: data.status });
+                    return {
+                        id,
+                        status: data.status,
+                        questionCount: data.questions.length,
+                        assigneeCount: data.status === 'assigned' ? 1 : 0,
+                    };
+                }
+                if (name === 'getHomeworkEditor') {
+                    const pack = packs.get(data.id);
+                    if (!pack) throw new Error('下書きがありません。');
+                    return pack;
+                }
+                throw new Error('プレビューではサーバーに保存しません。');
+            },
+            openReport: () => {
+                panel.innerHTML = '<p class="hw-note">レポートは、ログインした先生の画面で開きます。</p>';
+            },
+        });
+    }
+
+    if (homeworkLab) openHomeworkLab().catch((error) => {
+        const note = document.getElementById('login-error');
+        if (note) note.textContent = error && error.message ? error.message : String(error);
+    });
     onAuthStateChanged(auth, async (user) => {
+        if (homeworkLab) return;
         if (user) {
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);

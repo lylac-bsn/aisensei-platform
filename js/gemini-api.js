@@ -410,13 +410,15 @@ export class GeminiLiveAPI {
         },
         system_instruction: { parts: [{ text: this.systemInstructions }] },
         tools: { function_declarations: tools },
-        proactivity: this.proactivity,
-
         realtime_input_config: {
           automatic_activity_detection: this.automaticActivityDetection,
         },
       },
     };
+
+    if (this.proactivity) {
+      sessionSetupMessage.setup.proactivity = this.proactivity;
+    }
 
     if (this.contextWindowCompression?.enabled) {
       sessionSetupMessage.setup.context_window_compression = {

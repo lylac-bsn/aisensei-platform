@@ -522,7 +522,7 @@ async function renderAttendance(root, db, uid) {
   await paintRoster();
 }
 
-async function renderReport(root, db, uid) {
+async function renderReport(root, db, uid, reportOptions = {}) {
   const classSnap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
   const sessions = classSnap.docs.map((item) => {
     const data = item.data();
@@ -569,8 +569,8 @@ async function renderReport(root, db, uid) {
         <div class="gc-phrase-head"><span>英語</span><span>日本語</span><span></span></div>
         <div id="phrase-rows"></div>
         <button type="button" class="gc-text-btn" id="add-phrase">＋ 単語を追加</button>
-        <p class="gc-report-note">出席した生徒本人に、この単語の練習を「きょうのしゅくだい」として出します。レポートとは別に送られます。</p>
-        <button type="button" class="gc-secondary" id="send-homework">単語を宿題にする</button>
+        <p class="gc-report-note">この単語はレポートに載ります。練習問題は「宿題」タブで、単語リストから自動で作れます。</p>
+        <button type="button" class="gc-secondary" id="send-homework">宿題タブでつくる</button>
       </div>
       <div id="recipients" class="gc-report-to"></div>
       <div class="gc-report-actions">
@@ -835,7 +835,10 @@ async function renderReport(root, db, uid) {
     }
   };
   reportButton.onclick = () => submit("report");
-  homeworkButton.onclick = () => submit("homework");
+  homeworkButton.onclick = () => {
+    if (reportOptions.onCreateHomework) reportOptions.onCreateHomework();
+    else submit("homework");
+  };
   await paintSession();
 }
 
@@ -875,8 +878,8 @@ async function renderStudentLearning(root, db, uid) {
       <section class="gc-panel">
         <h2>先生の宿題</h2>
         <div id="hw-list" class="gc-note-list">${homework.map((item) => `
-          <button type="button" class="gc-note-card" data-hw="${escapeHtml(item.id)}">
-            <small>${escapeHtml(noteWhen(item.time))}</small>
+          <button type="button" class="gc-note-card" data-hw="${escapeHtml(item.id)}" data-format="${escapeHtml(item.format || "")}">
+            <small>${escapeHtml(noteWhen(item.time))}${item.dueOn ? ` · 期日 ${escapeHtml(item.dueOn)}` : ""}</small>
             <strong>${escapeHtml(item.title || "宿題")}</strong>
           </button>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
         <div id="hw-play"></div>
@@ -893,7 +896,15 @@ async function renderStudentLearning(root, db, uid) {
       <p class="gc-learn-more"><a href="page1.html">アクアリウムの宿題をはじめる</a></p>
     </div>`;
   root.querySelectorAll("[data-hw]").forEach((button) => {
-    button.onclick = () => playHomework(root.querySelector("#hw-play"), button.dataset.hw);
+    button.onclick = () => {
+      if (button.dataset.format === "pack-v1") {
+        playPackHomework(root.querySelector("#hw-play"), button.dataset.hw, uid).catch((error) => {
+          root.querySelector("#hw-play").textContent = error.message;
+        });
+        return;
+      }
+      playHomework(root.querySelector("#hw-play"), button.dataset.hw);
+    };
   });
 }
 
@@ -935,7 +946,14 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    await renderReport(root, db, uid);
+    const { mountTeacherHomework } = await import("./homework-studio.js?v=20261026-retry");
+    const openHomework = () => mountTeacherHomework(root, {
+      db,
+      uid,
+      callFunction,
+      openReport: () => renderReport(root, db, uid, { onCreateHomework: openHomework }),
+    });
+    await openHomework();
     return;
   }
   if (action === "my-homework") {
@@ -1698,6 +1716,33 @@ function renderQuiz(root, { host, uid }) {
   } else {
     paintJoin();
   }
+}
+
+async function playPackHomework(root, assignmentId, uid) {
+  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261026-retry");
+  const db = getFirestore();
+  root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
+  const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));
+  const questions = snap.data()?.questions || [];
+  await mountHomeworkPlayer(root, {
+    title: snap.data()?.title || "しゅくだい",
+    questions,
+    db,
+    loadProgress: async () => (await getDoc(doc(db, "homeworkProgress", `${assignmentId}_${uid}`))).data(),
+    grade: (id, payload) => callFunction("submitHomework", {
+      assignmentId,
+      activityId: id,
+      kind: payload.kind,
+      answer: payload.answer,
+      leftId: payload.leftId,
+      rightId: payload.rightId,
+      elapsedMs: payload.elapsedMs,
+    }),
+    finish: () => callFunction("finishHomework", { assignmentId }),
+    onClose: () => {
+      root.replaceChildren();
+    },
+  });
 }
 
 async function playHomework(root, assignmentId) {
