@@ -237,6 +237,8 @@ exports.deleteCostEntry = onCall(
   exports.setTicketPolicy = booking.setTicketPolicy;
   exports.grantMonthlyTicketsNow = booking.grantMonthlyTicketsNow;
   exports.grantMonthlyTickets = booking.grantMonthlyTickets;
+  exports.adjustStudentTickets = booking.adjustStudentTickets;
+  exports.adjustAllTickets = booking.adjustAllTickets;
 }
 
 {
@@ -248,8 +250,16 @@ exports.deleteCostEntry = onCall(
   exports.publishHomework = school.publishHomework;
   exports.submitHomework = school.submitHomework;
   exports.createQuiz = school.createQuiz;
+  exports.saveQuizTemplate = school.saveQuizTemplate;
+  exports.deleteQuizTemplate = school.deleteQuizTemplate;
   exports.joinQuiz = school.joinQuiz;
   exports.advanceQuiz = school.advanceQuiz;
+  exports.syncQuizRoom = school.syncQuizRoom;
   exports.submitQuizAnswer = school.submitQuizAnswer;
   exports.markInboxRead = school.markInboxRead;
+}
+
+{
+  const push = require("./push");
+  exports.registerPushToken = push.registerPushToken;
 }

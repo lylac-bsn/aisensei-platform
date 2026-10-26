@@ -1,5 +1,6 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { pushTo } = require("./push");
 
 const REGION = "asia-northeast1";
 
@@ -125,6 +126,7 @@ function answerMatches(activity, answer) {
 async function inbox(userId, item) {
   const ref = db().collection("inbox").doc(userId).collection("items").doc();
   await ref.set({ ...item, read: false, createdAt: FieldValue.serverTimestamp() });
+  await pushTo(userId, item.title, item.body);
 }
 
 exports.ensureLinkCode = onCall({ region: REGION }, async (request) => {
@@ -214,7 +216,7 @@ exports.publishReport = onCall({ region: REGION }, async (request) => {
   for (const studentId of presentIds) {
     const student = await db().collection("users").doc(studentId).get();
     const parents = student.data()?.linkedParentIds || [];
-    const targets = parents.length ? parents : [studentId];
+    const targets = [...new Set([studentId, ...parents].filter(Boolean))];
     for (const target of targets) {
       await inbox(target, {
         type: "report",
@@ -258,6 +260,18 @@ exports.publishHomework = onCall({ region: REGION }, async (request) => {
       body: title,
       assignmentId: ref.id,
     });
+    const student = await db().collection("users").doc(studentId).get();
+    const parents = student.data()?.linkedParentIds || [];
+    for (const parentId of parents) {
+      if (!parentId || parentId === studentId) continue;
+      await inbox(parentId, {
+        type: "homework",
+        title: "あたらしい しゅくだい",
+        body: `${student.data()?.displayName || "生徒"} · ${title}`,
+        assignmentId: ref.id,
+        studentId,
+      });
+    }
   }
   return { id: ref.id, activities: activities.length };
 });
@@ -302,17 +316,83 @@ function quizCode() {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+const QUIZ_LIMITS = new Set([5, 10, 20, 30, 60, 90, 120]);
+
+function quizTimeLimit(value) {
+  const seconds = Number(value);
+  return QUIZ_LIMITS.has(seconds) ? seconds : 20;
+}
+
+function quizQuestions(raw) {
+  return (Array.isArray(raw) ? raw : []).slice(0, 20).map((row) => ({
+    prompt: clean(row?.prompt, 120),
+    choices: (Array.isArray(row?.choices) ? row.choices : []).map((choice) => clean(choice, 80)).filter(Boolean).slice(0, 4),
+    answer: clean(row?.answer, 80),
+    timeLimitSec: quizTimeLimit(row?.timeLimitSec),
+  })).filter((row) => row.prompt && row.choices.length >= 2 && row.choices.some((choice) => norm(choice) === norm(row.answer)));
+}
+
+function nextRoomPatch(data) {
+  const questions = data.questions || [];
+  const next = Number(data.questionIndex) + 1;
+  if (next >= questions.length) {
+    return { questionIndex: Number(data.questionIndex), status: "done", questionEndsAt: null, answeredCount: 0, choiceCounts: [] };
+  }
+  return {
+    questionIndex: next,
+    status: "question",
+    questionEndsAt: Date.now() + quizTimeLimit(questions[next]?.timeLimitSec) * 1000,
+    answeredCount: 0,
+    choiceCounts: [],
+  };
+}
+
+function tallyChoices(data, docs, extra) {
+  const index = Number(data.questionIndex);
+  const choices = ((data.questions || [])[index] || {}).choices || [];
+  const counts = choices.map(() => 0);
+  const seen = new Set();
+  const add = (id, choice, answeredIndex) => {
+    if (!id || id === data.hostId || seen.has(id) || Number(answeredIndex) !== index) return;
+    const at = choices.findIndex((item) => norm(item) === norm(choice));
+    if (at < 0) return;
+    seen.add(id);
+    counts[at] += 1;
+  };
+  docs.forEach((item) => {
+    const row = item.data() || {};
+    add(item.id, row.choice, row.answeredIndex);
+  });
+  if (extra) add(extra.id, extra.choice, index);
+  return counts;
+}
+
+function revealPatch(data, docs, extra) {
+  return {
+    status: "reveal",
+    questionEndsAt: null,
+    choiceCounts: tallyChoices(data, docs, extra),
+  };
+}
+
+async function rankingFor(tx, roomRef, hostId) {
+  const snap = await tx.get(roomRef.collection("players"));
+  return snap.docs
+    .filter((item) => item.id !== hostId)
+    .map((item) => ({
+      id: item.id,
+      name: clean(item.data().name, 40) || "プレイヤー",
+      score: Number(item.data().score || 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ja"))
+    .slice(0, 30);
+}
+
 exports.createQuiz = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生がホストします。");
   const title = clean(request.data?.title, 80) || "クイズ";
-  const questions = (Array.isArray(request.data?.questions) ? request.data.questions : [])
-    .map((row) => ({
-      prompt: clean(row?.prompt, 120),
-      choices: (Array.isArray(row?.choices) ? row.choices : []).map((choice) => clean(choice, 80)).filter(Boolean).slice(0, 4),
-      answer: clean(row?.answer, 80),
-    }))
-    .filter((row) => row.prompt && row.choices.length >= 2 && row.choices.some((choice) => norm(choice) === norm(row.answer)));
+  const questions = quizQuestions(request.data?.questions);
   if (!questions.length) throw new HttpsError("invalid-argument", "問題を1つ以上入れてください。");
   const code = quizCode();
   const ref = db().collection("quizRooms").doc();
@@ -322,10 +402,50 @@ exports.createQuiz = onCall({ region: REGION }, async (request) => {
     title,
     status: "lobby",
     questionIndex: -1,
+    questionEndsAt: null,
+    playerCount: 0,
+    answeredCount: 0,
     questions,
     createdAt: FieldValue.serverTimestamp(),
   });
   return { id: ref.id, code };
+});
+
+exports.saveQuizTemplate = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが保存できます。");
+  const title = clean(request.data?.title, 80) || "クイズ";
+  const questions = quizQuestions(request.data?.questions);
+  if (!questions.length) throw new HttpsError("invalid-argument", "問題を1つ以上入れてください。");
+  const requestedId = clean(request.data?.id, 128);
+  const ref = requestedId
+    ? db().collection("quizTemplates").doc(requestedId)
+    : db().collection("quizTemplates").doc();
+  if (requestedId) {
+    const existing = await ref.get();
+    if (!existing.exists || existing.data().ownerId !== user.uid) {
+      throw new HttpsError("permission-denied", "このテンプレートは保存できません。");
+    }
+  }
+  await ref.set({
+    ownerId: user.uid,
+    title,
+    questions,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { id: ref.id };
+});
+
+exports.deleteQuizTemplate = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが削除できます。");
+  const ref = db().collection("quizTemplates").doc(clean(request.data?.id, 128));
+  const existing = await ref.get();
+  if (!existing.exists || existing.data().ownerId !== user.uid) {
+    throw new HttpsError("permission-denied", "このテンプレートは削除できません。");
+  }
+  await ref.delete();
+  return { ok: true };
 });
 
 exports.joinQuiz = onCall({ region: REGION }, async (request) => {
@@ -333,53 +453,132 @@ exports.joinQuiz = onCall({ region: REGION }, async (request) => {
   const code = clean(request.data?.code, 8).toUpperCase();
   const snap = await db().collection("quizRooms").where("code", "==", code).limit(1).get();
   if (snap.empty) throw new HttpsError("not-found", "ルームが見つかりません。");
-  const room = snap.docs[0];
-  await room.ref.collection("players").doc(user.uid).set({
-    name: clean(user.displayName, 40) || "プレイヤー",
-    score: 0,
-    answeredIndex: -1,
-  }, { merge: true });
-  return { id: room.id, title: room.data().title };
+  const roomRef = snap.docs[0].ref;
+  const title = snap.docs[0].data().title;
+  await db().runTransaction(async (tx) => {
+    const room = await tx.get(roomRef);
+    if (!room.exists) throw new HttpsError("not-found", "ルームが見つかりません。");
+    const playerRef = roomRef.collection("players").doc(user.uid);
+    const player = await tx.get(playerRef);
+    if (!player.exists && user.uid !== room.data().hostId) {
+      tx.set(roomRef, { playerCount: FieldValue.increment(1) }, { merge: true });
+    }
+    tx.set(playerRef, {
+      name: clean(user.displayName, 40) || "プレイヤー",
+      score: player.exists ? Number(player.data().score || 0) : 0,
+      answeredIndex: player.exists ? Number(player.data().answeredIndex ?? -1) : -1,
+    }, { merge: true });
+  });
+  return { id: roomRef.id, title };
 });
 
 exports.advanceQuiz = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   const roomRef = db().collection("quizRooms").doc(clean(request.data?.roomId, 128));
-  const room = await roomRef.get();
-  if (!room.exists || room.data().hostId !== user.uid) {
-    throw new HttpsError("permission-denied", "ホストだけが進められます。");
-  }
-  const next = Number(room.data().questionIndex) + 1;
-  const done = next >= (room.data().questions || []).length;
-  await roomRef.set({
-    questionIndex: done ? room.data().questionIndex : next,
-    status: done ? "done" : "question",
-  }, { merge: true });
-  return { status: done ? "done" : "question", questionIndex: done ? room.data().questionIndex : next };
+  const sent = request.data?.questionIndex;
+  const expected = sent === undefined || sent === null || sent === "" ? null : Number(sent);
+  if (expected !== null && !Number.isInteger(expected)) throw new HttpsError("invalid-argument", "問題が不明です。");
+  return db().runTransaction(async (tx) => {
+    const room = await tx.get(roomRef);
+    if (!room.exists || room.data().hostId !== user.uid) {
+      throw new HttpsError("permission-denied", "ホストだけが進められます。");
+    }
+    const data = room.data();
+    if (data.status === "done" || (expected !== null && Number(data.questionIndex) !== expected)) {
+      return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
+    }
+    if (data.status === "question") {
+      const playersSnap = await tx.get(roomRef.collection("players"));
+      const patch = revealPatch(data, playersSnap.docs);
+      tx.set(roomRef, patch, { merge: true });
+      return { ...patch, questionIndex: Number(data.questionIndex), advanced: true };
+    }
+    const finishing = data.status === "reveal" && Number(data.questionIndex) + 1 >= (data.questions || []).length;
+    const ranking = finishing ? await rankingFor(tx, roomRef, data.hostId) : null;
+    const patch = nextRoomPatch(data);
+    if (ranking) patch.ranking = ranking;
+    tx.set(roomRef, patch, { merge: true });
+    return { ...patch, advanced: true };
+  });
+});
+
+exports.syncQuizRoom = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  const roomRef = db().collection("quizRooms").doc(clean(request.data?.roomId, 128));
+  const expected = Number(request.data?.questionIndex);
+  if (!Number.isInteger(expected)) throw new HttpsError("invalid-argument", "問題が不明です。");
+  return db().runTransaction(async (tx) => {
+    const room = await tx.get(roomRef);
+    if (!room.exists) throw new HttpsError("not-found", "ルームが見つかりません。");
+    const data = room.data();
+    const me = await tx.get(roomRef.collection("players").doc(user.uid));
+    if (data.hostId !== user.uid && !me.exists) {
+      throw new HttpsError("permission-denied", "このルームの参加者だけが進められます。");
+    }
+    if (data.status !== "question" || Number(data.questionIndex) !== expected) {
+      return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
+    }
+    const playerCount = Number(data.playerCount || 0);
+    const allAnswered = playerCount > 0 && Number(data.answeredCount || 0) >= playerCount;
+    const ends = Number(data.questionEndsAt || 0);
+    const expired = ends > 0 && Date.now() >= ends;
+    if (!allAnswered && !expired) {
+      return { status: data.status, questionIndex: expected, advanced: false };
+    }
+    const playersSnap = await tx.get(roomRef.collection("players"));
+    const patch = revealPatch(data, playersSnap.docs);
+    tx.set(roomRef, patch, { merge: true });
+    return { ...patch, questionIndex: expected, advanced: true };
+  });
 });
 
 exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   const roomRef = db().collection("quizRooms").doc(clean(request.data?.roomId, 128));
-  const room = await roomRef.get();
-  if (!room.exists || room.data().status !== "question") {
-    throw new HttpsError("failed-precondition", "いまは回答できません。");
+  const sent = request.data?.questionIndex;
+  const expected = sent === undefined || sent === null || sent === "" ? null : Number(sent);
+  if (expected !== null && (!Number.isInteger(expected) || expected < 0)) {
+    throw new HttpsError("invalid-argument", "問題が不明です。");
   }
-  const index = Number(room.data().questionIndex);
-  const question = (room.data().questions || [])[index];
-  const playerRef = roomRef.collection("players").doc(user.uid);
-  const player = await playerRef.get();
-  if (!player.exists) throw new HttpsError("permission-denied", "先に参加してください。");
-  if (Number(player.data().answeredIndex) === index) return { correct: false, duplicate: true };
-  const correct = norm(request.data?.choice) === norm(question?.answer);
-  await playerRef.set({
-    answeredIndex: index,
-    score: FieldValue.increment(correct ? 100 : 0),
-  }, { merge: true });
-  if (correct) {
-    await db().collection("users").doc(user.uid).set({ xp: FieldValue.increment(2) }, { merge: true });
-  }
-  return { correct };
+  return db().runTransaction(async (tx) => {
+    const room = await tx.get(roomRef);
+    if (!room.exists) throw new HttpsError("not-found", "ルームが見つかりません。");
+    const data = room.data();
+    const index = Number(data.questionIndex);
+    if (data.status !== "question" || (expected !== null && index !== expected)) return { correct: false, closed: true };
+    const playerRef = roomRef.collection("players").doc(user.uid);
+    const player = await tx.get(playerRef);
+    if (!player.exists) throw new HttpsError("permission-denied", "先に参加してください。");
+    if (Number(player.data().answeredIndex) === index) return { correct: false, duplicate: true };
+    const ends = Number(data.questionEndsAt || 0);
+    const expired = ends > 0 && Date.now() >= ends;
+    const question = (data.questions || [])[index];
+    const choice = clean(request.data?.choice, 80);
+    const correct = !expired && norm(choice) === norm(question?.answer);
+    const counts = user.uid === data.hostId ? null : {
+      answeredCount: Number(data.answeredCount || 0) + (expired ? 0 : 1),
+      playerCount: Number(data.playerCount || 0),
+    };
+    const closing = expired || (counts && counts.playerCount > 0 && counts.answeredCount >= counts.playerCount);
+    const playersSnap = closing ? await tx.get(roomRef.collection("players")) : null;
+    if (expired) {
+      tx.set(roomRef, revealPatch(data, playersSnap.docs), { merge: true });
+      return { correct: false, expired: true };
+    }
+    const roomPatch = {};
+    if (counts && !closing) roomPatch.answeredCount = counts.answeredCount;
+    if (closing) Object.assign(roomPatch, revealPatch(data, playersSnap.docs, { id: user.uid, choice }));
+    tx.set(playerRef, {
+      answeredIndex: index,
+      choice,
+      score: FieldValue.increment(correct ? 100 : 0),
+    }, { merge: true });
+    if (correct) {
+      tx.set(db().collection("users").doc(user.uid), { xp: FieldValue.increment(2) }, { merge: true });
+    }
+    if (Object.keys(roomPatch).length) tx.set(roomRef, roomPatch, { merge: true });
+    return { correct };
+  });
 });
 
 exports.markInboxRead = onCall({ region: REGION }, async (request) => {
