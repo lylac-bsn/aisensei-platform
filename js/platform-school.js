@@ -1,5 +1,6 @@
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, collection, doc, documentId, getDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { renderCollab } from "./platform-collab.js";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -943,8 +944,9 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   const me = await getDoc(doc(db, "users", uid));
-  const host = me.data()?.role === "admin" || me.data()?.role === "owner";
-  renderQuiz(root, { host, uid });
+  const role = me.data()?.role || "";
+  const host = role === "admin" || role === "owner";
+  await renderCollab(root, { host, uid, role });
 }
 
 const QUIZ_COLORS = ["qo-red", "qo-blue", "qo-yellow", "qo-green"];
