@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isTeacher() {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'owner'];
+    }
+
+    function imageUnder5mb() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /collabCovers/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isTeacher()
+        && request.auth.uid == userId
+        && imageUnder5mb();
+      allow delete: if isTeacher() && request.auth.uid == userId;
+    }
+
+    match /collabMedia/{userId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if isTeacher()
+        && request.auth.uid == userId
+        && request.resource.size < 8 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('audio/.*'));
+      allow delete: if isTeacher() && request.auth.uid == userId;
+    }
+  }
+}

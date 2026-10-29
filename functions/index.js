@@ -263,3 +263,18 @@ exports.deleteCostEntry = onCall(
   const push = require("./push");
   exports.registerPushToken = push.registerPushToken;
 }
+
+{
+  const collab = require("./collab");
+  exports.createCollabTemplate = collab.createCollabTemplate;
+  exports.saveCollabTemplate = collab.saveCollabTemplate;
+  exports.publishCollabTemplate = collab.publishCollabTemplate;
+  exports.unpublishCollabTemplate = collab.unpublishCollabTemplate;
+  exports.duplicateCollabTemplate = collab.duplicateCollabTemplate;
+  exports.deleteCollabTemplate = collab.deleteCollabTemplate;
+  exports.setCollabOfficial = collab.setCollabOfficial;
+  exports.toggleCollabFavorite = collab.toggleCollabFavorite;
+  exports.startCollabRoom = collab.startCollabRoom;
+  exports.saveCollabSession = collab.saveCollabSession;
+  exports.seedOfficialCollabTemplates = collab.seedOfficialCollabTemplates;
+}

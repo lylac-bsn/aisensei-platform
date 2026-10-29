@@ -554,7 +554,28 @@ exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
     const expired = ends > 0 && Date.now() >= ends;
     const question = (data.questions || [])[index];
     const choice = clean(request.data?.choice, 80);
-    const correct = !expired && norm(choice) === norm(question?.answer);
+    const typed = clean(request.data?.typed, 160);
+    const multi = Array.isArray(request.data?.choices) ? request.data.choices.map((item) => clean(item, 80)).filter(Boolean) : [];
+    let correct = false;
+    if (!expired) {
+      if ((question?.type || "multipleChoice") === "typeAnswer") {
+        const answers = (question.answers || [question.answer]).map(norm);
+        correct = answers.includes(norm(typed || choice));
+      } else if ((question?.type || "") === "wordOrder") {
+        correct = norm(typed || choice) === norm(question?.answer);
+      } else if (Array.isArray(question?.answers) && question.answers.length > 1) {
+        const need = question.answers.map(norm).sort().join("|");
+        const got = multi.map(norm).sort().join("|");
+        correct = need === got && multi.length > 0;
+      } else {
+        correct = norm(choice || typed) === norm(question?.answer);
+      }
+    }
+    const points = Math.min(1000, Math.max(0, Number(question?.points) || 100));
+    const limitMs = Math.max(1000, (Number(question?.timeLimitSec) || 20) * 1000);
+    const leftRatio = ends > 0 ? Math.max(0, Math.min(1, (ends - Date.now()) / limitMs)) : 0;
+    const speedBonus = correct ? Math.round(points * 0.5 * leftRatio) : 0;
+    const gained = correct ? points + speedBonus : 0;
     const counts = user.uid === data.hostId ? null : {
       answeredCount: Number(data.answeredCount || 0) + (expired ? 0 : 1),
       playerCount: Number(data.playerCount || 0),
@@ -567,17 +588,17 @@ exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
     }
     const roomPatch = {};
     if (counts && !closing) roomPatch.answeredCount = counts.answeredCount;
-    if (closing) Object.assign(roomPatch, revealPatch(data, playersSnap.docs, { id: user.uid, choice }));
+    if (closing) Object.assign(roomPatch, revealPatch(data, playersSnap.docs, { id: user.uid, choice: choice || typed }));
     tx.set(playerRef, {
       answeredIndex: index,
-      choice,
-      score: FieldValue.increment(correct ? 100 : 0),
+      choice: choice || typed || multi.join(" | "),
+      score: FieldValue.increment(gained),
     }, { merge: true });
     if (correct) {
       tx.set(db().collection("users").doc(user.uid), { xp: FieldValue.increment(2) }, { merge: true });
     }
     if (Object.keys(roomPatch).length) tx.set(roomRef, roomPatch, { merge: true });
-    return { correct };
+    return { correct, points: gained, speedBonus };
   });
 });
 
