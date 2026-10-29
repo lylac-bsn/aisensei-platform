@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "FTLCN5SSDU.com.growbuddy.learnie",
+        "paths": [
+          "/collab/join",
+          "/collab/join.html",
+          "/collab/join/*"
+        ]
+      }
+    ]
+  }
+}

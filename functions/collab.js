@@ -417,7 +417,20 @@ exports.startCollabRoom = onCall({ region: REGION }, async (request) => {
     await template.ref.set({ usageCount: FieldValue.increment(1) }, { merge: true });
   }
   if (!questions.length) throw new HttpsError("invalid-argument", "問題を1つ以上入れてください。");
-  const code = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const publicQuestions = questions.map((row) => ({
+    type: row.type || "multipleChoice",
+    prompt: row.prompt,
+    choices: row.choices || [],
+    pairs: row.pairs || null,
+    words: row.words || null,
+    timeLimitSec: row.timeLimitSec,
+    points: row.points || 1000,
+  }));
+  const answerKey = questions.map((row) => ({
+    answer: row.answer || "",
+    answers: row.answers?.length ? row.answers : (row.answer ? [row.answer] : []),
+  }));
   const ref = db().collection("quizRooms").doc();
   await ref.set({
     hostId: user.uid,
@@ -426,14 +439,18 @@ exports.startCollabRoom = onCall({ region: REGION }, async (request) => {
     status: "lobby",
     questionIndex: -1,
     questionEndsAt: null,
+    introEndsAt: null,
     playerCount: 0,
     answeredCount: 0,
     choiceCounts: [],
-    questions,
+    questions: publicQuestions,
+    acceptingJoins: true,
+    revealedAnswer: null,
     templateId: templateId || "",
     pinExpiresAt: Date.now() + 6 * 60 * 60 * 1000,
     createdAt: FieldValue.serverTimestamp(),
   });
+  await ref.collection("secure").doc("answers").set({ answerKey });
   return { id: ref.id, code };
 });
 

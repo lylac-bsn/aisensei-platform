@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>COllAB に参加</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/collab.css">
+  <link rel="icon" href="../images/tab-logo.png" type="image/png">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255, 216, 90, 0.55), transparent 42%),
+        radial-gradient(circle at 88% 8%, rgba(103, 184, 255, 0.45), transparent 40%),
+        radial-gradient(circle at 70% 90%, rgba(181, 155, 255, 0.35), transparent 42%),
+        #FFF9F1;
+      font-family: "M PLUS Rounded 1c", sans-serif;
+      color: #352521;
+    }
+    .shell { width: min(440px, 100%); }
+    .open-app {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      align-items: center;
+    }
+    .ball-me {
+      width: var(--size, 88px);
+      height: var(--size, 88px);
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: #5C4A42;
+      font-weight: 600;
+      font-size: clamp(0.72rem, 2.4vw, 0.95rem);
+      box-shadow: 0 6px 14px rgba(53, 37, 33, 0.08);
+      border: 1.5px solid rgba(255, 255, 255, 0.55);
+      animation: floaty 1.6s ease-in-out infinite;
+    }
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ball-me { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="root">
+    <section class="cb-join-page">
+      <h1 class="cb-brand">COllAB</h1>
+      <p class="cb-sub">よみこみ中…</p>
+    </section>
+  </main>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
+      authDomain: "ai-sensei-8849b.firebaseapp.com",
+      projectId: "ai-sensei-8849b",
+      storageBucket: "ai-sensei-8849b.firebasestorage.app",
+      messagingSenderId: "483139385570",
+      appId: "1:483139385570:web:cc62d4391366a27db406bb",
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const root = document.getElementById("root");
+    const params = new URLSearchParams(location.search);
+    const preset = String(params.get("code") || params.get("pin") || "").replace(/\s+/g, "");
+
+    const COLORS = ["cb-red", "cb-blue", "cb-yellow", "cb-green"];
+    const SHAPES = ["▲", "◆", "●", "■"];
+
+    let roomId = "";
+    let roomData = {};
+    let me = null;
+    let stopRoom = null;
+    let stopMe = null;
+    let lockedChoice = "";
+    let lockedResult = "";
+    let lastPoints = 0;
+    let lastCorrect = null;
+    let syncing = false;
+    let clockGen = 0;
+    let clock = 0;
+    let joining = false;
+
+    function escapeHtml(value) {
+      return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+    }
+
+    async function callFunction(name, data) {
+      const token = await auth.currentUser.getIdToken();
+      const response = await fetch(`https://asia-northeast1-ai-sensei-8849b.cloudfunctions.net/${name}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ data }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error?.message || "うまくいきませんでした。");
+      return body.result || body;
+    }
+
+    async function ensureAuth() {
+      if (auth.currentUser) return auth.currentUser;
+      try {
+        await signInAnonymously(auth);
+      } catch {
+        /* anonymous may be disabled */
+      }
+      return auth.currentUser;
+    }
+
+    function paintPin(note = "") {
+      root.innerHTML = `
+        <section class="cb-join-page">
+          <h1 class="cb-brand">COllAB</h1>
+          <p class="cb-sub">クイズに参加しよう！</p>
+          <input id="pin" class="cb-search" inputmode="numeric" maxlength="8" placeholder="6けたのコード" value="${escapeHtml(preset)}" style="text-align:center;letter-spacing:0.22em;font-size:1.45rem;">
+          <button type="button" class="cb-btn cb-btn-primary" id="next">参加する</button>
+          <p class="cb-save-note is-error">${escapeHtml(note)}</p>
+          <div class="open-app">
+            <a class="cb-btn cb-btn-secondary" href="${escapeHtml(location.href)}">ブラウザで開く</a>
+            <p class="cb-sub">ラーニーアプリがある人は、アプリの COllAB からも参加できます。</p>
+          </div>
+        </section>`;
+      const go = async () => {
+        const code = root.querySelector("#pin").value.replace(/\s+/g, "");
+        try {
+          await ensureAuth();
+          if (!auth.currentUser) return paintLogin(code);
+          await callFunction("lookupCollabRoom", { code });
+          paintName(code);
+        } catch (error) {
+          paintPin(error.message);
+        }
+      };
+      root.querySelector("#next").onclick = go;
+      root.querySelector("#pin").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") go();
+      });
+      root.querySelector("#pin").focus();
+    }
+
+    function paintLogin(code, note = "") {
+      root.innerHTML = `
+        <section class="cb-join-page">
+          <h1 class="cb-brand">COllAB</h1>
+          <p class="cb-sub">ログインして参加</p>
+          <input id="email" class="cb-search" type="email" placeholder="メール">
+          <input id="password" class="cb-search" type="password" placeholder="パスワード">
+          <button type="button" class="cb-btn cb-btn-primary" id="go">つぎへ</button>
+          <p class="cb-save-note is-error">${escapeHtml(note)}</p>
+        </section>`;
+      root.querySelector("#go").onclick = async () => {
+        try {
+          await signInWithEmailAndPassword(auth, root.querySelector("#email").value, root.querySelector("#password").value);
+          paintName(code);
+        } catch (error) {
+          paintLogin(code, error.message);
+        }
+      };
+    }
+
+    function paintName(code, note = "") {
+      root.innerHTML = `
+        <section class="cb-join-page">
+          <h1 class="cb-brand">COllAB</h1>
+          <p class="cb-sub">おなまえを入力してね！</p>
+          <input id="name" class="cb-search" maxlength="12" placeholder="なまえ" style="text-align:center;font-size:1.2rem;">
+          <button type="button" class="cb-btn cb-btn-primary" id="join">参加する</button>
+          <p class="cb-save-note is-error">${escapeHtml(note)}</p>
+        </section>`;
+      root.querySelector("#join").onclick = async () => {
+        if (joining) return;
+        joining = true;
+        const button = root.querySelector("#join");
+        button.disabled = true;
+        try {
+          const result = await callFunction("joinQuiz", {
+            code,
+            nickname: root.querySelector("#name").value,
+          });
+          roomId = result.id;
+          me = { id: auth.currentUser.uid, name: result.name, ballColor: result.ballColor, ballSize: result.ballSize };
+          watch();
+        } catch (error) {
+          joining = false;
+          paintName(code, error.message);
+        }
+      };
+      root.querySelector("#name").focus();
+    }
+
+    function stopClock() {
+      clockGen += 1;
+      cancelAnimationFrame(clock);
+      clock = 0;
+    }
+
+    async function syncRoom() {
+      if (!roomId || syncing) return;
+      syncing = true;
+      try {
+        await callFunction("syncQuizRoom", { roomId, questionIndex: roomData.questionIndex });
+      } catch {
+        /* ignore */
+      } finally {
+        syncing = false;
+      }
+    }
+
+    function armClock(endsAt, fullMs, barId) {
+      stopClock();
+      const gen = clockGen;
+      const ends = Number(endsAt);
+      const full = Math.max(1, fullMs);
+      let synced = false;
+      const frame = () => {
+        if (gen !== clockGen) return;
+        const bar = root.querySelector(barId);
+        const left = ends - Date.now();
+        const ratio = Math.max(0, Math.min(1, left / full));
+        if (bar) bar.style.transform = `scaleX(${ratio})`;
+        if (left <= 0) {
+          if (!synced) {
+            synced = true;
+            syncRoom();
+          }
+          return;
+        }
+        clock = requestAnimationFrame(frame);
+      };
+      frame();
+    }
+
+    function paint() {
+      const status = roomData.status || "lobby";
+      const questions = roomData.questions || [];
+      const index = Number(roomData.questionIndex ?? -1);
+      const question = questions[index];
+      const name = me?.name || "プレイヤー";
+
+      if (status === "lobby") {
+        root.innerHTML = `
+          <section class="cb-join-page">
+            <h1 class="cb-brand">GET READY!</h1>
+            <p class="cb-sub">${escapeHtml(name)}さん、じゅんびはいい？</p>
+            <div class="ball-me" style="--size:${Number(me?.ballSize || 88)}px;background:${escapeHtml(me?.ballColor || "#C9EBD8")}">${escapeHtml(name.slice(0, 6))}</div>
+            <p class="cb-sub">先生がゲームを始めるまで待ってね！</p>
+            <p class="cb-sub">${escapeHtml(roomData.title || "COllAB")}</p>
+          </section>`;
+        return;
+      }
+
+      if (status === "intro" && question) {
+        root.innerHTML = `
+          <section class="cb-live">
+            <p class="cb-sub">問題 ${index + 1} / ${questions.length}</p>
+            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+            <div class="cb-timer"><span id="intro-bar"></span></div>
+            <p class="cb-sub">もうすぐ答えが出るよ</p>
+          </section>`;
+        armClock(roomData.introEndsAt, 3000, "#intro-bar");
+        return;
+      }
+
+      if (status === "question" && question) {
+        const answered = lockedChoice || Number(me?.answeredIndex) === index;
+        root.innerHTML = `
+          <section class="cb-live">
+            <div class="cb-timer"><span id="q-bar"></span></div>
+            <p class="cb-sub">問題 ${index + 1} / ${questions.length}</p>
+            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+            <div class="cb-answer-grid" id="board"></div>
+            <p class="cb-save-note">${escapeHtml(lockedResult)}</p>
+          </section>`;
+        const board = root.querySelector("#board");
+        (question.choices || []).forEach((choice, choiceIndex) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `cb-answer ${COLORS[choiceIndex] || ""}${lockedChoice === choice ? " is-correct" : ""}`;
+          button.disabled = Boolean(answered);
+          button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+          button.onclick = async () => {
+            if (lockedChoice || Number(me?.answeredIndex) === index) return;
+            lockedChoice = choice;
+            lockedResult = "こたえを送ったよ！みんなを待ってね！";
+            board.querySelectorAll("button").forEach((item) => { item.disabled = true; });
+            try {
+              const result = await callFunction("submitQuizAnswer", { roomId, choice, questionIndex: index });
+              if (result.duplicate) {
+                /* keep local answer state */
+              } else if (result.expired) {
+                lastCorrect = false;
+                lastPoints = 0;
+              } else if (result.closed) {
+                /* reveal already started — keep choice; score from reveal answer */
+                lastCorrect = null;
+              } else {
+                lastPoints = Number(result.points || 0);
+                lastCorrect = Boolean(result.correct);
+              }
+              if (!result.expired && !result.closed) syncRoom();
+            } catch (error) {
+              lockedResult = error.message;
+            }
+            paint();
+          };
+          board.appendChild(button);
+        });
+        const limit = Number(question.timeLimitSec || 20) * 1000;
+        armClock(roomData.questionEndsAt, limit, "#q-bar");
+        return;
+      }
+
+      if (status === "reveal" && question) {
+        const answer = roomData.revealedAnswer || "";
+        const myChoice = lockedChoice
+          || (Number(me?.answeredIndex) === index ? (me?.choice || "") : "");
+        const matchesAnswer = Boolean(
+          myChoice && String(myChoice).trim().toLowerCase() === String(answer).trim().toLowerCase(),
+        );
+        const gotIt = lastCorrect == null ? matchesAnswer : lastCorrect === true;
+        const points = gotIt ? Number(lastPoints || me?.lastPoints || 0) : 0;
+        root.innerHTML = `
+          <section class="cb-live">
+            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+            <p class="cb-banner ${gotIt ? "is-ok" : "is-bad"}">${gotIt ? "せいかい！" : "ふせいかい"}</p>
+            <p class="cb-pin" style="font-size:clamp(1.8rem,6vw,2.6rem);letter-spacing:0.04em;">+${points}</p>
+            <p class="cb-sub">てん</p>
+          </section>`;
+        return;
+      }
+
+      if (status === "leaderboard") {
+        const ranking = roomData.ranking || [];
+        const mine = ranking.findIndex((row) => row.id === auth.currentUser.uid);
+        const row = mine >= 0 ? ranking[mine] : null;
+        root.innerHTML = `
+          <section class="cb-live">
+            <h2 class="cb-brand">いまのてんすう</h2>
+            <p class="cb-question">${row ? `${mine + 1}い` : "-"}</p>
+            <p class="cb-sub">${escapeHtml(name)} · ${Number(row?.score || me?.score || 0)} てん</p>
+            <p class="cb-sub">つぎの問題を待ってね</p>
+          </section>`;
+        return;
+      }
+
+      if (status === "final_results" || status === "done") {
+        const ranking = roomData.ranking || [];
+        const mine = ranking.findIndex((row) => row.id === auth.currentUser.uid);
+        const row = mine >= 0 ? ranking[mine] : null;
+        const total = questions.length || 0;
+        const correct = Number(me?.correctCount || 0);
+        root.innerHTML = `
+          <section class="cb-live">
+            <h2 class="cb-brand">おつかれさま！</h2>
+            <p class="cb-question">${mine >= 0 ? `${mine + 1}い` : ""}</p>
+            <p class="cb-sub">${Number(row?.score || me?.score || 0)} てん</p>
+            <p class="cb-sub">${total}問中${correct}問正解！</p>
+            <p class="cb-sub">またチャレンジしよう！</p>
+          </section>`;
+      }
+    }
+
+    function watch() {
+      stopRoom?.();
+      stopMe?.();
+      root.innerHTML = `<section class="cb-join-page"><p class="cb-sub">ルームに入っています…</p></section>`;
+      stopRoom = onSnapshot(doc(db, "quizRooms", roomId), (snap) => {
+        const next = snap.data() || {};
+        // Only reset answer lock when the question changes — not on question→reveal.
+        if (next.questionIndex !== roomData.questionIndex) {
+          lockedChoice = "";
+          lockedResult = "";
+          lastPoints = 0;
+          lastCorrect = null;
+        }
+        roomData = next;
+        paint();
+      });
+      stopMe = onSnapshot(doc(db, "quizRooms", roomId, "players", auth.currentUser.uid), (snap) => {
+        me = snap.exists() ? { id: snap.id, ...snap.data() } : me;
+        if (typeof me?.lastPoints === "number" && Number(me.answeredIndex) === Number(roomData.questionIndex)) {
+          lastPoints = Number(me.lastPoints);
+        }
+        paint();
+      });
+    }
+
+    onAuthStateChanged(auth, async () => {
+      if (preset) {
+        try {
+          await ensureAuth();
+          if (!auth.currentUser) {
+            paintLogin(preset);
+            return;
+          }
+          await callFunction("lookupCollabRoom", { code: preset });
+          paintName(preset);
+        } catch (error) {
+          paintPin(error.message);
+        }
+      } else {
+        paintPin();
+      }
+    });
+  </script>
+</body>
+</html>

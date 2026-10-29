@@ -253,6 +253,7 @@ exports.deleteCostEntry = onCall(
   exports.saveQuizTemplate = school.saveQuizTemplate;
   exports.deleteQuizTemplate = school.deleteQuizTemplate;
   exports.joinQuiz = school.joinQuiz;
+  exports.lookupCollabRoom = school.lookupCollabRoom;
   exports.advanceQuiz = school.advanceQuiz;
   exports.syncQuizRoom = school.syncQuizRoom;
   exports.submitQuizAnswer = school.submitQuizAnswer;
