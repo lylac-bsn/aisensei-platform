@@ -196,6 +196,11 @@ service cloud.firestore {
         );
         allow write: if false;
       }
+
+      match /secure/{docId} {
+        allow read: if isQuizHost(roomId) || isAdmin();
+        allow write: if false;
+      }
     }
 
     match /quizSessions/{sessionId} {
