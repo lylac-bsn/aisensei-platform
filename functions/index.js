@@ -254,6 +254,7 @@ exports.deleteCostEntry = onCall(
   exports.duplicateHomeworkPack = school.duplicateHomeworkPack;
   exports.deleteHomeworkPack = school.deleteHomeworkPack;
   exports.setHomeworkPublished = school.setHomeworkPublished;
+  exports.updateHomeworkPackMeta = school.updateHomeworkPackMeta;
   exports.getHomeworkEditor = school.getHomeworkEditor;
   exports.submitHomework = school.submitHomework;
   exports.finishHomework = school.finishHomework;

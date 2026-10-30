@@ -1005,20 +1005,24 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib31");
-    const openHub = () => {
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib85");
+    const openHub = ({ landing = false } = {}) => {
       root._stopAttendance?.();
       return mountHomeworkHub(root, {
         db,
         uid,
         callFunction,
+        ...(landing ? { initialView: "landing", skipResume: true } : {}),
         openReport: () => {
           root._stopAttendance?.();
-          return renderReport(root, db, uid, { onCreateHomework: openHub });
+          return renderReport(root, db, uid, {
+            onCreateHomework: () => openHub({ landing: true }),
+          });
         },
       });
     };
-    await openHub();
+    // Left-nav always opens the homework/report top page.
+    await openHub({ landing: true });
     return;
   }
   if (action === "my-homework") {
@@ -1784,7 +1788,7 @@ function renderQuiz(root, { host, uid }) {
 }
 
 async function playPackHomework(root, assignmentId, uid) {
-  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib31");
+  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib85");
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
   const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));
