@@ -594,10 +594,12 @@ exports.submitHomework = onCall({ region: REGION }, async (request) => {
 });
 
 function quizCode() {
-  return Math.random().toString(36).slice(2, 6).toUpperCase();
+  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 const QUIZ_LIMITS = new Set([5, 10, 20, 30, 60, 90, 120]);
+const BALL_COLORS = ["#C9EBD8", "#C5DFF5", "#F8D0BC", "#F3E6A6", "#D9CEF2", "#F5C8D6", "#F0B8B0", "#BFE8E2"];
+const BAD_NAMES = new Set(["ばか", "あほ", "くそ", "しね", "fuck", "shit", "bitch"]);
 
 function quizTimeLimit(value) {
   const seconds = Number(value);
@@ -605,27 +607,115 @@ function quizTimeLimit(value) {
 }
 
 function quizQuestions(raw) {
-  return (Array.isArray(raw) ? raw : []).slice(0, 20).map((row) => ({
-    prompt: clean(row?.prompt, 120),
+  return (Array.isArray(raw) ? raw : []).slice(0, 30).map((row) => ({
+    type: clean(row?.type, 24) || "multipleChoice",
+    prompt: clean(row?.prompt, 160),
     choices: (Array.isArray(row?.choices) ? row.choices : []).map((choice) => clean(choice, 80)).filter(Boolean).slice(0, 4),
     answer: clean(row?.answer, 80),
+    answers: (Array.isArray(row?.answers) ? row.answers : []).map((item) => clean(item, 80)).filter(Boolean).slice(0, 8),
+    pairs: Array.isArray(row?.pairs) ? row.pairs : undefined,
+    words: Array.isArray(row?.words) ? row.words.map((word) => clean(word, 40)).filter(Boolean) : undefined,
     timeLimitSec: quizTimeLimit(row?.timeLimitSec),
-  })).filter((row) => row.prompt && row.choices.length >= 2 && row.choices.some((choice) => norm(choice) === norm(row.answer)));
+    points: Math.min(1000, Math.max(0, Number(row?.points) || 1000)),
+  })).filter((row) => {
+    if (!row.prompt) return false;
+    if (row.type === "typeAnswer") return (row.answers.length || row.answer);
+    if (row.type === "wordOrder") return (row.words || []).length >= 2 && row.answer;
+    if (row.type === "trueFalse") return true;
+    return row.choices.length >= 2 && row.choices.some((choice) => norm(choice) === norm(row.answer) || row.answers.some((item) => norm(item) === norm(choice)));
+  });
 }
 
-function nextRoomPatch(data) {
+function publicQuestions(questions) {
+  return questions.map((row) => ({
+    type: row.type || "multipleChoice",
+    prompt: row.prompt,
+    choices: row.choices || [],
+    pairs: row.pairs || null,
+    words: row.words || null,
+    timeLimitSec: row.timeLimitSec,
+    points: row.points || 1000,
+  }));
+}
+
+function answerKey(questions) {
+  return questions.map((row) => ({
+    answer: row.answer || "",
+    answers: row.answers?.length ? row.answers : (row.answer ? [row.answer] : []),
+  }));
+}
+
+async function loadAnswerKey(tx, roomRef, data) {
+  if (Array.isArray(data.answerKey) && data.answerKey.length) return data.answerKey;
+  const secure = await tx.get(roomRef.collection("secure").doc("answers"));
+  if (secure.exists) return secure.data().answerKey || [];
+  return (data.questions || []).map((row) => ({ answer: row.answer || "", answers: row.answers || [] }));
+}
+
+function withAnswers(data, key) {
+  const questions = (data.questions || []).map((row, index) => ({
+    ...row,
+    answer: key[index]?.answer || row.answer || "",
+    answers: key[index]?.answers || row.answers || [],
+  }));
+  return { ...data, questions };
+}
+
+function introPatch(data, index) {
+  return {
+    status: "intro",
+    questionIndex: index,
+    introEndsAt: Date.now() + 3000,
+    questionEndsAt: null,
+    answeredCount: 0,
+    choiceCounts: [],
+    revealedAnswer: null,
+    acceptingJoins: false,
+  };
+}
+
+function questionPatch(data) {
+  const index = Number(data.questionIndex);
+  const seconds = quizTimeLimit((data.questions || [])[index]?.timeLimitSec);
+  return {
+    status: "question",
+    introEndsAt: null,
+    questionEndsAt: Date.now() + seconds * 1000,
+    answeredCount: 0,
+    choiceCounts: [],
+    revealedAnswer: null,
+  };
+}
+
+function nextAfterLeaderboard(data) {
   const questions = data.questions || [];
   const next = Number(data.questionIndex) + 1;
   if (next >= questions.length) {
-    return { questionIndex: Number(data.questionIndex), status: "done", questionEndsAt: null, answeredCount: 0, choiceCounts: [] };
+    return {
+      status: "final_results",
+      questionIndex: Number(data.questionIndex),
+      questionEndsAt: null,
+      introEndsAt: null,
+      answeredCount: 0,
+      choiceCounts: [],
+    };
   }
-  return {
-    questionIndex: next,
-    status: "question",
-    questionEndsAt: Date.now() + quizTimeLimit(questions[next]?.timeLimitSec) * 1000,
-    answeredCount: 0,
-    choiceCounts: [],
-  };
+  return introPatch(data, next);
+}
+
+function sanitizeNickname(value) {
+  const name = clean(value, 12).replace(/\s+/g, " ");
+  if (!name || name.length < 1) throw new HttpsError("invalid-argument", "おなまえを入れてね。");
+  if (BAD_NAMES.has(name.toLowerCase()) || BAD_NAMES.has(name)) {
+    throw new HttpsError("invalid-argument", "そのおなまえはつかえないよ。");
+  }
+  return name;
+}
+
+function ballStyle(seed) {
+  const color = BALL_COLORS[Math.abs(Number(seed) || Date.now()) % BALL_COLORS.length];
+  const size = 60 + (Math.abs(Number(seed) || 7) % 51);
+  return { ballColor: color, ballSize: size };
 }
 
 function tallyChoices(data, docs, extra) {
@@ -648,11 +738,15 @@ function tallyChoices(data, docs, extra) {
   return counts;
 }
 
-function revealPatch(data, docs, extra) {
+function revealPatch(data, docs, extra, key) {
+  const index = Number(data.questionIndex);
+  const answer = key?.[index]?.answer || (data.questions || [])[index]?.answer || "";
   return {
     status: "reveal",
     questionEndsAt: null,
+    introEndsAt: null,
     choiceCounts: tallyChoices(data, docs, extra),
+    revealedAnswer: answer,
   };
 }
 
@@ -660,11 +754,17 @@ async function rankingFor(tx, roomRef, hostId) {
   const snap = await tx.get(roomRef.collection("players"));
   return snap.docs
     .filter((item) => item.id !== hostId)
-    .map((item) => ({
-      id: item.id,
-      name: clean(item.data().name, 40) || "プレイヤー",
-      score: Number(item.data().score || 0),
-    }))
+    .map((item) => {
+      const row = item.data() || {};
+      return {
+        id: item.id,
+        name: clean(row.name, 40) || "プレイヤー",
+        score: Number(row.score || 0),
+        correctCount: Number(row.correctCount || 0),
+        ballColor: clean(row.ballColor, 16) || "",
+        ballSize: Number(row.ballSize || 0) || undefined,
+      };
+    })
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ja"))
     .slice(0, 30);
 }
@@ -684,12 +784,31 @@ exports.createQuiz = onCall({ region: REGION }, async (request) => {
     status: "lobby",
     questionIndex: -1,
     questionEndsAt: null,
+    introEndsAt: null,
     playerCount: 0,
     answeredCount: 0,
-    questions,
+    questions: publicQuestions(questions),
+    acceptingJoins: true,
+    revealedAnswer: null,
     createdAt: FieldValue.serverTimestamp(),
   });
+  await ref.collection("secure").doc("answers").set({ answerKey: answerKey(questions) });
   return { id: ref.id, code };
+});
+
+exports.lookupCollabRoom = onCall({ region: REGION }, async (request) => {
+  const code = clean(request.data?.code, 8).replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(code)) throw new HttpsError("invalid-argument", "6けたのコードを入れてね。");
+  const snap = await db().collection("quizRooms").where("code", "==", code).limit(1).get();
+  if (snap.empty) throw new HttpsError("not-found", "そのコードのルームはないよ。");
+  const data = snap.docs[0].data();
+  if (data.status !== "lobby" || data.acceptingJoins === false) {
+    throw new HttpsError("failed-precondition", "このルームはもう参加できないよ。");
+  }
+  if (data.pinExpiresAt && Date.now() > Number(data.pinExpiresAt)) {
+    throw new HttpsError("failed-precondition", "このコードのじかんが切れたよ。");
+  }
+  return { id: snap.docs[0].id, title: data.title || "COllAB", code };
 });
 
 exports.saveQuizTemplate = onCall({ region: REGION }, async (request) => {
@@ -730,27 +849,57 @@ exports.deleteQuizTemplate = onCall({ region: REGION }, async (request) => {
 });
 
 exports.joinQuiz = onCall({ region: REGION }, async (request) => {
-  const user = await callerUser(request);
-  const code = clean(request.data?.code, 8).toUpperCase();
+  if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です。");
+  const uid = request.auth.uid;
+  let profile = null;
+  try {
+    profile = await callerUser(request);
+  } catch {
+    profile = { uid, displayName: "" };
+  }
+  const code = clean(request.data?.code, 8).replace(/\s+/g, "");
+  const nickname = request.data?.nickname != null
+    ? sanitizeNickname(request.data.nickname)
+    : clean(profile.displayName, 12) || "プレイヤー";
   const snap = await db().collection("quizRooms").where("code", "==", code).limit(1).get();
-  if (snap.empty) throw new HttpsError("not-found", "ルームが見つかりません。");
+  if (snap.empty) throw new HttpsError("not-found", "そのコードのルームはないよ。");
   const roomRef = snap.docs[0].ref;
   const title = snap.docs[0].data().title;
+  let ball = null;
   await db().runTransaction(async (tx) => {
     const room = await tx.get(roomRef);
-    if (!room.exists) throw new HttpsError("not-found", "ルームが見つかりません。");
-    const playerRef = roomRef.collection("players").doc(user.uid);
-    const player = await tx.get(playerRef);
-    if (!player.exists && user.uid !== room.data().hostId) {
-      tx.set(roomRef, { playerCount: FieldValue.increment(1) }, { merge: true });
+    if (!room.exists) throw new HttpsError("not-found", "そのコードのルームはないよ。");
+    const data = room.data();
+    if (data.status !== "lobby" || data.acceptingJoins === false) {
+      throw new HttpsError("failed-precondition", "このルームはもう参加できないよ。");
     }
-    tx.set(playerRef, {
-      name: clean(user.displayName, 40) || "プレイヤー",
-      score: player.exists ? Number(player.data().score || 0) : 0,
-      answeredIndex: player.exists ? Number(player.data().answeredIndex ?? -1) : -1,
-    }, { merge: true });
+    if (uid === data.hostId) throw new HttpsError("failed-precondition", "ホストは参加者として入れません。");
+    const playerRef = roomRef.collection("players").doc(uid);
+    const player = await tx.get(playerRef);
+    if (!player.exists) {
+      tx.set(roomRef, { playerCount: FieldValue.increment(1) }, { merge: true });
+      ball = ballStyle(Date.now() + uid.length);
+      tx.set(playerRef, {
+        name: nickname,
+        score: 0,
+        answeredIndex: -1,
+        correctCount: 0,
+        ...ball,
+        joinedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      ball = {
+        ballColor: player.data().ballColor || ballStyle(uid.length).ballColor,
+        ballSize: player.data().ballSize || ballStyle(uid.length).ballSize,
+      };
+      tx.set(playerRef, {
+        name: nickname,
+        ballColor: ball.ballColor,
+        ballSize: ball.ballSize,
+      }, { merge: true });
+    }
   });
-  return { id: roomRef.id, title };
+  return { id: roomRef.id, title, name: nickname, ...ball };
 });
 
 exports.advanceQuiz = onCall({ region: REGION }, async (request) => {
@@ -765,26 +914,59 @@ exports.advanceQuiz = onCall({ region: REGION }, async (request) => {
       throw new HttpsError("permission-denied", "ホストだけが進められます。");
     }
     const data = room.data();
-    if (data.status === "done" || (expected !== null && Number(data.questionIndex) !== expected)) {
+    if (["done", "completed"].includes(data.status)) {
       return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
+    }
+    if (expected !== null && !["lobby", "leaderboard", "final_results"].includes(data.status)
+      && Number(data.questionIndex) !== expected) {
+      return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
+    }
+    const key = await loadAnswerKey(tx, roomRef, data);
+    const full = withAnswers(data, key);
+    if (data.status === "lobby") {
+      const patch = introPatch(data, 0);
+      tx.set(roomRef, patch, { merge: true });
+      return { ...patch, advanced: true };
     }
     if (data.status === "question") {
       const playersSnap = await tx.get(roomRef.collection("players"));
-      const patch = revealPatch(data, playersSnap.docs);
+      const patch = revealPatch(full, playersSnap.docs, null, key);
       tx.set(roomRef, patch, { merge: true });
       return { ...patch, questionIndex: Number(data.questionIndex), advanced: true };
     }
-    const finishing = data.status === "reveal" && Number(data.questionIndex) + 1 >= (data.questions || []).length;
-    const ranking = finishing ? await rankingFor(tx, roomRef, data.hostId) : null;
-    const patch = nextRoomPatch(data);
-    if (ranking) patch.ranking = ranking;
-    tx.set(roomRef, patch, { merge: true });
-    return { ...patch, advanced: true };
+    if (data.status === "reveal") {
+      const ranking = await rankingFor(tx, roomRef, data.hostId);
+      const patch = {
+        status: "leaderboard",
+        ranking,
+        questionEndsAt: null,
+        introEndsAt: null,
+      };
+      tx.set(roomRef, patch, { merge: true });
+      return { ...patch, questionIndex: Number(data.questionIndex), advanced: true };
+    }
+    if (data.status === "leaderboard") {
+      const patch = nextAfterLeaderboard(data);
+      if (patch.status === "final_results") {
+        patch.ranking = data.ranking || await rankingFor(tx, roomRef, data.hostId);
+      }
+      tx.set(roomRef, patch, { merge: true });
+      return { ...patch, advanced: true };
+    }
+    if (data.status === "final_results") {
+      const patch = { status: "done", acceptingJoins: false };
+      tx.set(roomRef, patch, { merge: true });
+      return { ...patch, questionIndex: Number(data.questionIndex), advanced: true };
+    }
+    return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
   });
 });
 
 exports.syncQuizRoom = onCall({ region: REGION }, async (request) => {
-  const user = await callerUser(request);
+  const user = await callerUser(request).catch(async () => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です。");
+    return { uid: request.auth.uid };
+  });
   const roomRef = db().collection("quizRooms").doc(clean(request.data?.roomId, 128));
   const expected = Number(request.data?.questionIndex);
   if (!Number.isInteger(expected)) throw new HttpsError("invalid-argument", "問題が不明です。");
@@ -795,6 +977,17 @@ exports.syncQuizRoom = onCall({ region: REGION }, async (request) => {
     const me = await tx.get(roomRef.collection("players").doc(user.uid));
     if (data.hostId !== user.uid && !me.exists) {
       throw new HttpsError("permission-denied", "このルームの参加者だけが進められます。");
+    }
+    const key = await loadAnswerKey(tx, roomRef, data);
+    const full = withAnswers(data, key);
+    if (data.status === "intro" && Number(data.questionIndex) === expected) {
+      const ends = Number(data.introEndsAt || 0);
+      if (ends > 0 && Date.now() >= ends) {
+        const patch = questionPatch(data);
+        tx.set(roomRef, patch, { merge: true });
+        return { ...patch, questionIndex: expected, advanced: true };
+      }
+      return { status: data.status, questionIndex: expected, advanced: false };
     }
     if (data.status !== "question" || Number(data.questionIndex) !== expected) {
       return { status: data.status, questionIndex: Number(data.questionIndex), advanced: false };
@@ -807,14 +1000,20 @@ exports.syncQuizRoom = onCall({ region: REGION }, async (request) => {
       return { status: data.status, questionIndex: expected, advanced: false };
     }
     const playersSnap = await tx.get(roomRef.collection("players"));
-    const patch = revealPatch(data, playersSnap.docs);
+    const patch = revealPatch(full, playersSnap.docs, null, key);
     tx.set(roomRef, patch, { merge: true });
     return { ...patch, questionIndex: expected, advanced: true };
   });
 });
 
 exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
-  const user = await callerUser(request);
+  if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です。");
+  let user;
+  try {
+    user = await callerUser(request);
+  } catch {
+    user = { uid: request.auth.uid };
+  }
   const roomRef = db().collection("quizRooms").doc(clean(request.data?.roomId, 128));
   const sent = request.data?.questionIndex;
   const expected = sent === undefined || sent === null || sent === "" ? null : Number(sent);
@@ -830,12 +1029,36 @@ exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
     const playerRef = roomRef.collection("players").doc(user.uid);
     const player = await tx.get(playerRef);
     if (!player.exists) throw new HttpsError("permission-denied", "先に参加してください。");
-    if (Number(player.data().answeredIndex) === index) return { correct: false, duplicate: true };
+    if (Number(player.data().answeredIndex) === index) return { correct: false, duplicate: true, pending: true };
     const ends = Number(data.questionEndsAt || 0);
-    const expired = ends > 0 && Date.now() >= ends;
-    const question = (data.questions || [])[index];
+    // Small grace so a tap at the buzzer still counts before reveal lands.
+    const expired = ends > 0 && Date.now() > ends + 1500;
+    const key = await loadAnswerKey(tx, roomRef, data);
+    const full = withAnswers(data, key);
+    const question = (full.questions || [])[index];
     const choice = clean(request.data?.choice, 80);
-    const correct = !expired && norm(choice) === norm(question?.answer);
+    const typed = clean(request.data?.typed, 160);
+    const multi = Array.isArray(request.data?.choices) ? request.data.choices.map((item) => clean(item, 80)).filter(Boolean) : [];
+    let correct = false;
+    if (!expired) {
+      if ((question?.type || "multipleChoice") === "typeAnswer") {
+        const answers = (question.answers || [question.answer]).map(norm);
+        correct = answers.includes(norm(typed || choice));
+      } else if ((question?.type || "") === "wordOrder") {
+        correct = norm(typed || choice) === norm(question?.answer);
+      } else if (Array.isArray(question?.answers) && question.answers.length > 1) {
+        const need = question.answers.map(norm).sort().join("|");
+        const got = multi.map(norm).sort().join("|");
+        correct = need === got && multi.length > 0;
+      } else {
+        correct = norm(choice || typed) === norm(question?.answer);
+      }
+    }
+    const base = Math.min(1000, Math.max(0, Number(question?.points) || 1000));
+    const limitMs = Math.max(1000, (Number(question?.timeLimitSec) || 20) * 1000);
+    const leftRatio = ends > 0 ? Math.max(0, Math.min(1, (ends - Date.now()) / limitMs)) : 0;
+    const speedBonus = correct ? Math.round(500 * leftRatio) : 0;
+    const gained = correct ? base + speedBonus : 0;
     const counts = user.uid === data.hostId ? null : {
       answeredCount: Number(data.answeredCount || 0) + (expired ? 0 : 1),
       playerCount: Number(data.playerCount || 0),
@@ -843,24 +1066,30 @@ exports.submitQuizAnswer = onCall({ region: REGION }, async (request) => {
     const closing = expired || (counts && counts.playerCount > 0 && counts.answeredCount >= counts.playerCount);
     const playersSnap = closing ? await tx.get(roomRef.collection("players")) : null;
     if (expired) {
-      tx.set(roomRef, revealPatch(data, playersSnap.docs), { merge: true });
-      return { correct: false, expired: true };
+      tx.set(roomRef, revealPatch(full, playersSnap.docs, null, key), { merge: true });
+      return { correct: false, expired: true, pending: true };
     }
     const roomPatch = {};
     if (counts && !closing) roomPatch.answeredCount = counts.answeredCount;
-    if (closing) Object.assign(roomPatch, revealPatch(data, playersSnap.docs, { id: user.uid, choice }));
+    if (closing) Object.assign(roomPatch, revealPatch(full, playersSnap.docs, { id: user.uid, choice: choice || typed }, key));
     tx.set(playerRef, {
       answeredIndex: index,
-      choice,
-      score: FieldValue.increment(correct ? 100 : 0),
+      choice: choice || typed || multi.join(" | "),
+      score: FieldValue.increment(gained),
+      correctCount: FieldValue.increment(correct ? 1 : 0),
+      lastPoints: gained,
     }, { merge: true });
-    if (correct) {
+    if (correct && profileExists(user)) {
       tx.set(db().collection("users").doc(user.uid), { xp: FieldValue.increment(2) }, { merge: true });
     }
     if (Object.keys(roomPatch).length) tx.set(roomRef, roomPatch, { merge: true });
-    return { correct };
+    return { correct, points: gained, speedBonus, pending: true };
   });
 });
+
+function profileExists(user) {
+  return Boolean(user && user.role !== undefined);
+}
 
 exports.markInboxRead = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);

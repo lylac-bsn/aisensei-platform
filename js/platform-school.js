@@ -1,5 +1,6 @@
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, collection, doc, documentId, getDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { renderCollab } from "./platform-collab.js";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -893,7 +894,6 @@ async function renderStudentLearning(root, db, uid) {
             <ul>${(item.phrases || []).map((phrase) => `<li>${escapeHtml(phrase.en || "")} / ${escapeHtml(phrase.ja || "")}</li>`).join("")}</ul>
           </article>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
       </section>
-      <p class="gc-learn-more"><a href="page1.html">アクアリウムの宿題をはじめる</a></p>
     </div>`;
   root.querySelectorAll("[data-hw]").forEach((button) => {
     button.onclick = () => {
@@ -961,8 +961,9 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   const me = await getDoc(doc(db, "users", uid));
-  const host = me.data()?.role === "admin" || me.data()?.role === "owner";
-  renderQuiz(root, { host, uid });
+  const role = me.data()?.role || "";
+  const host = role === "admin" || role === "owner";
+  await renderCollab(root, { host, uid, role });
 }
 
 const QUIZ_COLORS = ["qo-red", "qo-blue", "qo-yellow", "qo-green"];

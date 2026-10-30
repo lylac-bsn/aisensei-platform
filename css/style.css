@@ -418,8 +418,10 @@ header.app-header .header-tab-switcher .tab-btn:disabled {
     pointer-events: none;
 }
 
-/* Legacy header rules (login/other pages) */
-header:not(.app-header) {
+/* Legacy header rules (login/other pages).
+   Keep specificity at one class so hub/COllAB headers (header.gc-top, etc.) still win.
+   :where() exclusions add zero specificity. */
+header:not(.app-header):where(:not(.gc-top):not(.cb-finish-hero):not(.platform-hub__top)) {
     background: linear-gradient(135deg, #D84315 0%, #E64A19 100%);
     color: var(--text-light);
     padding: 1.5rem 2.5rem;
