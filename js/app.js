@@ -45,7 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const hubPanel = document.getElementById('hub-panel');
     const hubPlaceholder = document.getElementById('hub-panel-placeholder');
     const hubPlaceholderTitle = document.getElementById('hub-placeholder-title');
-    const hubHomework = document.getElementById('hub-panel-homework');
     const hubGreeting = document.getElementById('hub-greeting');
     const hubRoleLabel = document.getElementById('hub-role-label');
     const hubStudent = document.getElementById('hub-student');
@@ -76,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hubMenu) hubMenu.hidden = false;
         if (hubPanel) hubPanel.hidden = true;
         if (hubPlaceholder) hubPlaceholder.hidden = true;
-        if (hubHomework) hubHomework.hidden = true;
         const platformPanel = document.getElementById('hub-panel-platform');
         if (platformPanel) platformPanel.hidden = true;
         const pageTitle = document.getElementById('hub-page-title');
@@ -235,15 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (hubMenu) hubMenu.hidden = true;
         hubPanel.hidden = false;
-        if (action === 'aquarium-homework') {
-            if (hubPlaceholder) hubPlaceholder.hidden = true;
-            document.getElementById('hub-panel-platform')?.setAttribute('hidden', '');
-            if (hubHomework) hubHomework.hidden = false;
-            return;
-        }
         if (action === 'family' || action === 'children' || action === 'inbox' || action === 'attendance' || action === 'assign-homework' || action === 'my-homework' || action === 'quiz') {
             if (hubPlaceholder) hubPlaceholder.hidden = true;
-            if (hubHomework) hubHomework.hidden = true;
             const panel = document.getElementById('hub-panel-platform');
             if (panel) {
                 panel.hidden = false;
@@ -255,7 +246,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (action === 'book' || action === 'publish-class' || action === 'tickets' || action === 'ticket-settings') {
             if (hubPlaceholder) hubPlaceholder.hidden = true;
-            if (hubHomework) hubHomework.hidden = true;
             const panel = document.getElementById('hub-panel-platform');
             if (panel) {
                 panel.hidden = false;
@@ -264,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         document.getElementById('hub-panel-platform')?.setAttribute('hidden', '');
-        if (hubHomework) hubHomework.hidden = true;
         if (hubPlaceholder) hubPlaceholder.hidden = false;
         if (hubPlaceholderTitle) {
             hubPlaceholderTitle.textContent = actionBtn.getAttribute('data-hub-label') || '';

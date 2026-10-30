@@ -891,7 +891,6 @@ async function renderStudentLearning(root, db, uid) {
             <ul>${(item.phrases || []).map((phrase) => `<li>${escapeHtml(phrase.en || "")} / ${escapeHtml(phrase.ja || "")}</li>`).join("")}</ul>
           </article>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
       </section>
-      <p class="gc-learn-more"><a href="page1.html">アクアリウムの宿題をはじめる</a></p>
     </div>`;
   root.querySelectorAll("[data-hw]").forEach((button) => {
     button.onclick = () => playHomework(root.querySelector("#hw-play"), button.dataset.hw);

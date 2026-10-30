@@ -52,15 +52,6 @@
         ]
       },
       {
-        "source": "voice-tab*.html",
-        "headers": [
-          {
-            "key": "X-Frame-Options",
-            "value": "SAMEORIGIN"
-          }
-        ]
-      },
-      {
         "source": "admin.html",
         "headers": [
           {
