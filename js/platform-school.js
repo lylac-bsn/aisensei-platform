@@ -5,11 +5,17 @@ import { renderCollab } from "./platform-collab.js";
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
   const token = await user.getIdToken();
-  const response = await fetch(`https://asia-northeast1-ai-sensei-8849b.cloudfunctions.net/${name}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ data }),
-  });
+  let response;
+  try {
+    response = await fetch(`https://asia-northeast1-ai-sensei-8849b.cloudfunctions.net/${name}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ data }),
+    });
+  } catch (error) {
+    console.error(`[callFunction] ${name} network error`, error);
+    throw new Error("通信に失敗しました。接続を確認してもう一度お試しください。");
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body?.error?.message || "うまくいきませんでした。");
   return body.result || body;
@@ -523,17 +529,28 @@ async function renderAttendance(root, db, uid) {
   await paintRoster();
 }
 
-async function renderReport(root, db, uid, reportOptions = {}) {
-  const classSnap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
-  const sessions = classSnap.docs.map((item) => {
-    const data = item.data();
-    return {
-      id: item.id,
-      title: data.title || "クラス",
-      startsAt: data.startsAt?.toDate?.() || null,
-      endsAt: data.endsAt?.toDate?.() || null,
-    };
-  }).sort((a, b) => (b.startsAt?.getTime?.() || 0) - (a.startsAt?.getTime?.() || 0));
+export async function renderReport(root, db, uid, reportOptions = {}) {
+  const lab = Boolean(reportOptions.lab);
+  let sessions = [];
+  if (lab) {
+    sessions = [{
+      id: "lab-class",
+      title: "プレビューのクラス",
+      startsAt: new Date(),
+      endsAt: null,
+    }];
+  } else {
+    const classSnap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
+    sessions = classSnap.docs.map((item) => {
+      const data = item.data();
+      return {
+        id: item.id,
+        title: data.title || "クラス",
+        startsAt: data.startsAt?.toDate?.() || null,
+        endsAt: data.endsAt?.toDate?.() || null,
+      };
+    }).sort((a, b) => (b.startsAt?.getTime?.() || 0) - (a.startsAt?.getTime?.() || 0));
+  }
   const now = Date.now();
   const todayKey = jstParts(new Date());
   const todayId = `${todayKey.year}-${todayKey.month}-${todayKey.day}`;
@@ -542,41 +559,52 @@ async function renderReport(root, db, uid, reportOptions = {}) {
   let currentId = initial?.id || "";
   let savedKey = "";
   let lastReportKey = "";
-  let lastHomeworkKey = "";
   let presentCount = 0;
   let loadToken = 0;
   let sending = false;
   root.innerHTML = `
-    <div class="gc-report">
-      <div class="gc-pick">
-        <p class="gc-kicker">クラス</p>
-        <button type="button" id="class-pick" class="gc-pick-btn" aria-haspopup="listbox" aria-expanded="false">
-          <span id="class-pick-label"><strong>クラスがありません</strong><small>担当クラスが表示されます</small></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div id="class-menu" class="gc-pick-menu" hidden>
-          <input id="class-find" type="search" placeholder="クラス名・日時で検索" autocomplete="off">
-          <div id="class-options" role="listbox"></div>
+    <div class="hw-switch-shell">
+      <div class="gc-report-layout">
+        <div class="gc-report">
+          <div class="gc-pick">
+            <p class="gc-kicker">クラス</p>
+            <button type="button" id="class-pick" class="gc-pick-btn" aria-haspopup="listbox" aria-expanded="false">
+              <span id="class-pick-label"><strong>クラスがありません</strong><small>担当クラスが表示されます</small></span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="class-menu" class="gc-pick-menu" hidden>
+              <input id="class-find" type="search" placeholder="クラス名・日時で検索" autocomplete="off">
+              <div id="class-options" role="listbox"></div>
+            </div>
+          </div>
+          <div class="gc-report-bar">
+            <p id="attend-summary">出席を確認しています。</p>
+            ${lab ? "" : `<button type="button" class="gc-text-btn" data-hub-action="attendance" data-hub-label="出席">出席を編集</button>`}
+          </div>
+          <label class="gc-report-label">今日のレッスン内容
+            <textarea id="summary" maxlength="600" placeholder="今日の授業で練習したことや、生徒の様子を書いてください。"></textarea>
+          </label>
+          <div class="gc-report-words">
+            <div class="gc-phrase-head"><span>英語</span><span>日本語</span><span></span></div>
+            <div id="phrase-rows"></div>
+            <button type="button" class="gc-text-btn" id="add-phrase">＋ 単語を追加</button>
+            <p class="gc-report-note">この単語はレポートに載ります。</p>
+          </div>
+          <div id="recipients" class="gc-report-to"></div>
+          <div class="gc-report-actions">
+            <p id="school-status" class="gc-save-note" role="status"></p>
+            <button type="button" class="gc-primary" id="send-report">${lab ? "プレビューを更新" : "レポートを送る"}</button>
+          </div>
         </div>
-      </div>
-      <div class="gc-report-bar">
-        <p id="attend-summary">出席を確認しています。</p>
-        <button type="button" class="gc-text-btn" data-hub-action="attendance" data-hub-label="出席">出席を編集</button>
-      </div>
-      <label class="gc-report-label">今日のレッスン内容
-        <textarea id="summary" maxlength="600" placeholder="今日の授業で練習したことや、生徒の様子を書いてください。"></textarea>
-      </label>
-      <div class="gc-report-words">
-        <div class="gc-phrase-head"><span>英語</span><span>日本語</span><span></span></div>
-        <div id="phrase-rows"></div>
-        <button type="button" class="gc-text-btn" id="add-phrase">＋ 単語を追加</button>
-        <p class="gc-report-note">この単語はレポートに載ります。練習問題は「宿題」タブで、単語リストから自動で作れます。</p>
-        <button type="button" class="gc-secondary" id="send-homework">宿題タブでつくる</button>
-      </div>
-      <div id="recipients" class="gc-report-to"></div>
-      <div class="gc-report-actions">
-        <p id="school-status" class="gc-save-note" role="status"></p>
-        <button type="button" class="gc-primary" id="send-report">レポートを送る</button>
+        <aside class="gc-report-preview" aria-label="届くレポートの見え方">
+          <p class="gc-kicker">生徒・保護者に届く見た目</p>
+          <article class="gc-report-card" id="report-preview-card">
+            <small id="report-preview-when">きょうのクラスレポート</small>
+            <strong>クラスレポート</strong>
+            <p id="report-preview-summary" class="gc-report-card-empty">レッスン内容を書くと、ここに表示されます。</p>
+            <ul id="report-preview-words" hidden></ul>
+          </article>
+        </aside>
       </div>
     </div>`;
   const status = root.querySelector("#school-status");
@@ -589,7 +617,8 @@ async function renderReport(root, db, uid, reportOptions = {}) {
   const find = root.querySelector("#class-find");
   const options = root.querySelector("#class-options");
   const reportButton = root.querySelector("#send-report");
-  const homeworkButton = root.querySelector("#send-homework");
+  const previewSummary = root.querySelector("#report-preview-summary");
+  const previewWords = root.querySelector("#report-preview-words");
   const setStatus = (kind, text) => {
     status.className = `gc-save-note${kind ? ` is-${kind}` : ""}`;
     status.textContent = text || "";
@@ -598,6 +627,27 @@ async function renderReport(root, db, uid, reportOptions = {}) {
     en: row.querySelector("[data-en]").value.trim(),
     ja: row.querySelector("[data-ja]").value.trim(),
   }));
+  const paintPreview = () => {
+    const summary = lesson.value.trim();
+    const words = phraseValues().filter((row) => row.en || row.ja);
+    if (summary) {
+      previewSummary.className = "";
+      previewSummary.textContent = summary;
+    } else {
+      previewSummary.className = "gc-report-card-empty";
+      previewSummary.textContent = "レッスン内容を書くと、ここに表示されます。";
+    }
+    const complete = words.filter((row) => row.en && row.ja);
+    if (!complete.length) {
+      previewWords.hidden = true;
+      previewWords.innerHTML = "";
+      return;
+    }
+    previewWords.hidden = false;
+    previewWords.innerHTML = complete
+      .map((row) => `<li><span>${escapeHtml(row.en)}</span><span>${escapeHtml(row.ja)}</span></li>`)
+      .join("");
+  };
   const formKey = () => `${lesson.value}\n${phraseValues().map((row) => `${row.en}\t${row.ja}`).join("\n")}`;
   const isDirty = () => !sending && formKey() !== savedKey;
   const confirmDiscard = (message) => {
@@ -627,6 +677,7 @@ async function renderReport(root, db, uid, reportOptions = {}) {
     root._confirmLeave = null;
   };
   const touch = () => {
+    paintPreview();
     if (sending) return;
     if (isDirty()) setStatus("dirty", "未保存の内容があります。");
     else if (!status.classList.contains("is-ok")) setStatus("", "");
@@ -641,6 +692,7 @@ async function renderReport(root, db, uid, reportOptions = {}) {
     };
     row.querySelectorAll("input").forEach((input) => { input.oninput = touch; });
     phraseRows.appendChild(row);
+    paintPreview();
   };
   const readyPhrases = () => {
     const rows = phraseValues();
@@ -700,6 +752,15 @@ async function renderReport(root, db, uid, reportOptions = {}) {
       attendSummary.textContent = "担当のクラスはまだありません。";
       recipients.textContent = "";
       presentCount = 0;
+      return;
+    }
+    if (lab) {
+      presentCount = 1;
+      attendSummary.textContent = "プレビュー · 出席 1人";
+      recipients.innerHTML = `
+        <p class="gc-kicker">レポートの送付先</p>
+        <ul><li>プレビュー生徒 · 保護者 プレビュー保護者</li></ul>
+        <p class="gc-report-note">プレビューでは実際には送信しません。</p>`;
       return;
     }
     attendSummary.textContent = "出席を確認しています。";
@@ -772,7 +833,11 @@ async function renderReport(root, db, uid, reportOptions = {}) {
     }
   };
   [["apple", "りんご"], ["book", "ほん"], ["cat", "ねこ"]].forEach(([en, ja]) => addPhrase(en, ja));
+  if (lab && !lesson.value) {
+    lesson.value = "きょうは色と動物の単語を練習しました。みんな元気に参加していました。";
+  }
   lesson.oninput = touch;
+  paintPreview();
   savedKey = formKey();
   picker.onclick = () => {
     if (!sessions.length) return;
@@ -792,11 +857,11 @@ async function renderReport(root, db, uid, reportOptions = {}) {
     addPhrase();
     touch();
   };
-  const submit = async (kind) => {
+  const submit = async () => {
     if (sending || !currentId) return;
     const lessonText = lesson.value.trim();
     const phrases = readyPhrases();
-    if (kind === "report" && !lessonText) {
+    if (!lessonText) {
       setStatus("error", "今日のレッスン内容を書いてください。");
       lesson.focus();
       return;
@@ -805,41 +870,34 @@ async function renderReport(root, db, uid, reportOptions = {}) {
       setStatus("error", phrases.error);
       return;
     }
+    paintPreview();
+    if (lab) {
+      setStatus("ok", "右側が、生徒と保護者に届く見え方です。");
+      savedKey = formKey();
+      return;
+    }
     if (!presentCount) {
       setStatus("error", "先に出席を記録してください。");
       return;
     }
     const key = `${lessonText}\n${phrases.complete.map((row) => `${row.en}\t${row.ja}`).join("\n")}`;
-    const again = kind === "report" ? key === lastReportKey : key === lastHomeworkKey;
-    if (again && !window.confirm(kind === "report" ? "同じ内容のレポートを、もう一度送りますか？" : "同じ単語の宿題を、もう一度出しますか？")) return;
+    if (key === lastReportKey && !window.confirm("同じ内容のレポートを、もう一度送りますか？")) return;
     sending = true;
     reportButton.disabled = true;
-    homeworkButton.disabled = true;
-    setStatus("", kind === "report" ? "送信しています…" : "宿題を出しています…");
+    setStatus("", "送信しています…");
     try {
-      if (kind === "report") {
-        await callFunction("publishReport", { classId: currentId, summary: lessonText, phrases: phrases.complete });
-        lastReportKey = key;
-        setStatus("ok", "レポートを送りました。");
-      } else {
-        await callFunction("publishHomework", { classId: currentId, title: "きょうのしゅくだい", phrases: phrases.complete });
-        lastHomeworkKey = key;
-        setStatus("ok", "宿題を出しました。");
-      }
+      await callFunction("publishReport", { classId: currentId, summary: lessonText, phrases: phrases.complete });
+      lastReportKey = key;
+      setStatus("ok", "レポートを送りました。");
       savedKey = formKey();
     } catch (error) {
       setStatus("error", error.message);
     } finally {
       sending = false;
       reportButton.disabled = false;
-      homeworkButton.disabled = false;
     }
   };
-  reportButton.onclick = () => submit("report");
-  homeworkButton.onclick = () => {
-    if (reportOptions.onCreateHomework) reportOptions.onCreateHomework();
-    else submit("homework");
-  };
+  reportButton.onclick = () => submit();
   await paintSession();
 }
 
@@ -946,14 +1004,20 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountTeacherHomework } = await import("./homework-studio.js?v=20261026-retry");
-    const openHomework = () => mountTeacherHomework(root, {
-      db,
-      uid,
-      callFunction,
-      openReport: () => renderReport(root, db, uid, { onCreateHomework: openHomework }),
-    });
-    await openHomework();
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib31");
+    const openHub = () => {
+      root._stopAttendance?.();
+      return mountHomeworkHub(root, {
+        db,
+        uid,
+        callFunction,
+        openReport: () => {
+          root._stopAttendance?.();
+          return renderReport(root, db, uid, { onCreateHomework: openHub });
+        },
+      });
+    };
+    await openHub();
     return;
   }
   if (action === "my-homework") {
@@ -1720,7 +1784,7 @@ function renderQuiz(root, { host, uid }) {
 }
 
 async function playPackHomework(root, assignmentId, uid) {
-  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261026-retry");
+  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib31");
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
   const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));

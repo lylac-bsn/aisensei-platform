@@ -5,9 +5,9 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261026-retry";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib31";
 import { renderHome } from "./platform-home.js";
-import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261026-sfx";
+import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib31";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -199,35 +199,118 @@ document.addEventListener("click", (event) => {
         showHub('admin', 'プレビュー', 'lab');
         if (hubMenu) hubMenu.hidden = true;
         if (hubPanel) hubPanel.hidden = false;
+        const pageTitle = document.getElementById('hub-page-title');
+        if (pageTitle) pageTitle.textContent = '宿題とレポート';
+        document.querySelectorAll('.gc-nav').forEach((item) => {
+            item.classList.toggle('is-current', item.getAttribute('data-hub-action') === 'assign-homework');
+        });
         const panel = document.getElementById('hub-panel-platform');
         if (!panel) return;
         panel.hidden = false;
         const packs = new Map();
-        const { mountTeacherHomework } = await import('./homework-studio.js?v=20261026-retry');
-        await mountTeacherHomework(panel, {
-            lab: true,
-            callFunction: async (name, data) => {
-                if (name === 'saveHomeworkPack') {
-                    const id = data.id || `lab${packs.size + 1}`;
-                    packs.set(id, { ...data, id, status: data.status });
-                    return {
-                        id,
-                        status: data.status,
-                        questionCount: data.questions.length,
-                        assigneeCount: data.status === 'assigned' ? 1 : 0,
-                    };
-                }
-                if (name === 'getHomeworkEditor') {
-                    const pack = packs.get(data.id);
-                    if (!pack) throw new Error('下書きがありません。');
-                    return pack;
-                }
-                throw new Error('プレビューではサーバーに保存しません。');
-            },
-            openReport: () => {
-                panel.innerHTML = '<p class="hw-note">レポートは、ログインした先生の画面で開きます。</p>';
-            },
-        });
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib31');
+        const labCall = async (name, data) => {
+            if (name === 'saveHomeworkPack') {
+                const id = data.id || `lab${packs.size + 1}`;
+                packs.set(id, {
+                    ...data,
+                    id,
+                    status: data.status,
+                    published: data.published !== false,
+                    libraryReady: Boolean(data.libraryReady),
+                    teacherId: 'lab',
+                    creatorName: 'プレビュー',
+                    questionCount: (data.questions || []).length,
+                    format: 'pack-v1',
+                    updatedAt: { toMillis: () => Date.now() },
+                });
+                return {
+                    id,
+                    status: data.status,
+                    questionCount: (data.questions || []).length,
+                    assigneeCount: data.status === 'assigned' ? 1 : 0,
+                };
+            }
+            if (name === 'getHomeworkEditor') {
+                const pack = packs.get(data.id);
+                if (!pack) throw new Error('下書きがありません。');
+                return pack;
+            }
+            if (name === 'listHomeworkLibrary') {
+                return {
+                    items: [...packs.values()]
+                        .filter((pack) => pack.status !== 'assigned')
+                        .map((pack) => ({
+                            id: pack.id,
+                            title: pack.title,
+                            description: pack.description || '',
+                            level: pack.level || 'beginner',
+                            status: pack.status || 'draft',
+                            published: pack.published !== false,
+                            libraryReady: Boolean(pack.libraryReady),
+                            official: false,
+                            teacherId: 'lab',
+                            creatorName: 'プレビュー',
+                            questionCount: pack.questionCount || (pack.questions || []).length || 0,
+                            types: ['問題パック'],
+                            updatedAt: Date.now(),
+                        })),
+                };
+            }
+            if (name === 'assignHomeworkFromTemplate') {
+                const pack = packs.get(data.templateId);
+                if (!pack) throw new Error('テンプレートがありません。');
+                return labCall('saveHomeworkPack', {
+                    ...pack,
+                    id: '',
+                    status: 'assigned',
+                    classIds: data.classIds || [],
+                    dueOn: data.dueOn || '',
+                    published: false,
+                    libraryReady: false,
+                });
+            }
+            if (name === 'duplicateHomeworkPack') {
+                const pack = packs.get(data.id);
+                if (!pack) throw new Error('宿題がありません。');
+                return labCall('saveHomeworkPack', {
+                    ...pack,
+                    id: '',
+                    title: `${pack.title || '宿題'}（コピー）`,
+                    status: 'draft',
+                    published: false,
+                });
+            }
+            if (name === 'deleteHomeworkPack') {
+                packs.delete(data.id);
+                return { ok: true };
+            }
+            if (name === 'setHomeworkPublished') {
+                const pack = packs.get(data.id);
+                if (!pack) throw new Error('宿題がありません。');
+                pack.published = data.published !== false;
+                return { id: pack.id, published: pack.published };
+            }
+            throw new Error('プレビューではサーバーに保存しません。');
+        };
+        const openHub = async () => {
+            panel._stopAttendance?.();
+            await mountHomeworkHub(panel, {
+                lab: true,
+                db,
+                uid: 'lab',
+                callFunction: labCall,
+                openReport: async () => {
+                    if (panel._confirmLeave && !panel._confirmLeave()) return;
+                    panel._stopAttendance?.();
+                    await renderReport(panel, null, "lab", {
+                        lab: true,
+                        onCreateHomework: () => openHub(),
+                    });
+                },
+            });
+        };
+        await openHub();
     }
 
     if (homeworkLab) openHomeworkLab().catch((error) => {
@@ -335,11 +418,31 @@ document.addEventListener("click", (event) => {
         setLoginLoading(true);
         signInWithEmailAndPassword(auth, email, password)
             .then(async (userCredential) => {
-                const userRef = doc(db, "users", userCredential.user.uid);
-                await updateDoc(userRef, { displayName: displayName });
+                // Name sync must not block login — rules may reject partial updates
+                // (e.g. accounts without remainingTime). Hub load uses onAuthStateChanged.
+                try {
+                    const userRef = doc(db, "users", userCredential.user.uid);
+                    const snap = await getDoc(userRef);
+                    if (snap.exists()) {
+                        await updateDoc(userRef, { displayName });
+                    }
+                } catch (error) {
+                    console.warn("displayName sync skipped", error?.code || error?.message || error);
+                }
             })
-            .catch(() => {
-                loginError.textContent = 'メールアドレスまたはパスワードが正しくありません。';
+            .catch((error) => {
+                const code = error?.code || "";
+                if (code === "auth/too-many-requests") {
+                    loginError.textContent = "しばらく待ってから、もう一度ログインしてください。";
+                } else if (code === "auth/network-request-failed") {
+                    loginError.textContent = "ネット接続を確認して、もう一度ログインしてください。";
+                } else if (code === "auth/invalid-email") {
+                    loginError.textContent = "メールアドレスの形が正しくありません。";
+                } else if (code === "auth/user-disabled") {
+                    loginError.textContent = "このアカウントは停止されています。先生に連絡してください。";
+                } else {
+                    loginError.textContent = "メールアドレスまたはパスワードが正しくありません。";
+                }
                 setLoginLoading(false);
             });
     });

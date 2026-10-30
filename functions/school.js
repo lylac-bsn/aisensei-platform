@@ -1,7 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { pushTo } = require("./push");
-const { preparePack, gradeAnswer } = require("./homework-engine");
+const { preparePack, gradeAnswer, questionsForEditor } = require("./homework-engine");
 
 const REGION = "asia-northeast1";
 
@@ -351,12 +351,22 @@ exports.saveHomeworkPack = onCall({ region: REGION }, async (request) => {
     sentenceJa: clean(row?.sentenceJa, 80),
     sentenceEn: clean(row?.sentenceEn, 120),
   })).filter((row) => row.ja && row.en);
+  const published = request.data?.published !== false;
+  const libraryReady = Boolean(request.data?.libraryReady)
+    || (status === "draft" && prepared.publicQuestions.length > 0 && prepared.publicQuestions.every((q) => q.approved));
+  const description = clean(request.data?.description, 160);
+  const creatorName = clean(user.displayName, 40) || "先生";
   await ref.set({
     format: "pack-v1",
     status,
     title,
     level,
     teacherId: user.uid,
+    creatorName,
+    description,
+    published: status === "assigned" ? false : published,
+    libraryReady: status === "assigned" ? false : libraryReady,
+    official: false,
     classIds,
     dueOn: dueOn(request.data?.dueOn),
     questionCount: prepared.publicQuestions.length,
@@ -415,6 +425,245 @@ exports.saveHomeworkPack = onCall({ region: REGION }, async (request) => {
   return { id: ref.id, status, questionCount: prepared.publicQuestions.length, assigneeCount: assigneeIds.length };
 });
 
+function libraryCard(id, data) {
+  const types = data.settings?.types || {};
+  const typeLabels = [];
+  if (types.multipleChoice !== false) typeLabels.push("4択");
+  if (types.matching !== false) typeLabels.push("線つなぎ");
+  if (types.spelling !== false) typeLabels.push("スペリング");
+  if (types.sentence !== false) typeLabels.push("文づくり");
+  return {
+    id,
+    title: data.title || "きょうのしゅくだい",
+    description: data.description || "",
+    level: data.level || "beginner",
+    status: data.status || "draft",
+    published: data.published !== false,
+    libraryReady: Boolean(data.libraryReady) || data.status === "draft",
+    official: Boolean(data.official),
+    teacherId: data.teacherId || "",
+    creatorName: data.official ? "Learny" : (data.creatorName || "先生"),
+    questionCount: data.questionCount || (data.questions || []).length || 0,
+    types: typeLabels,
+    dueOn: data.dueOn || "",
+    updatedAt: data.updatedAt?.toMillis?.() || 0,
+  };
+}
+
+function canAccessHomework(user, data) {
+  if (!data) return false;
+  if (user.role === "owner" || user.role === "admin") return true;
+  if (data.teacherId === user.uid) return true;
+  if (data.published === true && data.status === "draft") return true;
+  if (data.official === true) return true;
+  return false;
+}
+
+exports.listHomeworkLibrary = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが開けます。");
+  const byId = new Map();
+  try {
+    const mineSnap = await db().collection("homeworkAssignments")
+      .where("teacherId", "==", user.uid)
+      .limit(80)
+      .get();
+    mineSnap.docs.forEach((item) => {
+      const data = item.data();
+      if (data.format !== "pack-v1" || data.status === "assigned") return;
+      byId.set(item.id, libraryCard(item.id, data));
+    });
+  } catch (error) {
+    console.warn("listHomeworkLibrary mine", error);
+  }
+  try {
+    const sharedSnap = await db().collection("homeworkAssignments")
+      .where("published", "==", true)
+      .limit(80)
+      .get();
+    sharedSnap.docs.forEach((item) => {
+      const data = item.data();
+      if (data.format !== "pack-v1" || data.status === "assigned") return;
+      if (data.teacherId === user.uid) return;
+      byId.set(item.id, libraryCard(item.id, data));
+    });
+  } catch (error) {
+    console.warn("listHomeworkLibrary shared", error);
+  }
+  const items = [...byId.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return { items };
+});
+
+exports.assignHomeworkFromTemplate = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが出せます。");
+  const templateId = clean(request.data?.templateId, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(templateId)) throw new HttpsError("invalid-argument", "無効な宿題です。");
+  const classIds = [...new Set((Array.isArray(request.data?.classIds) ? request.data.classIds : [])
+    .map((id) => clean(id, 128))
+    .filter((id) => /^[A-Za-z0-9]{1,128}$/.test(id)))].slice(0, 8);
+  if (!classIds.length) throw new HttpsError("invalid-argument", "出すクラスを選んでください。");
+  const template = await db().collection("homeworkAssignments").doc(templateId).get();
+  if (!template.exists || template.data().format !== "pack-v1") {
+    throw new HttpsError("not-found", "宿題が見つかりません。");
+  }
+  const data = template.data();
+  if (!canAccessHomework(user, data)) throw new HttpsError("permission-denied", "この宿題は使えません。");
+  if (data.status === "assigned") throw new HttpsError("failed-precondition", "配信済みの宿題はテンプレートにできません。");
+  const key = await db().collection("homeworkKeys").doc(templateId).get();
+  if (!key.exists) throw new HttpsError("failed-precondition", "この宿題の中身がありません。");
+  const questions = (key.data()?.questions || []).map((question) => ({
+    ...question,
+    approved: true,
+    review: false,
+  }));
+  if (!questions.length) throw new HttpsError("failed-precondition", "問題がありません。");
+  const assigneeIds = await studentsForClasses(user, classIds);
+  if (!assigneeIds.length) throw new HttpsError("failed-precondition", "予約している生徒がいません。");
+  const prepared = preparePack(questions, { assigning: true });
+  if (!prepared.ok) throw new HttpsError("invalid-argument", prepared.error);
+  const title = clean(data.title, 80) || "きょうのしゅくだい";
+  const level = ["beginner", "intermediate", "advanced"].includes(data.level) ? data.level : "beginner";
+  const due = dueOn(request.data?.dueOn);
+  const ref = db().collection("homeworkAssignments").doc();
+  await ref.set({
+    format: "pack-v1",
+    status: "assigned",
+    title,
+    level,
+    teacherId: user.uid,
+    creatorName: clean(user.displayName, 40) || "先生",
+    description: clean(data.description, 160),
+    published: false,
+    libraryReady: false,
+    official: false,
+    sourceTemplateId: templateId,
+    classIds,
+    dueOn: due,
+    questionCount: prepared.publicQuestions.length,
+    questions: prepared.publicQuestions,
+    assigneeIds,
+    settings: data.settings || {},
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await db().collection("homeworkKeys").doc(ref.id).set({
+    teacherId: user.uid,
+    questions: prepared.questions,
+    vocab: key.data()?.vocab || [],
+    answers: prepared.secrets,
+    sourceTemplateId: templateId,
+  });
+  for (const studentId of assigneeIds) {
+    await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
+      assignmentId: ref.id,
+      title,
+      teacherId: user.uid,
+      format: "pack-v1",
+      questionCount: prepared.publicQuestions.length,
+      dueOn: due,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    await inbox(studentId, {
+      type: "homework",
+      title: "あたらしい しゅくだい",
+      body: title,
+      assignmentId: ref.id,
+    });
+    const student = await db().collection("users").doc(studentId).get();
+    const parents = student.data()?.linkedParentIds || [];
+    for (const parentId of parents) {
+      if (!parentId || parentId === studentId) continue;
+      await inbox(parentId, {
+        type: "homework",
+        title: "あたらしい しゅくだい",
+        body: `${student.data()?.displayName || "生徒"} · ${title}`,
+        assignmentId: ref.id,
+        studentId,
+      });
+    }
+  }
+  return { id: ref.id, status: "assigned", questionCount: prepared.publicQuestions.length, assigneeCount: assigneeIds.length };
+});
+
+exports.duplicateHomeworkPack = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが複製できます。");
+  const id = clean(request.data?.id, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(id)) throw new HttpsError("invalid-argument", "無効な宿題です。");
+  const source = await db().collection("homeworkAssignments").doc(id).get();
+  if (!source.exists || source.data().format !== "pack-v1") throw new HttpsError("not-found", "宿題が見つかりません。");
+  if (!canAccessHomework(user, source.data())) throw new HttpsError("permission-denied", "この宿題は複製できません。");
+  const key = await db().collection("homeworkKeys").doc(id).get();
+  if (!key.exists) throw new HttpsError("failed-precondition", "この宿題の中身がありません。");
+  const data = source.data();
+  const ref = db().collection("homeworkAssignments").doc();
+  const title = `${clean(data.title, 70) || "きょうのしゅくだい"}（コピー）`.slice(0, 80);
+  await ref.set({
+    ...data,
+    title,
+    status: "draft",
+    teacherId: user.uid,
+    creatorName: clean(user.displayName, 40) || "先生",
+    published: false,
+    libraryReady: Boolean(data.libraryReady),
+    official: false,
+    sourceTemplateId: id,
+    classIds: [],
+    assigneeIds: [],
+    dueOn: "",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await db().collection("homeworkKeys").doc(ref.id).set({
+    teacherId: user.uid,
+    questions: key.data()?.questions || [],
+    vocab: key.data()?.vocab || [],
+    answers: key.data()?.answers || {},
+    sourceTemplateId: id,
+  });
+  return { id: ref.id };
+});
+
+exports.deleteHomeworkPack = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが削除できます。");
+  const id = clean(request.data?.id, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(id)) throw new HttpsError("invalid-argument", "無効な宿題です。");
+  const ref = db().collection("homeworkAssignments").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "宿題が見つかりません。");
+  const data = snap.data();
+  if (data.teacherId !== user.uid && user.role !== "owner") {
+    throw new HttpsError("permission-denied", "自分の宿題だけ削除できます。");
+  }
+  if (data.status === "assigned") {
+    throw new HttpsError("failed-precondition", "出した宿題は削除できません。");
+  }
+  await ref.delete();
+  await db().collection("homeworkKeys").doc(id).delete().catch(() => {});
+  return { ok: true };
+});
+
+exports.setHomeworkPublished = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが変更できます。");
+  const id = clean(request.data?.id, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(id)) throw new HttpsError("invalid-argument", "無効な宿題です。");
+  const ref = db().collection("homeworkAssignments").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "宿題が見つかりません。");
+  if (snap.data().teacherId !== user.uid && user.role !== "owner") {
+    throw new HttpsError("permission-denied", "自分の宿題だけ変更できます。");
+  }
+  if (snap.data().status === "assigned") {
+    throw new HttpsError("failed-precondition", "出した宿題は公開設定を変えられません。");
+  }
+  const published = request.data?.published !== false;
+  await ref.set({ published, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { id, published };
+});
+
 exports.getHomeworkEditor = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが開けます。");
@@ -424,11 +673,12 @@ exports.getHomeworkEditor = onCall({ region: REGION }, async (request) => {
   if (!assignment.exists || assignment.data().format !== "pack-v1") {
     throw new HttpsError("not-found", "宿題が見つかりません。");
   }
-  if (assignment.data().teacherId !== user.uid && user.role !== "owner") {
+  if (!canAccessHomework(user, assignment.data())) {
     throw new HttpsError("permission-denied", "この宿題は開けません。");
   }
   const key = await db().collection("homeworkKeys").doc(id).get();
   const data = assignment.data();
+  const mine = data.teacherId === user.uid || user.role === "owner";
   return {
     id,
     title: data.title || "",
@@ -437,8 +687,12 @@ exports.getHomeworkEditor = onCall({ region: REGION }, async (request) => {
     classIds: data.classIds || [],
     dueOn: data.dueOn || "",
     settings: data.settings || {},
+    published: data.published !== false,
+    libraryReady: Boolean(data.libraryReady),
+    description: data.description || "",
+    readOnly: !mine || data.status === "assigned",
     vocab: key.data()?.vocab || [],
-    questions: key.data()?.questions || [],
+    questions: questionsForEditor(key.data()?.questions || []),
   };
 });
 

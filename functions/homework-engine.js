@@ -225,7 +225,7 @@ function makeMatching(group, random, id) {
     id,
     type: "matching",
     promptJa: "にほんごと えいごを つなげよう",
-    promptEn: "",
+    promptEn: "日本語をタップして、合う英語をタップしよう！",
     speak: { prompt: { text: "にほんごと えいごを つなげよう", lang: "ja" } },
     left,
     right,
@@ -367,7 +367,6 @@ function generateHomework(pairs, options = {}) {
   }
   if (types.sentence) {
     const items = list.map((pair, index) => makeSentence(pair, list, level, direction, random, `sent-${index + 1}`, index)).filter(Boolean);
-    if (items.some((item) => !item.approved)) warnings.push("文をつくる問題は提案です。出す前に、文を確認してください。");
     if (items.length) buckets.push(items);
     else warnings.push("文をつくる問題を作れませんでした。");
   }
@@ -391,7 +390,7 @@ function generateHomework(pairs, options = {}) {
     });
   }
   if (!questions.length) return { questions: [], warnings, error: "この単語リストでは問題を作れません。" };
-  if (questions.length < count) warnings.push(`${count}問は作れなかったので、${questions.length}問にしました。`);
+  if (questions.length < count) warnings.push(`最大${questions.length}問です。`);
   return {
     questions,
     warnings: [...new Set(warnings)],
@@ -481,12 +480,37 @@ function toPublic(question) {
   };
 }
 
+/** Firestore forbids nested arrays; store accept as [{ tokens: string[] }]. */
+function encodeAccept(accept) {
+  if (!Array.isArray(accept) || !accept.length) return null;
+  return accept.map((sequence) => {
+    if (Array.isArray(sequence)) {
+      return { tokens: sequence.map((token) => clip(String(token || ""), 40)).filter(Boolean) };
+    }
+    if (sequence && typeof sequence === "object" && Array.isArray(sequence.tokens)) {
+      return { tokens: sequence.tokens.map((token) => clip(String(token || ""), 40)).filter(Boolean) };
+    }
+    return { tokens: tokenize(sequence) };
+  }).filter((row) => row.tokens.length);
+}
+
+function decodeAcceptSequences(accept, fallbackAnswer) {
+  if (!Array.isArray(accept) || !accept.length) {
+    return Array.isArray(fallbackAnswer) ? [fallbackAnswer] : [];
+  }
+  return accept.map((sequence) => {
+    if (Array.isArray(sequence)) return sequence;
+    if (sequence && typeof sequence === "object" && Array.isArray(sequence.tokens)) return sequence.tokens;
+    return tokenize(sequence);
+  }).filter((sequence) => Array.isArray(sequence) && sequence.length);
+}
+
 function toSecret(question) {
   return {
     type: question.type,
     answer: question.answer,
     pairs: question.pairs || null,
-    accept: question.accept || null,
+    accept: encodeAccept(question.accept),
     display: question.display || "",
     vocabKey: question.vocabKey || "",
   };
@@ -505,7 +529,7 @@ function gradeAnswer(question, answer) {
   if (question.type === "sentence") {
     const tokens = Array.isArray(answer) ? answer : tokenize(answer);
     const got = tokens.map(norm).join(" ");
-    const accepts = Array.isArray(question.accept) && question.accept.length ? question.accept : [question.answer];
+    const accepts = decodeAcceptSequences(question.accept, question.answer);
     const correct = accepts.some((sequence) => (sequence || []).map(norm).join(" ") === got);
     const solution = Array.isArray(question.answer) ? question.answer.join(" ") : (question.display || "");
     return { correct, solution: correct ? "" : solution };
@@ -573,6 +597,7 @@ function preparePack(rawQuestions, options = {}) {
       if (options.assigning && !question.approved) {
         return { ok: false, error: "文をつくる問題を確認してから出してください。" };
       }
+      question.accept = encodeAccept(question.accept || sentenceAlternates(question.answer));
     }
     questions.push(question);
   }
@@ -585,6 +610,16 @@ function preparePack(rawQuestions, options = {}) {
   };
 }
 
+function questionsForEditor(questions) {
+  return (Array.isArray(questions) ? questions : []).map((question) => {
+    if (!question || question.type !== "sentence") return question;
+    return {
+      ...question,
+      accept: decodeAcceptSequences(question.accept, question.answer),
+    };
+  });
+}
+
 module.exports = {
   parseVocabulary,
   generateHomework,
@@ -595,4 +630,6 @@ module.exports = {
   toSecret,
   gradeAnswer,
   preparePack,
+  decodeAcceptSequences,
+  questionsForEditor,
 };

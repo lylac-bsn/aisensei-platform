@@ -1,10 +1,19 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261026-retry";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261026-retry";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261026-retry";
-import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261026-sfx";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib26";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib26";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib26";
+import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib26";
 
-const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！"];
+const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！", "やったね！", "いいね！"];
+const ENCOURAGE = ["おしい！", "もういちど！", "だいじょうぶ！", "がんばろう！"];
 let retryCursor = 0;
+let encourageCursor = 0;
+
+const PLAY_ICON = {
+  back: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  star: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.8 7.2 18.3l.9-5.4L4.2 9.1l5.4-.8L12 3.4z"/></svg>`,
+  speaker: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>`,
+  mascot: `<svg viewBox="0 0 80 80" aria-hidden="true"><ellipse cx="40" cy="46" rx="22" ry="20" fill="#FFF5EA"/><circle cx="28" cy="28" r="10" fill="#FFE2D8"/><circle cx="52" cy="28" r="10" fill="#FFE2D8"/><circle cx="33" cy="44" r="3.2" fill="#5B463C"/><circle cx="47" cy="44" r="3.2" fill="#5B463C"/><ellipse cx="40" cy="52" rx="5" ry="3.4" fill="#F3B5A0"/><path d="M31 57c3.5 4 14.5 4 18 0" fill="none" stroke="#5B463C" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+};
 
 function nextRetryLine() {
   const line = RETRY_LINES[retryCursor % RETRY_LINES.length];
@@ -53,29 +62,46 @@ export async function mountHomeworkPlayer(root, options) {
 
   function paintShell(question) {
     const seen = outcomes.size;
+    const progress = Math.round((seen / Math.max(source.length, 1)) * 100);
     root.innerHTML = "";
     const play = document.createElement("section");
     play.className = "hw-play";
     play.innerHTML = `
-      <div class="hw-top">
-        ${options.onClose ? `<button type="button" class="hw-text" data-close>もどる</button>` : `<span></span>`}
-        <p class="hw-count">${reviewing ? "ふくしゅう" : "もんだい"} ${cursor + 1} / ${order.length}</p>
+      <div class="hw-play-deco" aria-hidden="true">
+        <span class="hw-blob hw-blob-a"></span>
+        <span class="hw-blob hw-blob-b"></span>
+        <span class="hw-blob hw-blob-c"></span>
+        <span class="hw-spark hw-spark-a"></span>
+        <span class="hw-spark hw-spark-b"></span>
       </div>
-      <div class="hw-bar" aria-hidden="true"><span style="width:${Math.round((seen / Math.max(source.length, 1)) * 100)}%"></span></div>
-      <div class="hw-ask">
-        <button type="button" class="hw-speaker" aria-label="きく">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>
-        </button>
-        <div class="hw-ask-text">
-          <p class="hw-prompt"></p>
-          <p class="hw-sub"></p>
+      <div class="hw-play-card">
+        <div class="hw-top">
+          ${options.onClose ? `<button type="button" class="hw-back" data-close aria-label="もどる" title="もどる">${PLAY_ICON.back}</button>` : `<span class="hw-back-spacer"></span>`}
+          <div class="hw-progress-meta">
+            <p class="hw-count">${reviewing ? "ふくしゅう" : "もんだい"} <strong>${cursor + 1}</strong> / ${order.length}</p>
+            <span class="hw-streak" title="連続せいせい">${PLAY_ICON.star}<b>${streak}</b></span>
+          </div>
         </div>
-      </div>
-      <div class="hw-body"></div>
-      <p class="hw-live" role="status"></p>
-      <div class="hw-submit">
-        <button type="button" class="hw-check" disabled>こたえあわせる</button>
-        <button type="button" class="hw-next">つぎへ</button>
+        <div class="hw-bar" aria-hidden="true"><span style="width:${progress}%"></span></div>
+        <div class="hw-ask-block">
+          <div class="hw-mascot" aria-hidden="true">${PLAY_ICON.mascot}</div>
+          <p class="hw-cheer" data-cheer>きいてみよう！</p>
+          <div class="hw-ask">
+            <button type="button" class="hw-speaker" aria-label="きく">${PLAY_ICON.speaker}</button>
+            <div class="hw-ask-text">
+              <p class="hw-prompt"></p>
+              <p class="hw-sub"></p>
+            </div>
+          </div>
+        </div>
+        <div class="hw-body"></div>
+        <div class="hw-feedback" hidden>
+          <p class="hw-live" role="status"></p>
+        </div>
+        <div class="hw-submit">
+          <button type="button" class="hw-check" disabled>こたえをチェック</button>
+          <button type="button" class="hw-next" hidden>つぎへ</button>
+        </div>
       </div>`;
     play.querySelector("[data-close]")?.addEventListener("click", () => {
       stopHomeworkSfx();
@@ -85,8 +111,14 @@ export async function mountHomeworkPlayer(root, options) {
     const prompt = play.querySelector(".hw-prompt");
     const sub = play.querySelector(".hw-sub");
     prompt.textContent = question.promptJa || "えいごを ならぼう";
-    sub.textContent = question.promptEn || "";
-    sub.hidden = !question.promptEn;
+    if (question.type === "matching") {
+      sub.textContent = "日本語をタップして、合う英語をタップしよう！";
+      sub.hidden = false;
+      play.querySelector("[data-cheer]").textContent = "つなげてみよう！";
+    } else {
+      sub.textContent = question.promptEn || "";
+      sub.hidden = !question.promptEn;
+    }
     const spoken = question.speak?.prompt;
     const speaker = play.querySelector(".hw-speaker");
     speaker.hidden = !spoken?.text;
@@ -100,7 +132,16 @@ export async function mountHomeworkPlayer(root, options) {
       });
     };
     speaker.addEventListener("click", replay);
-    play.querySelector(".hw-next").addEventListener("click", () => {
+    const next = play.querySelector(".hw-next");
+    if (question.type === "matching") {
+      next.hidden = false;
+      next.disabled = true;
+      next.classList.remove("is-ready");
+    }
+    next.addEventListener("click", () => {
+      if (next.disabled || next.dataset.locked === "1") return;
+      next.dataset.locked = "1";
+      next.disabled = true;
       const current = outcomes.get(question.id);
       if (!current?.correct) outcomes.set(question.id, { correct: false, tries: current?.tries || 1 });
       advance();
@@ -118,30 +159,69 @@ export async function mountHomeworkPlayer(root, options) {
     });
   }
 
+  function setFeedback(play, text, kind = "") {
+    const wrap = play.querySelector(".hw-feedback");
+    const live = play.querySelector(".hw-live");
+    const cheer = play.querySelector("[data-cheer]");
+    if (!wrap || !live) return;
+    wrap.hidden = !text;
+    wrap.classList.toggle("is-good", kind === "good");
+    wrap.classList.toggle("is-miss", kind === "miss");
+    live.textContent = text || "";
+    if (cheer) {
+      if (kind === "good") cheer.textContent = "よくできた！";
+      else if (kind === "miss") cheer.textContent = "もういちど！";
+    }
+  }
+
   function showRetry(play) {
     const line = nextRetryLine();
+    const tip = ENCOURAGE[encourageCursor % ENCOURAGE.length];
+    encourageCursor += 1;
     play.classList.add("is-miss");
     play.classList.remove("is-good");
     const check = play.querySelector(".hw-check");
+    const next = play.querySelector(".hw-next");
     check.hidden = false;
     check.disabled = false;
-    check.textContent = "こたえあわせる";
-    play.querySelector(".hw-live").textContent = line;
-    speakAfter(playResult(false), line);
+    check.textContent = "もういちどチェック";
+    if (next) {
+      next.hidden = true;
+      next.classList.remove("is-ready");
+    }
+    setFeedback(play, `${tip} ${line}`, "miss");
+    const soundDone = playResult(false);
+    const streakEl = play.querySelector(".hw-streak b");
+    if (streakEl) streakEl.textContent = String(streak);
+    speakAfter(soundDone, line);
   }
 
-  function showCorrect(play, spoken, sound = true) {
+  function showCorrect(play, spoken, sound = true, message) {
     play.classList.add("is-good");
     play.classList.remove("is-miss");
     play.querySelectorAll("button, input").forEach((item) => {
-      if (item.classList.contains("hw-next") || item.classList.contains("hw-text") || item.classList.contains("hw-speaker")) return;
+      if (item.classList.contains("hw-next") || item.classList.contains("hw-back") || item.classList.contains("hw-speaker")) return;
       item.disabled = true;
     });
     const check = play.querySelector(".hw-check");
-    check.textContent = "こたえあわせる";
-    play.querySelector(".hw-live").textContent = PRAISE[praise % PRAISE.length];
-    praise += 1;
+    const next = play.querySelector(".hw-next");
+    check.hidden = true;
+    check.textContent = "こたえをチェック";
+    if (next) {
+      next.hidden = false;
+      next.disabled = false;
+      next.classList.add("is-ready");
+      next.dataset.locked = "";
+    }
+    if (message !== undefined) {
+      setFeedback(play, message, message ? "good" : "");
+    } else {
+      setFeedback(play, PRAISE[praise % PRAISE.length], "good");
+      praise += 1;
+    }
     const soundDone = sound ? playResult(true) : Promise.resolve();
+    const streakEl = play.querySelector(".hw-streak b");
+    if (streakEl) streakEl.textContent = String(streak);
     if (spoken) speakAfter(soundDone, spoken);
   }
 
@@ -195,6 +275,7 @@ export async function mountHomeworkPlayer(root, options) {
       }));
     } else {
       check.hidden = true;
+      const next = play.querySelector(".hw-next");
       buildMatching(question, body, live, playResult, async (leftId, rightId) => options.grade(question.id, {
         kind: "pair",
         leftId,
@@ -204,8 +285,8 @@ export async function mountHomeworkPlayer(root, options) {
         await options.grade(question.id, { kind: "matching-done", elapsedMs: Math.round(performance.now() - started) });
         const prev = outcomes.get(question.id);
         outcomes.set(question.id, { correct: true, tries: (prev?.tries || 0) + 1 });
-        showCorrect(play, "", false);
-      }, (line) => speakAfter(playResult(false), line));
+        showCorrect(play, "", false, "");
+      }, (line) => speakAfter(playResult(false), line), next);
       return;
     }
 
@@ -232,8 +313,8 @@ export async function mountHomeworkPlayer(root, options) {
         else showRetry(play);
       } catch (error) {
         check.disabled = false;
-        check.textContent = "こたえあわせる";
-        live.textContent = error.message;
+        check.textContent = "こたえをチェック";
+        setFeedback(play, error.message, "miss");
       }
     });
   }
@@ -281,33 +362,42 @@ export async function mountHomeworkPlayer(root, options) {
     root.innerHTML = "";
     const done = document.createElement("section");
     done.className = "hw-play hw-done";
-    const title = document.createElement("p");
-    title.className = "hw-kicker";
-    title.textContent = options.title || "しゅくだい";
-    const heading = document.createElement("h2");
-    heading.textContent = "おわったよ！";
-    const score = document.createElement("p");
-    score.className = "hw-score";
-    score.textContent = `${summary.correct ?? correct} / ${summary.total || total} せいかい`;
-    const note = document.createElement("p");
-    note.textContent = (summary.percent ?? 0) === 100 ? "ぜんぶ できたね。" : "まちがえた ことばは、また あそぼう。";
-    done.append(title, heading, score, note);
+    done.innerHTML = `
+      <div class="hw-play-deco" aria-hidden="true">
+        <span class="hw-blob hw-blob-a"></span>
+        <span class="hw-blob hw-blob-b"></span>
+        <span class="hw-spark hw-spark-a"></span>
+        <span class="hw-spark hw-spark-b"></span>
+      </div>
+      <div class="hw-play-card hw-done-card">
+        <div class="hw-mascot is-celebrate" aria-hidden="true">${PLAY_ICON.mascot}</div>
+        <p class="hw-kicker"></p>
+        <h2>おわったよ！</h2>
+        <p class="hw-score"></p>
+        <p class="hw-done-note"></p>
+        <div class="hw-submit" data-done-actions></div>
+      </div>`;
+    done.querySelector(".hw-kicker").textContent = options.title || "しゅくだい";
+    done.querySelector(".hw-score").textContent = `${summary.correct ?? correct} / ${summary.total || total} せいかい`;
+    done.querySelector(".hw-done-note").textContent = (summary.percent ?? 0) === 100
+      ? "ぜんぶ できたね。すごい！"
+      : "まちがえた ことばは、また あそぼう。";
     if (summary.error) {
       const warn = document.createElement("p");
       warn.className = "hw-live";
       warn.textContent = summary.error;
-      done.appendChild(warn);
+      done.querySelector(".hw-done-card").appendChild(warn);
     }
     if (options.onClose) {
       const back = document.createElement("button");
       back.type = "button";
-      back.className = "hw-check";
+      back.className = "hw-check is-ready";
       back.textContent = "もどる";
       back.addEventListener("click", () => {
         stopHomeworkSfx();
         options.onClose();
       });
-      done.appendChild(back);
+      done.querySelector("[data-done-actions]").appendChild(back);
     }
     root.appendChild(done);
     if (celebrate) playHomeworkSfx("complete");
@@ -424,52 +514,111 @@ function buildSentence(question, onChange) {
   return wrap;
 }
 
-function buildMatching(question, body, live, playResult, gradePair, onDone, onMiss) {
+function prefersReducedMotion() {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function buildMatching(question, body, live, playResult, gradePair, onDone, onMiss, nextBtn) {
+  const wrap = document.createElement("div");
+  wrap.className = "hw-match-wrap";
+  const progress = document.createElement("p");
+  progress.className = "hw-match-progress";
+  progress.setAttribute("aria-live", "polite");
   const board = document.createElement("div");
   board.className = "hw-match";
+  const totalPairs = (question.left || []).length;
   let leftId = "";
   let rightId = "";
   let busy = false;
+  let finished = false;
+  let celebrated = false;
   const matched = new Set();
   let wrongIds = new Set();
+  let flashIds = new Set();
+
+  function pairedCount() {
+    return matched.size / 2;
+  }
+
+  function updateProgress() {
+    if (finished) {
+      progress.textContent = "ぜんぶできた！すごい！";
+      progress.classList.add("is-complete");
+      return;
+    }
+    progress.classList.remove("is-complete");
+    progress.textContent = `${pairedCount()} / ${totalPairs} ペア完成`;
+  }
+
+  function unlockNext() {
+    if (!nextBtn) return;
+    nextBtn.disabled = false;
+    nextBtn.classList.add("is-ready");
+    nextBtn.dataset.locked = "";
+  }
+
   const paint = () => {
     board.replaceChildren();
     ["left", "right"].forEach((side) => {
       const column = document.createElement("div");
-      column.className = "hw-col";
+      column.className = `hw-col hw-col-${side}`;
       (question[side] || []).forEach((item) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "hw-pair";
-        button.textContent = item.text;
-        button.disabled = matched.has(item.id);
+        button.dataset.side = side;
+        button.dataset.id = item.id;
+        const label = document.createElement("span");
+        label.className = "hw-pair-label";
+        label.textContent = item.text;
+        button.appendChild(label);
+        const done = matched.has(item.id);
+        if (done) {
+          const mark = document.createElement("span");
+          mark.className = "hw-pair-check";
+          mark.setAttribute("aria-hidden", "true");
+          mark.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`;
+          button.appendChild(mark);
+          button.setAttribute("aria-label", `${item.text}、せいこう`);
+        }
+        button.disabled = done || finished;
         button.classList.toggle("is-wrong", wrongIds.has(item.id));
-        button.classList.toggle("is-picked", !wrongIds.has(item.id) && (item.id === leftId || item.id === rightId));
-        button.classList.toggle("is-done", matched.has(item.id));
+        button.classList.toggle("is-flash", flashIds.has(item.id));
+        button.classList.toggle("is-picked", !done && !wrongIds.has(item.id) && !flashIds.has(item.id) && (item.id === leftId || item.id === rightId));
+        button.classList.toggle("is-done", done);
         button.addEventListener("click", () => choose(side, item.id, item.text));
         column.appendChild(button);
       });
       board.appendChild(column);
     });
+    board.classList.toggle("is-busy", busy);
+    board.setAttribute("aria-busy", busy ? "true" : "false");
+    updateProgress();
   };
+
   function soundFor(ok) {
     try {
-      playResult(ok);
+      return playResult(ok);
     } catch (error) {
       console.warn(error);
-      playHomeworkSfx(ok ? "correct" : "incorrect");
+      return playHomeworkSfx(ok ? "correct" : "incorrect");
     }
   }
+
   async function choose(side, id, text) {
-    if (busy || matched.has(id)) return;
+    if (busy || finished || matched.has(id)) return;
     if (side === "left") leftId = leftId === id ? "" : id;
     else rightId = rightId === id ? "" : id;
     const chosen = side === "left" ? leftId : rightId;
     const pairing = Boolean(leftId && rightId);
     wrongIds = new Set();
+    flashIds = new Set();
     if (pairing) busy = true;
     paint();
-    if (chosen) playPrompt(text, voiceLang(text));
+    if (chosen) {
+      stopPrompt();
+      playPrompt(text, voiceLang(text));
+    }
     if (!pairing) {
       busy = false;
       return;
@@ -484,13 +633,28 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
         matched.add(pairRight);
         leftId = "";
         rightId = "";
+        flashIds = new Set([pairLeft, pairRight]);
         paint();
         soundFor(true);
-        live.textContent = "せいかい！";
-        if (matched.size >= (question.left || []).length + (question.right || []).length) {
-          await onDone();
+        const allDone = pairedCount() >= totalPairs && totalPairs > 0;
+        if (allDone) {
+          finished = true;
+          updateProgress();
+          live.textContent = "";
+          flashIds = new Set();
+          paint();
+          if (!celebrated) {
+            celebrated = true;
+            await onDone();
+            unlockNext();
+          }
           return;
         }
+        live.textContent = "せいかい！";
+        const hold = prefersReducedMotion() ? 120 : 420;
+        await new Promise((resolve) => setTimeout(resolve, hold));
+        flashIds = new Set();
+        if (board.isConnected) paint();
       } else {
         wrongIds = new Set([pairLeft, pairRight]);
         leftId = "";
@@ -500,8 +664,8 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
         live.textContent = line;
         onMiss(line);
         board.classList.add("is-shake");
-        window.setTimeout(() => board.classList.remove("is-shake"), 350);
-        await new Promise((resolve) => setTimeout(resolve, 700));
+        window.setTimeout(() => board.classList.remove("is-shake"), prefersReducedMotion() ? 0 : 350);
+        await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion() ? 280 : 700));
         wrongIds = new Set();
         if (board.isConnected) paint();
       }
@@ -510,11 +674,15 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
       leftId = "";
       rightId = "";
       wrongIds = new Set();
+      flashIds = new Set();
       if (board.isConnected) paint();
     } finally {
       busy = false;
+      if (board.isConnected && !finished) paint();
     }
   }
-  body.appendChild(board);
+
+  wrap.append(progress, board);
+  body.appendChild(wrap);
   paint();
 }

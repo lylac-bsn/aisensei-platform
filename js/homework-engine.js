@@ -225,7 +225,7 @@ function makeMatching(group, random, id) {
     id,
     type: "matching",
     promptJa: "にほんごと えいごを つなげよう",
-    promptEn: "",
+    promptEn: "日本語をタップして、合う英語をタップしよう！",
     speak: { prompt: { text: "にほんごと えいごを つなげよう", lang: "ja" } },
     left,
     right,
@@ -273,7 +273,8 @@ function makeSentence(pair, pairs, level, direction, random, id, templateIndex) 
     promptJa = pair.sentenceJa || `${pair.ja}`;
     promptEn = "";
     source = "teacher";
-    approved = true;
+    // Teacher-supplied sentences still need review before publishing.
+    approved = false;
     direction = "ja-to-en";
   } else if (direction === "en-to-ja") {
     const template = templatesFor(pair, level)[templateIndex % 2];
@@ -367,7 +368,6 @@ function generateHomework(pairs, options = {}) {
   }
   if (types.sentence) {
     const items = list.map((pair, index) => makeSentence(pair, list, level, direction, random, `sent-${index + 1}`, index)).filter(Boolean);
-    if (items.some((item) => !item.approved)) warnings.push("文をつくる問題は提案です。出す前に、文を確認してください。");
     if (items.length) buckets.push(items);
     else warnings.push("文をつくる問題を作れませんでした。");
   }
@@ -391,7 +391,7 @@ function generateHomework(pairs, options = {}) {
     });
   }
   if (!questions.length) return { questions: [], warnings, error: "この単語リストでは問題を作れません。" };
-  if (questions.length < count) warnings.push(`${count}問は作れなかったので、${questions.length}問にしました。`);
+  if (questions.length < count) warnings.push(`最大${questions.length}問です。`);
   return {
     questions,
     warnings: [...new Set(warnings)],
@@ -453,6 +453,95 @@ function updateSentence(question, edit, pairs, seed) {
   };
 }
 
+function updateQuestion(question, edit = {}) {
+  if (!question) return { error: "問題がありません。" };
+  if (question.type === "sentence") return { error: "文づくりは専用の編集を使ってください。" };
+  const promptJa = clip(edit.promptJa ?? question.promptJa, 80);
+  if (!promptJa) return { error: "問題文を入力してください。" };
+
+  if (question.type === "multipleChoice") {
+    const choices = (edit.choices || question.choices || [])
+      .map((choice) => clip(choice, 40))
+      .filter(Boolean)
+      .slice(0, 4);
+    if (choices.length < 2) return { error: "選択肢を2つ以上入れてください。" };
+    const answer = clip(edit.answer ?? question.answer, 40);
+    if (!choices.some((choice) => norm(choice) === norm(answer))) {
+      return { error: "正解は選択肢の中から選んでください。" };
+    }
+    return {
+      error: "",
+      question: {
+        ...question,
+        promptJa,
+        speak: { prompt: { text: promptJa, lang: "ja" } },
+        choices,
+        answer,
+        display: answer,
+        review: false,
+      },
+    };
+  }
+
+  if (question.type === "spelling") {
+    const answer = clip(edit.answer ?? question.answer ?? question.display, 40).trim();
+    if (lettersOnly(answer).length < 2) return { error: "スペリングの正解が短すぎます。" };
+    if (lettersOnly(answer).length > 16) return { error: "スペリングの正解が長すぎます。" };
+    return {
+      error: "",
+      question: {
+        ...question,
+        promptJa,
+        speak: { prompt: { text: promptJa, lang: "ja" } },
+        answer,
+        display: answer,
+        slots: spellingSlots(answer),
+        hint: question.hint ? firstLetter(answer) : "",
+        review: false,
+      },
+    };
+  }
+
+  if (question.type === "matching") {
+    const pairEdits = Array.isArray(edit.pairs) ? edit.pairs : null;
+    if (!pairEdits || !pairEdits.length) {
+      return { error: "正しい組み合わせを入力してください。" };
+    }
+    const leftById = new Map((question.left || []).map((item) => [item.id, { ...item }]));
+    const rightById = new Map((question.right || []).map((item) => [item.id, { ...item }]));
+    const pairs = [];
+    for (const row of pairEdits) {
+      const ja = clip(row.ja, 40);
+      const en = clip(row.en, 40);
+      if (!ja || !en) return { error: "すべての正しい組み合わせを入力してください。" };
+      const leftId = row.leftId || `match-l${pairs.length}`;
+      const rightId = row.rightId || `match-r${pairs.length}`;
+      leftById.set(leftId, { id: leftId, text: ja });
+      rightById.set(rightId, { id: rightId, text: en });
+      pairs.push({ leftId, rightId });
+    }
+    if (pairs.length < 2) return { error: "線つなぎは2組以上にしてください。" };
+    const random = makeRandom(Date.now());
+    const left = shuffle([...leftById.values()].filter((item) => pairs.some((pair) => pair.leftId === item.id)), random);
+    const right = shuffle([...rightById.values()].filter((item) => pairs.some((pair) => pair.rightId === item.id)), random);
+    return {
+      error: "",
+      question: {
+        ...question,
+        promptJa,
+        speak: { prompt: { text: promptJa, lang: "ja" } },
+        left,
+        right,
+        pairs,
+        vocabKey: pairs.map((pair) => norm(rightById.get(pair.rightId)?.text)).filter(Boolean).join(","),
+        review: false,
+      },
+    };
+  }
+
+  return { error: "この問題タイプは編集できません。" };
+}
+
 function setHintMode(questions, enabled) {
   return questions.map((question) => {
     if (question.type !== "spelling") return question;
@@ -481,12 +570,37 @@ function toPublic(question) {
   };
 }
 
+/** Firestore forbids nested arrays; store accept as [{ tokens: string[] }]. */
+function encodeAccept(accept) {
+  if (!Array.isArray(accept) || !accept.length) return null;
+  return accept.map((sequence) => {
+    if (Array.isArray(sequence)) {
+      return { tokens: sequence.map((token) => clip(String(token || ""), 40)).filter(Boolean) };
+    }
+    if (sequence && typeof sequence === "object" && Array.isArray(sequence.tokens)) {
+      return { tokens: sequence.tokens.map((token) => clip(String(token || ""), 40)).filter(Boolean) };
+    }
+    return { tokens: tokenize(sequence) };
+  }).filter((row) => row.tokens.length);
+}
+
+function decodeAcceptSequences(accept, fallbackAnswer) {
+  if (!Array.isArray(accept) || !accept.length) {
+    return Array.isArray(fallbackAnswer) ? [fallbackAnswer] : [];
+  }
+  return accept.map((sequence) => {
+    if (Array.isArray(sequence)) return sequence;
+    if (sequence && typeof sequence === "object" && Array.isArray(sequence.tokens)) return sequence.tokens;
+    return tokenize(sequence);
+  }).filter((sequence) => Array.isArray(sequence) && sequence.length);
+}
+
 function toSecret(question) {
   return {
     type: question.type,
     answer: question.answer,
     pairs: question.pairs || null,
-    accept: question.accept || null,
+    accept: encodeAccept(question.accept),
     display: question.display || "",
     vocabKey: question.vocabKey || "",
   };
@@ -505,7 +619,7 @@ function gradeAnswer(question, answer) {
   if (question.type === "sentence") {
     const tokens = Array.isArray(answer) ? answer : tokenize(answer);
     const got = tokens.map(norm).join(" ");
-    const accepts = Array.isArray(question.accept) && question.accept.length ? question.accept : [question.answer];
+    const accepts = decodeAcceptSequences(question.accept, question.answer);
     const correct = accepts.some((sequence) => (sequence || []).map(norm).join(" ") === got);
     const solution = Array.isArray(question.answer) ? question.answer.join(" ") : (question.display || "");
     return { correct, solution: correct ? "" : solution };
@@ -570,9 +684,10 @@ function preparePack(rawQuestions, options = {}) {
       if (!Array.isArray(question.answer) || question.answer.length < 2 || !coversTokens(question.answer, question.tiles)) {
         return { ok: false, error: "文の単語タイルを確認してください。" };
       }
-      if (options.assigning && !question.approved) {
-        return { ok: false, error: "文をつくる問題を確認してから出してください。" };
-      }
+      question.accept = encodeAccept(question.accept || sentenceAlternates(question.answer));
+    }
+    if (options.assigning && !question.approved) {
+      return { ok: false, error: "すべての問題の音声を確認してから出してください。" };
     }
     questions.push(question);
   }
@@ -590,6 +705,7 @@ export {
   generateHomework,
   regenerateAt,
   updateSentence,
+  updateQuestion,
   setHintMode,
   toPublic,
   toSecret,

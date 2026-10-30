@@ -1,17 +1,6 @@
-import { normalizeMcqAudioLabel } from "./mcq-audio-config.js?v=20261026-homework";
-import { playHomeworkVoice, stopHomeworkVoice } from "./homework-voice-bank.js?v=20261026-retry";
+import { playHomeworkVoice, stopHomeworkVoice } from "./homework-voice-bank.js?v=20261030-hw-lib26";
 
-let manifestPromise;
 let active = null;
-
-function loadManifest() {
-  if (!manifestPromise) {
-    manifestPromise = import("../audio/mcq/manifest.js?v=20260927-mcq-v2")
-      .then((mod) => mod.MCQ_AUDIO_MANIFEST)
-      .catch(() => ({}));
-  }
-  return manifestPromise;
-}
 
 function speak(text, lang) {
   if (!window.speechSynthesis) return "none";
@@ -38,15 +27,5 @@ export async function playPrompt(text, lang) {
     const played = await voice;
     if (played) return "learny";
   }
-  const table = await loadManifest();
-  const clip = table?.[normalizeMcqAudioLabel(spoken)]?.path;
-  if (!clip) return speak(spoken, lang);
-  const audio = new Audio(clip);
-  active = { stop() { audio.pause(); } };
-  try {
-    await audio.play();
-    return "file";
-  } catch {
-    return speak(spoken, lang);
-  }
+  return speak(spoken, lang);
 }
