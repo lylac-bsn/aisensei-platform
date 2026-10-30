@@ -5,9 +5,9 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib31";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib85";
 import { renderHome } from "./platform-home.js";
-import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib31";
+import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib85";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -96,6 +96,24 @@ document.addEventListener("click", (event) => {
         if (pageTitle) pageTitle.textContent = 'ホーム';
         platformHub?.classList.remove('is-nav-open');
         platformHub?.querySelectorAll('.gc-nav.is-current').forEach((item) => item.classList.remove('is-current'));
+        try {
+            sessionStorage.removeItem('gc-hub-action');
+        } catch {
+            /* ignore */
+        }
+    }
+
+    function resumeHubAction() {
+        let action = '';
+        try {
+            action = sessionStorage.getItem('gc-hub-action') || '';
+        } catch {
+            action = '';
+        }
+        if (!action) return;
+        const btn = document.querySelector(`[data-hub-action="${action}"]`);
+        if (!btn || btn.hidden) return;
+        queueMicrotask(() => btn.click());
     }
 
     function showHub(role, displayName, uid) {
@@ -131,7 +149,21 @@ document.addEventListener("click", (event) => {
         });
         decorateNav();
         paintDashboard();
+        let pendingAction = '';
+        try {
+            pendingAction = sessionStorage.getItem('gc-hub-action') || '';
+        } catch {
+            pendingAction = '';
+        }
         showHubMenu();
+        if (pendingAction) {
+            try {
+                sessionStorage.setItem('gc-hub-action', pendingAction);
+            } catch {
+                /* ignore */
+            }
+            resumeHubAction();
+        }
         watchNotifications(uid, currentHubRole);
     }
 
@@ -208,7 +240,25 @@ document.addEventListener("click", (event) => {
         if (!panel) return;
         panel.hidden = false;
         const packs = new Map();
-        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib31');
+        const LAB_PACKS_KEY = 'gc-hw-lab-packs';
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(LAB_PACKS_KEY) || '[]');
+            if (Array.isArray(saved)) {
+                saved.forEach((entry) => {
+                    if (Array.isArray(entry) && entry[0] && entry[1]) packs.set(entry[0], entry[1]);
+                });
+            }
+        } catch {
+            /* ignore */
+        }
+        const persistLabPacks = () => {
+            try {
+                sessionStorage.setItem(LAB_PACKS_KEY, JSON.stringify([...packs.entries()]));
+            } catch {
+                /* ignore */
+            }
+        };
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib85');
         const labCall = async (name, data) => {
             if (name === 'saveHomeworkPack') {
                 const id = data.id || `lab${packs.size + 1}`;
@@ -224,6 +274,7 @@ document.addEventListener("click", (event) => {
                     format: 'pack-v1',
                     updatedAt: { toMillis: () => Date.now() },
                 });
+                persistLabPacks();
                 return {
                     id,
                     status: data.status,
@@ -283,13 +334,23 @@ document.addEventListener("click", (event) => {
             }
             if (name === 'deleteHomeworkPack') {
                 packs.delete(data.id);
+                persistLabPacks();
                 return { ok: true };
             }
             if (name === 'setHomeworkPublished') {
                 const pack = packs.get(data.id);
                 if (!pack) throw new Error('宿題がありません。');
                 pack.published = data.published !== false;
+                persistLabPacks();
                 return { id: pack.id, published: pack.published };
+            }
+            if (name === 'updateHomeworkPackMeta') {
+                const pack = packs.get(data.id);
+                if (!pack) throw new Error('宿題がありません。');
+                pack.title = String(data.title || '').trim().slice(0, 80) || 'きょうのしゅくだい';
+                pack.description = String(data.description || '').trim().slice(0, 160);
+                persistLabPacks();
+                return { id: pack.id, title: pack.title, description: pack.description };
             }
             throw new Error('プレビューではサーバーに保存しません。');
         };
@@ -360,6 +421,11 @@ document.addEventListener("click", (event) => {
     platformHub?.addEventListener('click', (event) => {
         if (event.target.closest('[data-hub-home]')) {
             if (!discardAttendanceEdits()) return;
+            try {
+                sessionStorage.removeItem('gc-hw-resume');
+            } catch {
+                /* ignore */
+            }
             showHubMenu();
             return;
         }
@@ -367,6 +433,11 @@ document.addEventListener("click", (event) => {
         if (!actionBtn || !hubPanel) return;
         if (!discardAttendanceEdits()) return;
         const action = actionBtn.getAttribute('data-hub-action');
+        try {
+            sessionStorage.setItem('gc-hub-action', action);
+        } catch {
+            /* ignore */
+        }
         const pageTitle = document.getElementById('hub-page-title');
         if (pageTitle) pageTitle.textContent = actionBtn.getAttribute('data-hub-label') || 'Gamecollege';
         platformHub.classList.remove('is-nav-open');

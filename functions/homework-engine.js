@@ -56,7 +56,7 @@ function clampCount(value, pairCount) {
   const fallback = Math.min(12, Math.max(pairCount, 1));
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.min(24, Math.max(1, Math.round(number)));
+  return Math.min(100, Math.max(1, Math.round(number)));
 }
 
 function splitPair(text) {
@@ -331,9 +331,9 @@ function matchGroups(pairs) {
 }
 
 function generateHomework(pairs, options = {}) {
-  const list = Array.isArray(pairs) ? pairs.filter((pair) => pair?.ja && pair?.en) : [];
+  const source = Array.isArray(pairs) ? pairs.filter((pair) => pair?.ja && pair?.en) : [];
   const warnings = [...(options.warnings || [])];
-  if (!list.length) return { questions: [], warnings, error: "日本語と英語の単語を入力してください。" };
+  if (!source.length) return { questions: [], warnings, error: "日本語と英語の単語を入力してください。" };
   const level = LEVELS.includes(options.level) ? options.level : "beginner";
   const types = {
     multipleChoice: options.types?.multipleChoice !== false,
@@ -347,6 +347,9 @@ function generateHomework(pairs, options = {}) {
   const hints = options.hints != null ? Boolean(options.hints) : level === "beginner";
   const direction = options.sentenceDirection === "en-to-ja" ? "en-to-ja" : "ja-to-en";
   const random = makeRandom(options.seed);
+  const shuffleWords = options.shuffleWords !== false;
+  // Random mode shuffles the word list so small question counts cover more than the top rows.
+  const list = shuffleWords ? shuffle(source, random) : source;
   const buckets = [];
 
   if (types.multipleChoice) {
@@ -372,9 +375,15 @@ function generateHomework(pairs, options = {}) {
   }
 
   const poolSize = buckets.reduce((sum, bucket) => sum + bucket.length, 0);
-  const count = options.count == null || options.count === ""
+  const autoCount = options.count == null || options.count === "";
+  const requestedRaw = autoCount ? NaN : Number(options.count);
+  const count = autoCount
     ? Math.min(16, poolSize)
     : clampCount(options.count, list.length);
+  // Compare against what the teacher asked for (before the 100-cap).
+  const wanted = autoCount || !Number.isFinite(requestedRaw)
+    ? count
+    : Math.max(1, Math.round(requestedRaw));
   const questions = [];
   const cursors = buckets.map(() => 0);
   let moved = true;
@@ -390,12 +399,20 @@ function generateHomework(pairs, options = {}) {
     });
   }
   if (!questions.length) return { questions: [], warnings, error: "この単語リストでは問題を作れません。" };
-  if (questions.length < count) warnings.push(`最大${questions.length}問です。`);
+  if (questions.length < wanted) warnings.push(`最大${questions.length}問です。`);
   return {
     questions,
     warnings: [...new Set(warnings)],
     error: "",
-    settings: { level, types, hints, sentenceDirection: direction, count, seed: Number(options.seed) || 1 },
+    settings: {
+      level,
+      types,
+      hints,
+      sentenceDirection: direction,
+      count,
+      seed: Number(options.seed) || 1,
+      shuffleWords,
+    },
   };
 }
 
@@ -549,8 +566,8 @@ function coversTokens(tokens, tiles) {
 }
 
 function preparePack(rawQuestions, options = {}) {
-  if (!Array.isArray(rawQuestions) || !rawQuestions.length || rawQuestions.length > 24) {
-    return { ok: false, error: "問題は1〜24問にしてください。" };
+  if (!Array.isArray(rawQuestions) || !rawQuestions.length || rawQuestions.length > 100) {
+    return { ok: false, error: "問題は1〜100問にしてください。" };
   }
   const ids = new Set();
   const questions = [];

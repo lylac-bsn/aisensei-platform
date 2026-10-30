@@ -1,18 +1,23 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib26";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib26";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib26";
-import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib26";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib85";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib85";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib85";
+import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib85";
 
 const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！", "やったね！", "いいね！"];
 const ENCOURAGE = ["おしい！", "もういちど！", "だいじょうぶ！", "がんばろう！"];
 let retryCursor = 0;
 let encourageCursor = 0;
+let voiceDb = null;
+
+function playLine(text, lang) {
+  return playPrompt(text, lang, { db: voiceDb });
+}
 
 const PLAY_ICON = {
   back: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   star: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.8 7.2 18.3l.9-5.4L4.2 9.1l5.4-.8L12 3.4z"/></svg>`,
   speaker: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5l4.5 4V5Z"/><path d="M15 9.5a4 4 0 0 1 0 5"/><path d="M18 7a7.5 7.5 0 0 1 0 10"/></svg>`,
-  mascot: `<svg viewBox="0 0 80 80" aria-hidden="true"><ellipse cx="40" cy="46" rx="22" ry="20" fill="#FFF5EA"/><circle cx="28" cy="28" r="10" fill="#FFE2D8"/><circle cx="52" cy="28" r="10" fill="#FFE2D8"/><circle cx="33" cy="44" r="3.2" fill="#5B463C"/><circle cx="47" cy="44" r="3.2" fill="#5B463C"/><ellipse cx="40" cy="52" rx="5" ry="3.4" fill="#F3B5A0"/><path d="M31 57c3.5 4 14.5 4 18 0" fill="none" stroke="#5B463C" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+  mascot: `<img src="images/fukurou.svg" alt="" class="hw-mascot-owl" width="88" height="95" decoding="async">`,
 };
 
 function nextRetryLine() {
@@ -31,6 +36,7 @@ function voiceLang(text) {
 }
 
 export async function mountHomeworkPlayer(root, options) {
+  voiceDb = options.db || null;
   const source = Array.isArray(options.questions) ? options.questions : [];
   const outcomes = new Map();
   const saved = await options.loadProgress?.().catch(() => null);
@@ -78,14 +84,12 @@ export async function mountHomeworkPlayer(root, options) {
         <div class="hw-top">
           ${options.onClose ? `<button type="button" class="hw-back" data-close aria-label="もどる" title="もどる">${PLAY_ICON.back}</button>` : `<span class="hw-back-spacer"></span>`}
           <div class="hw-progress-meta">
-            <p class="hw-count">${reviewing ? "ふくしゅう" : "もんだい"} <strong>${cursor + 1}</strong> / ${order.length}</p>
             <span class="hw-streak" title="連続せいせい">${PLAY_ICON.star}<b>${streak}</b></span>
           </div>
         </div>
         <div class="hw-bar" aria-hidden="true"><span style="width:${progress}%"></span></div>
         <div class="hw-ask-block">
           <div class="hw-mascot" aria-hidden="true">${PLAY_ICON.mascot}</div>
-          <p class="hw-cheer" data-cheer>きいてみよう！</p>
           <div class="hw-ask">
             <button type="button" class="hw-speaker" aria-label="きく">${PLAY_ICON.speaker}</button>
             <div class="hw-ask-text">
@@ -114,7 +118,6 @@ export async function mountHomeworkPlayer(root, options) {
     if (question.type === "matching") {
       sub.textContent = "日本語をタップして、合う英語をタップしよう！";
       sub.hidden = false;
-      play.querySelector("[data-cheer]").textContent = "つなげてみよう！";
     } else {
       sub.textContent = question.promptEn || "";
       sub.hidden = !question.promptEn;
@@ -126,7 +129,7 @@ export async function mountHomeworkPlayer(root, options) {
       if (!spoken?.text) return;
       speaker.disabled = true;
       speaker.classList.add("is-speaking");
-      playPrompt(spoken.text, spoken.lang).finally(() => {
+      playLine(spoken.text, spoken.lang).finally(() => {
         speaker.disabled = false;
         speaker.classList.remove("is-speaking");
       });
@@ -155,23 +158,18 @@ export async function mountHomeworkPlayer(root, options) {
     const token = ++soundToken;
     return soundDone.then(() => {
       if (token !== soundToken) return;
-      return playPrompt(line, voiceLang(line));
+      return playLine(line, voiceLang(line));
     });
   }
 
   function setFeedback(play, text, kind = "") {
     const wrap = play.querySelector(".hw-feedback");
     const live = play.querySelector(".hw-live");
-    const cheer = play.querySelector("[data-cheer]");
     if (!wrap || !live) return;
     wrap.hidden = !text;
     wrap.classList.toggle("is-good", kind === "good");
     wrap.classList.toggle("is-miss", kind === "miss");
     live.textContent = text || "";
-    if (cheer) {
-      if (kind === "good") cheer.textContent = "よくできた！";
-      else if (kind === "miss") cheer.textContent = "もういちど！";
-    }
   }
 
   function showRetry(play) {
@@ -253,7 +251,7 @@ export async function mountHomeworkPlayer(root, options) {
           if (button.disabled || answer === choice) return;
           answer = choice;
           play.classList.remove("is-miss");
-          playPrompt(choice, "en");
+          playLine(choice, "en");
           choices.querySelectorAll(".hw-choice").forEach((item) => {
             item.classList.toggle("is-picked", item === button);
             item.classList.remove("is-wrong");
@@ -482,7 +480,7 @@ function buildSentence(question, onChange) {
       button.textContent = tile.text;
       button.addEventListener("click", () => {
         picked.splice(index, 1);
-        playPrompt(tile.text, voiceLang(tile.text));
+        playLine(tile.text, voiceLang(tile.text));
         paint();
       });
       answer.appendChild(button);
@@ -502,7 +500,7 @@ function buildSentence(question, onChange) {
       button.addEventListener("click", () => {
         if (picked.length >= question.slotCount) return;
         picked.push({ text, index });
-        playPrompt(text, voiceLang(text));
+        playLine(text, voiceLang(text));
         paint();
       });
       bank.appendChild(button);
@@ -617,7 +615,7 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     paint();
     if (chosen) {
       stopPrompt();
-      playPrompt(text, voiceLang(text));
+      playLine(text, voiceLang(text));
     }
     if (!pairing) {
       busy = false;

@@ -1,7 +1,33 @@
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { generateHomework } from "./homework-engine.js?v=20261030-hw-lib31";
+import { generateHomework } from "./homework-engine.js?v=20261030-hw-lib85";
 
-const CACHE = "20261030-hw-lib31";
+const CACHE = "20261030-hw-lib85";
+const RESUME_KEY = "gc-hw-resume";
+const HUB_ACTION_KEY = "gc-hub-action";
+
+function readHwResume() {
+  try {
+    return JSON.parse(sessionStorage.getItem(RESUME_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeHwResume(patch) {
+  try {
+    const prev = readHwResume() || {};
+    const next = {
+      ...prev,
+      ...patch,
+      action: "assign-homework",
+      updatedAt: Date.now(),
+    };
+    sessionStorage.setItem(RESUME_KEY, JSON.stringify(next));
+    sessionStorage.setItem(HUB_ACTION_KEY, "assign-homework");
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 const LEVEL_LABEL = {
   beginner: "Beginner",
@@ -202,12 +228,25 @@ function sampleLines(item) {
 }
 
 export async function mountHomeworkHub(root, options) {
-  const startView = options.initialView === "library" || options.initialView === "assign"
+  // Flush/tear down an open studio so leave-save can finish and listeners detach.
+  try { root._confirmLeave?.(); } catch { /* ignore */ }
+  root._stopHomeworkStudio?.();
+
+  const resume = options.skipResume ? null : readHwResume();
+  const resumeView = resume?.view;
+  const startView = options.initialView === "library"
+    || options.initialView === "assign"
+    || options.initialView === "landing"
     ? options.initialView
-    : "landing";
+    : (resumeView === "library" || resumeView === "assign" || resumeView === "studio"
+      ? "library"
+      : "landing");
+  const startTab = ["all", "official", "mine"].includes(options.initialTab)
+    ? options.initialTab
+    : "all";
   const state = {
     view: startView,
-    tab: "all",
+    tab: startTab,
     query: "",
     level: "all",
     type: "all",
@@ -224,17 +263,29 @@ export async function mountHomeworkHub(root, options) {
   hub.className = "hw-hub hw-studio hw-switch-shell";
   root.replaceChildren(hub);
 
+  const rememberView = (view, extra = {}) => {
+    writeHwResume({
+      view,
+      pack: view === "studio" ? (extra.pack ?? readHwResume()?.pack ?? null) : null,
+      selectedId: view === "assign" ? (extra.selectedId || state.selected?.id || null) : null,
+      ...extra,
+    });
+  };
+
   const paint = async () => {
     if (state.view === "landing") {
+      rememberView("landing");
       hub.innerHTML = landingHtml();
       bindLanding();
       return;
     }
     if (state.view === "assign" && state.selected) {
+      rememberView("assign", { selectedId: state.selected.id });
       hub.innerHTML = assignHtml(state.selected);
       await bindAssign(state.selected);
       return;
     }
+    rememberView("library");
     hub.innerHTML = libraryHtml();
     bindLibrary();
     await refreshLibrary();
@@ -483,9 +534,7 @@ export async function mountHomeworkHub(root, options) {
     showBanner("");
     state.loadError = "";
     try {
-      const remote = options.lab
-        ? { items: [] }
-        : await options.callFunction("listHomeworkLibrary", {});
+      const remote = await options.callFunction("listHomeworkLibrary", {});
       const mineAndShared = Array.isArray(remote.items) ? remote.items : [];
       state.items = [...officialCards(), ...mineAndShared];
       updateTabs();
@@ -769,10 +818,29 @@ export async function mountHomeworkHub(root, options) {
     bindPreview(item);
   }
 
+  function canEditPreviewMeta(item) {
+    return Boolean(item && !item.official && item.teacherId === options.uid && item.status !== "assigned");
+  }
+
   function previewShell(item, questionsHtml, audioNote) {
     const theme = themeFor(item);
     const art = THEME_ART[theme] || THEME_ART.default;
     const count = item.questionCount || item._questions?.length || 0;
+    const editable = canEditPreviewMeta(item);
+    const titleBlock = editable
+      ? `<label class="hw-lib-preview-edit">
+            <span class="visually-hidden">タイトル</span>
+            <input id="hw-preview-title" class="hw-lib-preview-title-input" type="text" maxlength="80" value="${escapeHtml(item.title || "")}" placeholder="宿題のタイトル">
+          </label>`
+      : `<h3>${escapeHtml(item.title)}</h3>`;
+    const descValue = item.description || "";
+    const descBlock = editable
+      ? `<label class="hw-lib-preview-edit">
+            <span class="visually-hidden">サブタイトル</span>
+            <textarea id="hw-preview-desc" class="hw-lib-preview-desc-input" maxlength="160" rows="2" placeholder="単語とクイズの宿題パックです。">${escapeHtml(descValue)}</textarea>
+          </label>
+          <p id="hw-preview-save" class="hw-lib-preview-save" hidden role="status" aria-live="polite"></p>`
+      : `<p class="hw-lib-card-desc">${escapeHtml(descValue || "単語とクイズの宿題パックです。")}</p>`;
     return `
       <div class="hw-lib-preview-backdrop" data-preview-close></div>
       <aside class="hw-lib-preview-panel" role="dialog" aria-modal="true" aria-label="宿題プレビュー">
@@ -783,8 +851,8 @@ export async function mountHomeworkHub(root, options) {
             <span class="hw-lib-badge ${item.official ? "is-official" : "is-mine"}">${item.official ? "公式" : "先生が作成"}</span>
             <span class="hw-lib-badge is-level-${escapeHtml(item.level || "beginner")}">${escapeHtml(LEVEL_LABEL[item.level] || item.level)}</span>
           </div>
-          <h3>${escapeHtml(item.title)}</h3>
-          <p class="hw-lib-card-desc">${escapeHtml(item.description || "単語とクイズの宿題パックです。")}</p>
+          ${titleBlock}
+          ${descBlock}
           <dl class="hw-lib-preview-meta">
             <div><dt>作成者</dt><dd>${escapeHtml(item.creatorName || "先生")}</dd></div>
             <div><dt>問題数</dt><dd>${count}問</dd></div>
@@ -798,6 +866,111 @@ export async function mountHomeworkHub(root, options) {
           <button type="button" class="hw-lib-use" data-preview-use="${escapeHtml(item.id)}">この宿題を使う →</button>
         </div>
       </aside>`;
+  }
+
+  function syncCardMeta(item) {
+    const grid = hub.querySelector("#hw-lib-grid");
+    const card = grid?.querySelector(`[data-open="${CSS.escape(item.id)}"]`);
+    if (!card) return;
+    const h3 = card.querySelector("h3");
+    const desc = card.querySelector(".hw-lib-card-desc");
+    if (h3) h3.textContent = item.title || "";
+    if (desc) desc.textContent = item.description || "単語とクイズの宿題パックです。";
+    card.setAttribute("aria-label", `${item.title || "宿題"}をプレビュー`);
+  }
+
+  function setPreviewSaveStatus(kind, message) {
+    const el = hub.querySelector("#hw-preview-save");
+    if (!el) return;
+    el.hidden = !message;
+    el.className = `hw-lib-preview-save${kind ? ` is-${kind}` : ""}`;
+    el.textContent = message || "";
+  }
+
+  function bindPreviewMeta(item) {
+    if (!canEditPreviewMeta(item)) return;
+    const titleInput = hub.querySelector("#hw-preview-title");
+    const descInput = hub.querySelector("#hw-preview-desc");
+    if (!titleInput || !descInput) return;
+    let timer = 0;
+    let seq = 0;
+    const flush = (immediate = false) => {
+      window.clearTimeout(timer);
+      const run = () => {
+        const token = ++seq;
+        autosavePreviewMeta(item, titleInput.value, descInput.value)
+          .then((ok) => {
+            if (token !== seq) return;
+            if (ok) setPreviewSaveStatus("ok", "自動保存しました");
+          })
+          .catch((error) => {
+            if (token !== seq) return;
+            setPreviewSaveStatus("bad", error?.message || "保存に失敗しました");
+          });
+      };
+      if (immediate) {
+        setPreviewSaveStatus("", "保存しています…");
+        run();
+        return;
+      }
+      setPreviewSaveStatus("", "保存しています…");
+      timer = window.setTimeout(run, 550);
+    };
+    titleInput.addEventListener("input", () => flush(false));
+    descInput.addEventListener("input", () => flush(false));
+    titleInput.addEventListener("blur", () => flush(true));
+    descInput.addEventListener("blur", () => flush(true));
+  }
+
+  async function autosavePreviewMeta(item, rawTitle, rawDesc) {
+    const title = String(rawTitle || "").trim().slice(0, 80) || "きょうのしゅくだい";
+    const description = String(rawDesc || "").trim().slice(0, 160);
+    if (title === (item.title || "") && description === (item.description || "")) {
+      setPreviewSaveStatus("", "");
+      return false;
+    }
+    if (!options.callFunction) throw new Error("保存できませんでした。");
+    let result = null;
+    try {
+      result = await options.callFunction("updateHomeworkPackMeta", {
+        id: item.id,
+        title,
+        description,
+      });
+    } catch (error) {
+      const message = String(error?.message || error?.code || "");
+      // Fallback when the lightweight meta endpoint is not deployed yet.
+      if (!/not-found|NOT_FOUND|not found|internal|INTERNAL|unimplemented|UNIMPLEMENTED/i.test(message)
+        && !/does not exist|not been deployed|404/i.test(message)) {
+        throw error;
+      }
+      const pack = await options.callFunction("getHomeworkEditor", { id: item.id });
+      if (pack?.readOnly) throw new Error("この宿題は編集できません。");
+      await options.callFunction("saveHomeworkPack", {
+        id: item.id,
+        status: "draft",
+        title,
+        description,
+        level: pack.level || item.level || "beginner",
+        published: pack.published !== false,
+        libraryReady: Boolean(pack.libraryReady ?? item.libraryReady),
+        vocab: pack.vocab || [],
+        questions: pack.questions || [],
+        settings: pack.settings || {},
+        dueOn: pack.dueOn || "",
+        classIds: [],
+      });
+      result = { title, description };
+    }
+    item.title = result?.title || title;
+    item.description = result?.description ?? description;
+    const listed = state.items.find((row) => row.id === item.id);
+    if (listed && listed !== item) {
+      listed.title = item.title;
+      listed.description = item.description;
+    }
+    syncCardMeta(item);
+    return true;
   }
 
   function bindPreview(item) {
@@ -814,6 +987,7 @@ export async function mountHomeworkHub(root, options) {
       host.hidden = true;
       useItem(item.id);
     });
+    bindPreviewMeta(item);
   }
 
   function setLibStatus(message, kind = "bad") {
@@ -840,10 +1014,21 @@ export async function mountHomeworkHub(root, options) {
       console.error("[homework-library] studio import failed", error);
       throw new Error("編集画面を開けませんでした。ページを再読み込みしてからもう一度お試しください。");
     }
+    rememberView("studio", { pack: pack || null });
     await mountTeacherHomework(root, {
       ...options,
       ...(pack ? { initialPack: pack } : {}),
-      openLibrary: () => mountHomeworkHub(root, { ...options, initialView: "library" }),
+      onStudioSnapshot: (snapshot) => rememberView("studio", { pack: snapshot }),
+      openLibrary: (opts = {}) => {
+        rememberView("library");
+        return mountHomeworkHub(root, {
+          ...options,
+          initialView: "library",
+          initialTab: opts.tab || "all",
+          libNotice: opts.notice || "",
+          skipResume: true,
+        });
+      },
       openReport: options.openReport,
     });
   }
@@ -1260,4 +1445,23 @@ export async function mountHomeworkHub(root, options) {
 
   root._confirmLeave = () => true;
   await paint();
+
+  if (options.libNotice) {
+    setLibStatus(options.libNotice, "ok");
+  }
+
+  if (!options.skipResume && resumeView === "studio" && resume?.pack) {
+    try {
+      await openStudio(resume.pack);
+    } catch (error) {
+      console.warn("[homework-library] resume studio failed", error);
+    }
+  } else if (!options.skipResume && resumeView === "assign" && resume?.selectedId) {
+    const item = state.items.find((row) => row.id === resume.selectedId);
+    if (item) {
+      state.selected = item;
+      state.view = "assign";
+      await paint();
+    }
+  }
 }

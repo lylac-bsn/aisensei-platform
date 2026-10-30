@@ -356,9 +356,9 @@ exports.saveHomeworkPack = onCall({ region: REGION }, async (request) => {
     sentenceJa: clean(row?.sentenceJa, 80),
     sentenceEn: clean(row?.sentenceEn, 120),
   })).filter((row) => row.ja && row.en);
-  const published = request.data?.published !== false;
-  const libraryReady = Boolean(request.data?.libraryReady)
-    || (status === "draft" && prepared.publicQuestions.length > 0 && prepared.publicQuestions.every((q) => q.approved));
+  // Opt-in only — incomplete drafts must never become public by default.
+  const published = request.data?.published === true;
+  const libraryReady = Boolean(request.data?.libraryReady);
   const description = clean(request.data?.description, 160);
   const creatorName = clean(user.displayName, 40) || "先生";
   await ref.set({
@@ -443,8 +443,8 @@ function libraryCard(id, data) {
     description: data.description || "",
     level: data.level || "beginner",
     status: data.status || "draft",
-    published: data.published !== false,
-    libraryReady: Boolean(data.libraryReady) || data.status === "draft",
+    published: data.published === true,
+    libraryReady: Boolean(data.libraryReady),
     official: Boolean(data.official),
     teacherId: data.teacherId || "",
     creatorName: data.official ? "Learny" : (data.creatorName || "先生"),
@@ -515,6 +515,9 @@ exports.assignHomeworkFromTemplate = onCall({ region: REGION }, async (request) 
   const data = template.data();
   if (!canAccessHomework(user, data)) throw new HttpsError("permission-denied", "この宿題は使えません。");
   if (data.status === "assigned") throw new HttpsError("failed-precondition", "配信済みの宿題はテンプレートにできません。");
+  if (!data.official && !data.libraryReady) {
+    throw new HttpsError("failed-precondition", "音声確認が終わるまで配信できません。");
+  }
   const key = await db().collection("homeworkKeys").doc(templateId).get();
   if (!key.exists) throw new HttpsError("failed-precondition", "この宿題の中身がありません。");
   const questions = (key.data()?.questions || []).map((question) => ({
@@ -664,9 +667,34 @@ exports.setHomeworkPublished = onCall({ region: REGION }, async (request) => {
   if (snap.data().status === "assigned") {
     throw new HttpsError("failed-precondition", "出した宿題は公開設定を変えられません。");
   }
-  const published = request.data?.published !== false;
+  const published = request.data?.published === true;
+  if (published && !snap.data()?.libraryReady && !snap.data()?.official) {
+    throw new HttpsError("failed-precondition", "完成していない宿題は公開できません。");
+  }
   await ref.set({ published, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return { id, published };
+});
+
+exports.updateHomeworkPackMeta = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが変更できます。");
+  const id = clean(request.data?.id, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(id)) throw new HttpsError("invalid-argument", "無効な宿題です。");
+  const ref = db().collection("homeworkAssignments").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().format !== "pack-v1") {
+    throw new HttpsError("not-found", "宿題が見つかりません。");
+  }
+  if (snap.data().teacherId !== user.uid && user.role !== "owner") {
+    throw new HttpsError("permission-denied", "自分の宿題だけ変更できます。");
+  }
+  if (snap.data().status === "assigned") {
+    throw new HttpsError("failed-precondition", "出した宿題は変更できません。");
+  }
+  const title = clean(request.data?.title, 80) || "きょうのしゅくだい";
+  const description = clean(request.data?.description, 160);
+  await ref.set({ title, description, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { id, title, description };
 });
 
 exports.getHomeworkEditor = onCall({ region: REGION }, async (request) => {
@@ -692,7 +720,7 @@ exports.getHomeworkEditor = onCall({ region: REGION }, async (request) => {
     classIds: data.classIds || [],
     dueOn: data.dueOn || "",
     settings: data.settings || {},
-    published: data.published !== false,
+    published: data.published === true,
     libraryReady: Boolean(data.libraryReady),
     description: data.description || "",
     readOnly: !mine || data.status === "assigned",
