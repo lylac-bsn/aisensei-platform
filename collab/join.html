@@ -380,9 +380,12 @@
         const initials = String(name || "?").trim().slice(0, 2) || "?";
         const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : place === 3 ? "🥉" : "";
         const placeLabel = place > 0 ? `${place}位` : "—";
+        const points = Math.max(0, Number(me?.score ?? row?.score ?? 0) || 0);
         root.innerHTML = `
           <section class="cb-live cb-finish cb-finish-student">
             <div class="cb-burst" aria-hidden="true"></div>
+            <div class="cb-finish-deco" aria-hidden="true"></div>
+            <div class="cb-finish-sparkles cb-student-bg-sparkles" aria-hidden="true"></div>
             <div class="cb-student-card" style="--ball:${color}">
               <div class="cb-student-hero">
                 <div class="cb-student-sparkles" aria-hidden="true"></div>
@@ -393,6 +396,7 @@
                 ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
                 <strong>${placeLabel}</strong>
               </div>
+              <p class="cb-student-points"><em>${points}</em><span>ポイント</span></p>
             </div>
           </section>`;
       }

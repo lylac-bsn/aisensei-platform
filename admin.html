@@ -1142,6 +1142,8 @@
             font-size: 0.95rem;
             transition: border-color 0.3s;
             min-width: 160px;
+            background: #fff;
+            color: #333;
         }
 
         .create-account-form input[type="number"] {
@@ -1158,6 +1160,61 @@
             outline: none;
             border-color: var(--primary-red);
             box-shadow: 0 0 0 3px rgba(216, 67, 21, 0.1);
+        }
+
+        .create-account-form .field-role {
+            flex: 1 1 100%;
+            margin-top: 0.35rem;
+        }
+
+        .role-picker {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            padding: 0.3rem;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background: #faf7f2;
+        }
+
+        .role-option {
+            position: relative;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .role-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .role-option span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 5.5rem;
+            min-height: 2.4rem;
+            padding: 0.45rem 0.95rem;
+            border-radius: 9px;
+            background: #fff;
+            color: #5c4a42;
+            font-size: 0.92rem;
+            font-weight: 700;
+            border: 1px solid transparent;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .role-option input:checked + span {
+            background: linear-gradient(135deg, #1565c0, #0d47a1);
+            color: #fff;
+            border-color: #0d47a1;
+            box-shadow: 0 4px 10px rgba(21, 101, 192, 0.25);
+        }
+
+        .role-option input:focus-visible + span {
+            outline: 2px solid #1565c0;
+            outline-offset: 2px;
         }
 
         .create-account-form .separator {
@@ -1423,7 +1480,10 @@
             .create-account-form input[type="email"],
             .create-account-form input[type="password"] {
                 min-width: unset;
+                width: 100%;
             }
+            .role-option span { min-width: 4.5rem; flex: 1; }
+            .role-picker { width: 100%; }
             .create-account-form .separator { display: none; }
             .auto-set-row {
                 flex-direction: column;
@@ -1569,6 +1629,23 @@
                     <input type="number" id="new-seconds" min="0" max="59" value="0" step="1">
                 </div>
                 <button class="btn-create-account" id="btn-create-account" onclick="createAccount()">アカウント作成</button>
+                <div class="field field-role">
+                    <label id="new-role-label">役割</label>
+                    <div class="role-picker" role="radiogroup" aria-labelledby="new-role-label">
+                        <label class="role-option">
+                            <input type="radio" name="new-role" value="student" checked>
+                            <span>生徒</span>
+                        </label>
+                        <label class="role-option">
+                            <input type="radio" name="new-role" value="parent">
+                            <span>保護者</span>
+                        </label>
+                        <label class="role-option">
+                            <input type="radio" name="new-role" value="admin">
+                            <span>先生</span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2042,8 +2119,10 @@
                 const roleTag = u.role === 'owner'
                     ? ' <span style="font-size:0.7rem; background:#fde8e8; color:#b71c1c; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">オーナー</span>'
                     : u.role === 'admin'
-                        ? ' <span style="font-size:0.7rem; background:#e3f2fd; color:#1565c0; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">ADMIN</span>'
-                        : '';
+                        ? ' <span style="font-size:0.7rem; background:#e3f2fd; color:#1565c0; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">先生</span>'
+                        : u.role === 'parent'
+                            ? ' <span style="font-size:0.7rem; background:#f3e5f5; color:#6a1b9a; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">保護者</span>'
+                            : ' <span style="font-size:0.7rem; background:#e8f5e9; color:#2e7d32; padding:0.15rem 0.45rem; border-radius:6px; font-weight:600;">生徒</span>';
 
                 const deleteBtn = u.role !== 'admin' && u.role !== 'owner'
                     ? `<button class="btn-delete-user" onclick="deleteUser(${idx})">削除</button>`
@@ -2189,6 +2268,10 @@
             const displayName = document.getElementById('new-displayname').value.trim();
             const email = document.getElementById('new-email').value.trim();
             const password = document.getElementById('new-password').value;
+            const roleInput = document.querySelector('input[name="new-role"]:checked');
+            const allowedRoles = { student: 'student', parent: 'parent', admin: 'admin' };
+            const role = allowedRoles[roleInput?.value] || 'student';
+            const roleLabel = { student: '生徒', parent: '保護者', admin: '先生' }[role] || '生徒';
             const h = parseInt(document.getElementById('new-hours').value, 10) || 0;
             const m = parseInt(document.getElementById('new-minutes').value, 10) || 0;
             const s = parseInt(document.getElementById('new-seconds').value, 10) || 0;
@@ -2228,7 +2311,7 @@
                     displayName: displayName || '',
                     email: email,
                     remainingTime: initialTime,
-                    role: 'user',
+                    role,
                     lastAutoSet: new Date(),
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp()
@@ -2241,11 +2324,13 @@
                 document.getElementById('new-displayname').value = '';
                 document.getElementById('new-email').value = '';
                 document.getElementById('new-password').value = '';
+                const studentRole = document.querySelector('input[name="new-role"][value="student"]');
+                if (studentRole) studentRole.checked = true;
                 document.getElementById('new-hours').value = 1;
                 document.getElementById('new-minutes').value = 0;
                 document.getElementById('new-seconds').value = 0;
 
-                showToast(`${displayName || email} のアカウントを作成しました。`, 'success');
+                showToast(`${displayName || email}（${roleLabel}）のアカウントを作成しました。`, 'success');
                 await loadUsers();
             } catch (err) {
                 let msg = 'アカウントの作成に失敗しました。';
