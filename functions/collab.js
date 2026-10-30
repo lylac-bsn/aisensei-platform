@@ -463,7 +463,9 @@ exports.saveCollabSession = onCall({ region: REGION }, async (request) => {
     throw new HttpsError("permission-denied", "このルームの結果は保存できません。");
   }
   const data = room.data();
-  if (data.status !== "done") throw new HttpsError("failed-precondition", "まだ終わっていません。");
+  if (!["done", "final_results"].includes(data.status)) {
+    throw new HttpsError("failed-precondition", "まだ終わっていません。");
+  }
   const players = await room.ref.collection("players").get();
   const ranking = (data.ranking || players.docs
     .filter((item) => item.id !== data.hostId)
@@ -471,6 +473,8 @@ exports.saveCollabSession = onCall({ region: REGION }, async (request) => {
       id: item.id,
       name: clean(item.data().name, 40) || "プレイヤー",
       score: Number(item.data().score || 0),
+      correctCount: Number(item.data().correctCount || 0),
+      ballColor: clean(item.data().ballColor, 16) || "",
     }))
     .sort((a, b) => b.score - a.score));
   const sessionRef = db().collection("quizSessions").doc(roomId);

@@ -24,7 +24,7 @@
       font-family: "M PLUS Rounded 1c", sans-serif;
       color: #352521;
     }
-    .shell { width: min(440px, 100%); }
+    .shell { width: min(520px, 100%); }
     .open-app {
       margin-top: 0.75rem;
       display: flex;
@@ -180,7 +180,7 @@
         <section class="cb-join-page">
           <h1 class="cb-brand">COllAB</h1>
           <p class="cb-sub">おなまえを入力してね！</p>
-          <input id="name" class="cb-search" maxlength="12" placeholder="なまえ" style="text-align:center;font-size:1.2rem;">
+          <input id="name" class="cb-name-bubble" maxlength="12" placeholder="なまえ" autocomplete="nickname" enterkeyhint="done">
           <button type="button" class="cb-btn cb-btn-primary" id="join">参加する</button>
           <p class="cb-save-note is-error">${escapeHtml(note)}</p>
         </section>`;
@@ -365,15 +365,52 @@
         const mine = ranking.findIndex((row) => row.id === auth.currentUser.uid);
         const row = mine >= 0 ? ranking[mine] : null;
         const total = questions.length || 0;
-        const correct = Number(me?.correctCount || 0);
+        const correct = Number(row?.correctCount ?? me?.correctCount ?? 0);
+        const score = Number(row?.score ?? me?.score ?? 0);
+        const place = mine >= 0 ? mine + 1 : 0;
+        const color = escapeHtml(me?.ballColor || row?.ballColor || "#C9EBD8");
+        const initials = String(name || "?").trim().slice(0, 2) || "?";
+        const pct = total ? Math.round((correct / total) * 100) : 0;
+        const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : place === 3 ? "🥉" : "";
+        const cheer = pct >= 80 ? "すごい！よくできたね！" : pct >= 50 ? "いいね！そのちょうし！" : "ナイスチャレンジ！またやってみよう！";
+        const among = ranking.length && place ? `全${ranking.length}人中` : "";
         root.innerHTML = `
-          <section class="cb-live">
-            <h2 class="cb-brand">おつかれさま！</h2>
-            <p class="cb-question">${mine >= 0 ? `${mine + 1}い` : ""}</p>
-            <p class="cb-sub">${Number(row?.score || me?.score || 0)} てん</p>
-            <p class="cb-sub">${total}問中${correct}問正解！</p>
-            <p class="cb-sub">またチャレンジしよう！</p>
+          <section class="cb-live cb-finish cb-finish-student">
+            <div class="cb-burst" aria-hidden="true"></div>
+            <div class="cb-student-card" style="--ball:${color};--acc:${pct}%">
+              <div class="cb-student-sparkles" aria-hidden="true"></div>
+              <div class="cb-student-avatar">${escapeHtml(initials)}</div>
+              <h2 class="cb-finish-title">おつかれさま！</h2>
+              <p class="cb-finish-sub">${escapeHtml(name)}さん、よくがんばったね！</p>
+              <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
+                ${medal ? `<span class="cb-student-medal">${medal}</span>` : ""}
+                <strong>${place > 0 ? `${place}位` : "—"}</strong>
+                ${among ? `<span>${among}</span>` : ""}
+              </div>
+              <p class="cb-student-points"><span class="cb-score-num" data-target="${score}">0</span><span>ポイント</span></p>
+              <div class="cb-student-acc">
+                <p><strong>${correct} / ${total || "—"}</strong> 問せいかい！</p>
+                <div class="cb-acc-bar" aria-hidden="true"><i style="--fill:${pct}%"></i></div>
+              </div>
+              <p class="cb-student-cheer">${cheer}</p>
+            </div>
           </section>`;
+        const scoreNode = root.querySelector(".cb-score-num");
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (scoreNode) {
+          if (reduce || !score) scoreNode.textContent = String(score);
+          else {
+            const start = performance.now();
+            const duration = Math.min(1400, 600 + score * 0.15);
+            const tick = (now) => {
+              const t = Math.min(1, (now - start) / duration);
+              scoreNode.textContent = String(Math.round(score * (1 - (1 - t) ** 3)));
+              if (t < 1) requestAnimationFrame(tick);
+              else scoreNode.classList.add("is-done");
+            };
+            requestAnimationFrame(tick);
+          }
+        }
       }
     }
 

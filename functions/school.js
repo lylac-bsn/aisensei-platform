@@ -473,11 +473,17 @@ async function rankingFor(tx, roomRef, hostId) {
   const snap = await tx.get(roomRef.collection("players"));
   return snap.docs
     .filter((item) => item.id !== hostId)
-    .map((item) => ({
-      id: item.id,
-      name: clean(item.data().name, 40) || "プレイヤー",
-      score: Number(item.data().score || 0),
-    }))
+    .map((item) => {
+      const row = item.data() || {};
+      return {
+        id: item.id,
+        name: clean(row.name, 40) || "プレイヤー",
+        score: Number(row.score || 0),
+        correctCount: Number(row.correctCount || 0),
+        ballColor: clean(row.ballColor, 16) || "",
+        ballSize: Number(row.ballSize || 0) || undefined,
+      };
+    })
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ja"))
     .slice(0, 30);
 }
