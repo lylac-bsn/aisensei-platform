@@ -65,6 +65,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { shapeIcon } from "../js/collab-icons.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -82,7 +83,6 @@
     const preset = String(params.get("code") || params.get("pin") || "").replace(/\s+/g, "");
 
     const COLORS = ["cb-red", "cb-blue", "cb-yellow", "cb-green"];
-    const SHAPES = ["▲", "◆", "●", "■"];
 
     let roomId = "";
     let roomData = {};
@@ -304,7 +304,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.className = `cb-answer ${COLORS[choiceIndex] || ""}`;
-            button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+            button.innerHTML = `<span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span>`;
             button.onclick = async () => {
               if (lockedChoice || Number(me?.answeredIndex) === index) return;
               lockedChoice = choice;
@@ -378,7 +378,6 @@
         const place = mine >= 0 ? mine + 1 : 0;
         const color = escapeHtml(me?.ballColor || row?.ballColor || "#C9EBD8");
         const initials = String(name || "?").trim().slice(0, 2) || "?";
-        const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : place === 3 ? "🥉" : "";
         const placeLabel = place > 0 ? `${place}位` : "—";
         const points = Math.max(0, Number(me?.score ?? row?.score ?? 0) || 0);
         root.innerHTML = `
@@ -392,9 +391,9 @@
                 <div class="cb-student-avatar">${escapeHtml(initials)}</div>
               </div>
               <h2 class="cb-finish-title">Amazing Job ${escapeHtml(name)}!</h2>
-              <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
-                ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
-                <strong>${placeLabel}</strong>
+              <div class="cb-student-place cb-medal${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
+                <span class="cb-medal-ribbon" aria-hidden="true"><i></i><i></i></span>
+                <span class="cb-medal-face"><strong>${placeLabel}</strong></span>
               </div>
               <p class="cb-student-points"><em>${points}</em><span>ポイント</span></p>
             </div>

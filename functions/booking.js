@@ -31,7 +31,12 @@ async function callerUser(request) {
   if (!snap.exists) {
     throw new HttpsError("permission-denied", "アカウントが見つかりません。");
   }
-  return { uid: request.auth.uid, email: request.auth.token?.email || "", ...snap.data() };
+  // Auth token email must win over any client-writable Firestore email field.
+  return {
+    uid: request.auth.uid,
+    ...snap.data(),
+    email: request.auth.token?.email || snap.data()?.email || "",
+  };
 }
 
 function isTeacher(user) {
@@ -347,7 +352,8 @@ exports.cancelBooking = onCall({ region: REGION }, async (request) => {
     const allowed =
       booking.studentId === user.uid ||
       booking.bookedBy === user.uid ||
-      isTeacher(user);
+      booking.teacherId === user.uid ||
+      user.role === "owner";
     if (!allowed) throw new HttpsError("permission-denied", "この予約は取り消せません。");
     const classRef = db().collection("classes").doc(booking.classId);
     const balanceRef = db().collection("ticketBalances").doc(booking.studentId);

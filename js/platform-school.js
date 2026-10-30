@@ -1,6 +1,7 @@
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, collection, doc, documentId, getDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { renderCollab } from "./platform-collab.js";
+import { checkIcon, shapeIcon } from "./collab-icons.js";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -1031,7 +1032,6 @@ export async function renderSchoolPanel(root, action) {
 }
 
 const QUIZ_COLORS = ["qo-red", "qo-blue", "qo-yellow", "qo-green"];
-const QUIZ_SHAPES = ["▲", "◆", "●", "■"];
 const QUIZ_TIMES = [5, 10, 20, 30, 60, 90, 120];
 
 function renderQuiz(root, { host, uid }) {
@@ -1250,7 +1250,7 @@ function renderQuiz(root, { host, uid }) {
       const tile = document.createElement("div");
       tile.className = `qo-tile ${QUIZ_COLORS[index]}${questions[current].answer === index ? " is-correct" : ""}`;
       const correct = questions[current].answer === index;
-      tile.innerHTML = `<button type="button" class="qo-mark" aria-label="この答えを正解にする" title="正解にする" aria-pressed="${correct}">${correct ? "✓" : ""}</button><span class="qo-shape" aria-hidden="true">${QUIZ_SHAPES[index]}</span><input data-choice maxlength="80" placeholder="答えを入力" value="${escapeHtml(choice)}">`;
+      tile.innerHTML = `<button type="button" class="qo-mark" aria-label="この答えを正解にする" title="正解にする" aria-pressed="${correct}">${correct ? checkIcon(14) : ""}</button><span class="qo-shape" aria-hidden="true">${shapeIcon(index)}</span><input data-choice maxlength="80" placeholder="答えを入力" value="${escapeHtml(choice)}">`;
       tile.querySelector(".qo-mark").onclick = () => {
         readCurrent();
         questions[current].answer = index;
@@ -1504,7 +1504,7 @@ function renderQuiz(root, { host, uid }) {
       const share = total ? Math.round((count / total) * 100) : 0;
       const correct = normChoice(choice) === normChoice(question.answer);
       const yours = picked && normChoice(choice) === normChoice(picked);
-      return `<div class="qo-answer qo-result ${QUIZ_COLORS[choiceIndex] || ""}${correct ? " is-correct" : " is-dim"}" style="--share:${share}%"><span>${correct ? "✓" : (QUIZ_SHAPES[choiceIndex] || "")}</span><span class="qo-result-label">${escapeHtml(choice)}${yours ? `<small class="qo-you">あなた</small>` : ""}</span><strong class="qo-count">${count}</strong><span class="qo-meter"></span></div>`;
+      return `<div class="qo-answer qo-result ${QUIZ_COLORS[choiceIndex] || ""}${correct ? " is-correct" : " is-dim"}" style="--share:${share}%"><span>${correct ? checkIcon() : shapeIcon(choiceIndex)}</span><span class="qo-result-label">${escapeHtml(choice)}${yours ? `<small class="qo-you">あなた</small>` : ""}</span><strong class="qo-count">${count}</strong><span class="qo-meter"></span></div>`;
     }).join("");
     const nextLabel = index + 1 >= questionsLive.length ? "結果を見る" : "つぎの問題";
     return `
@@ -1589,7 +1589,7 @@ function renderQuiz(root, { host, uid }) {
             const norm = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
             const correct = revealed && norm(choice) === norm(question.answer);
             const dim = revealed && !correct;
-            return `<div class="qo-answer ${QUIZ_COLORS[choiceIndex] || ""}${correct ? " is-correct" : ""}${dim ? " is-dim" : ""}"><span>${QUIZ_SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span></div>`;
+            return `<div class="qo-answer ${QUIZ_COLORS[choiceIndex] || ""}${correct ? " is-correct" : ""}${dim ? " is-dim" : ""}"><span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span></div>`;
           }).join("")}</div>
           <div class="qo-tools">
             ${revealed ? `<button type="button" class="gc-primary" id="quiz-next">${index + 1 >= questionsLive.length ? "結果を見る" : "つぎの問題"}</button>` : `<button type="button" class="gc-primary" id="quiz-reveal">答えを見せる</button>`}
@@ -1612,7 +1612,7 @@ function renderQuiz(root, { host, uid }) {
         button.type = "button";
         button.className = `qo-answer ${QUIZ_COLORS[choiceIndex] || ""}${lockedChoice === choice ? " is-correct" : ""}`;
         button.disabled = Boolean(answered);
-        button.innerHTML = `<span>${QUIZ_SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+        button.innerHTML = `<span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span>`;
         button.onclick = async () => {
           if (lockedChoice || Number(root._playerAnswered) === index) return;
           lockedChoice = choice;
@@ -1822,14 +1822,16 @@ async function playHomework(root, assignmentId) {
     root.textContent = "おわったよ";
     return;
   }
-  root.insertAdjacentHTML("beforeend", `<h3>${activity.promptJa || ""}</h3>`);
+  const title = document.createElement("h3");
+  title.textContent = activity.promptJa || "";
+  root.appendChild(title);
   if (activity.speak && window.speechSynthesis) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "hub-quiet";
     button.textContent = "きく";
     button.onclick = () => {
-      const utterance = new SpeechSynthesisUtterance(activity.speak);
+      const utterance = new SpeechSynthesisUtterance(String(activity.speak || ""));
       utterance.lang = "en-US";
       speechSynthesis.speak(utterance);
     };
@@ -1840,11 +1842,13 @@ async function playHomework(root, assignmentId) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "hub-choice";
-    button.textContent = typeof choice === "string" ? choice : choice;
+    button.textContent = typeof choice === "string" ? choice : String(choice ?? "");
     button.onclick = async () => {
       const answer = activity.pairs ? activity.pairs : (activity.tokens ? activity.tokens : choice);
       const result = await callFunction("submitHomework", { assignmentId, activityId: activity.id, answer });
-      root.insertAdjacentHTML("beforeend", `<p>${result.correct ? "せいかい" : "もういちど"}</p>`);
+      const note = document.createElement("p");
+      note.textContent = result.correct ? "せいかい" : "もういちど";
+      root.appendChild(note);
       if (result.correct) playHomework(root, assignmentId);
     };
     root.appendChild(button);

@@ -1,5 +1,6 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { callerIsOwner } = require("./cost-summary");
 
 const REGION = "asia-northeast1";
 const LEVELS = new Set(["beginner", "intermediate", "advanced"]);
@@ -26,7 +27,12 @@ async function callerUser(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です。");
   const snap = await db().collection("users").doc(request.auth.uid).get();
   if (!snap.exists) throw new HttpsError("permission-denied", "アカウントが見つかりません。");
-  return { uid: request.auth.uid, email: request.auth.token?.email || "", ...snap.data() };
+  // Auth token email must win over any client-writable Firestore email field.
+  return {
+    uid: request.auth.uid,
+    ...snap.data(),
+    email: request.auth.token?.email || snap.data()?.email || "",
+  };
 }
 
 function isTeacher(user) {
@@ -34,12 +40,39 @@ function isTeacher(user) {
 }
 
 function isOwner(user) {
-  return user.role === "owner" && user.email === "growbuddy@gc.com";
+  return callerIsOwner(user, user.email);
 }
 
 function quizTimeLimit(value) {
   const seconds = Number(value);
   return QUIZ_LIMITS.has(seconds) ? seconds : 20;
+}
+
+function shuffle(list) {
+  const copy = [...(Array.isArray(list) ? list : [])];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/** Shuffle MC / T-F choices so the correct answer is not always top-left (red). */
+function publicQuestionRow(row) {
+  const type = row.type || "multipleChoice";
+  let choices = row.choices || [];
+  if ((type === "multipleChoice" || type === "trueFalse") && choices.length >= 2) {
+    choices = shuffle(choices);
+  }
+  return {
+    type,
+    prompt: row.prompt,
+    choices,
+    pairs: row.pairs || null,
+    words: row.words || null,
+    timeLimitSec: row.timeLimitSec,
+    points: row.points || 1000,
+  };
 }
 
 function quizQuestions(raw) {
@@ -53,7 +86,7 @@ function quizQuestions(raw) {
       return {
         type,
         prompt,
-        choices: ["○ ほんとう", "× うそ"],
+        choices: shuffle(["○ ほんとう", "× うそ"]),
         answer: answer === "false" || answer === "× うそ" ? "× うそ" : "○ ほんとう",
         timeLimitSec,
         points,
@@ -84,10 +117,12 @@ function quizQuestions(raw) {
       if (!prompt || words.length < 2) return null;
       return { type, prompt, words, choices: words, answer, timeLimitSec, points };
     }
-    const choices = (Array.isArray(row?.choices) ? row.choices : [])
-      .map((choice) => clean(choice, 80))
-      .filter(Boolean)
-      .slice(0, 4);
+    const choices = shuffle(
+      (Array.isArray(row?.choices) ? row.choices : [])
+        .map((choice) => clean(choice, 80))
+        .filter(Boolean)
+        .slice(0, 4)
+    );
     const answer = clean(row?.answer, 80);
     const answers = (Array.isArray(row?.answers) ? row.answers : [])
       .map((item) => clean(item, 80))
@@ -418,15 +453,7 @@ exports.startCollabRoom = onCall({ region: REGION }, async (request) => {
   }
   if (!questions.length) throw new HttpsError("invalid-argument", "問題を1つ以上入れてください。");
   const code = String(Math.floor(100000 + Math.random() * 900000));
-  const publicQuestions = questions.map((row) => ({
-    type: row.type || "multipleChoice",
-    prompt: row.prompt,
-    choices: row.choices || [],
-    pairs: row.pairs || null,
-    words: row.words || null,
-    timeLimitSec: row.timeLimitSec,
-    points: row.points || 1000,
-  }));
+  const publicQuestions = questions.map((row) => publicQuestionRow(row));
   const answerKey = questions.map((row) => ({
     answer: row.answer || "",
     answers: row.answers?.length ? row.answers : (row.answer ? [row.answer] : []),

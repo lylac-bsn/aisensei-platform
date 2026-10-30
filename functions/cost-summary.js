@@ -1,3 +1,29 @@
+const fs = require("fs");
+const path = require("path");
+
+// Load functions/.env for local tests/emulator. Deployed functions get the same
+// keys from Firebase's dotenv packaging — never commit the real .env file.
+(function loadFunctionsEnv() {
+  const envPath = path.join(__dirname, ".env");
+  if (!fs.existsSync(envPath)) return;
+  for (const raw of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) continue;
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+})();
+
 const COST_PROJECT_ID = "ai-sensei-8849b";
 // Project of the Gemini API key used to pre-generate lesson audio (TTS).
 const AUDIO_KEY_PROJECT_ID = "gen-lang-client-0524969604";
@@ -11,10 +37,14 @@ const MAX_DAYS = 400;
 const DEFAULT_DAYS = 30;
 const MONTHLY_FROM_DAYS = 120;
 const ENTRY_KINDS = ["once", "monthly"];
-const OWNER_EMAIL = "growbuddy@gc.com";
 const MAX_LABEL = 60;
 const MAX_NOTE = 200;
 const MAX_AMOUNT = 100000000;
+
+/** Locked platform owner email — set via functions/.env (`OWNER_EMAIL`), not source. */
+function getOwnerEmail() {
+  return String(process.env.OWNER_EMAIL || "").trim().toLowerCase();
+}
 
 function clampDays(value) {
   const n = Math.round(Number(value));
@@ -85,9 +115,11 @@ function costPeriod(input, now = new Date()) {
 }
 
 function callerIsOwner(user, tokenEmail) {
+  const locked = getOwnerEmail();
+  if (!locked) return false;
   const email = String(user?.email || "").trim().toLowerCase();
   const token = String(tokenEmail || "").trim().toLowerCase();
-  return user?.role === "owner" && email === OWNER_EMAIL && token === OWNER_EMAIL;
+  return user?.role === "owner" && email === locked && token === locked;
 }
 
 // Billing rows land in the partition of their export time, which can trail
@@ -259,7 +291,11 @@ module.exports = {
   AUDIO_KEY_PROJECT_ID,
   BILLING_TABLE,
   billingQuery,
-  OWNER_EMAIL,
+  getOwnerEmail,
+  // Getter so tests/callers never bake a literal email into source.
+  get OWNER_EMAIL() {
+    return getOwnerEmail();
+  },
   clampDays,
   costRange,
   costPeriod,

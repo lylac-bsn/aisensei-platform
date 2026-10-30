@@ -21,11 +21,25 @@ service cloud.firestore {
         && (!('email' in request.resource.data) || request.resource.data.email == resource.data.email)
         // Block createdAt changes
         && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
-        // remainingTime, when present, must be a number >= 0 (optional on older accounts)
+        // remainingTime is optional on older accounts. When present: students may
+        // only count down, except the monthly auto-reset path below.
         && (
           !('remainingTime' in request.resource.data)
-          || (request.resource.data.remainingTime is number
-              && request.resource.data.remainingTime >= 0)
+          || (
+            request.resource.data.remainingTime is number
+            && request.resource.data.remainingTime >= 0
+            && (
+              request.resource.data.remainingTime <= resource.data.get('remainingTime', 0)
+              || (
+                request.resource.data.remainingTime
+                  == get(/databases/$(database)/documents/settings/monthlyAutoSet).data.resetSeconds
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remainingTime', 'lastAutoSet', 'updatedAt'])
+                && request.resource.data.lastAutoSet is timestamp
+                && request.resource.data.lastAutoSet
+                  > resource.data.get('lastAutoSet', timestamp.date(1970, 1, 1))
+              )
+            )
+          )
         )
         // Quest progress sync from student app
         && (!('beginnerProgress' in request.resource.data)
@@ -195,14 +209,16 @@ service cloud.firestore {
     }
 
     match /quizTemplates/{templateId} {
+      // Use direct field checks (not map.get defaults) so list queries with
+      // where("visibility"=="published") / where("ownerId"==uid) can be proven.
       allow get: if request.auth != null && (
         resource.data.ownerId == request.auth.uid
-        || resource.data.get('visibility', 'private') in ['published', 'unlisted']
+        || resource.data.visibility in ['published', 'unlisted']
         || isAdmin()
       );
       allow list: if request.auth != null && (
         resource.data.ownerId == request.auth.uid
-        || resource.data.get('visibility', 'private') == 'published'
+        || resource.data.visibility == 'published'
         || isAdmin()
       );
       allow write: if false;
@@ -263,9 +279,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/quizRooms/$(roomId)).data.hostId == request.auth.uid;
     }
 
+    // Owner privilege is role-based. Client rules already block creating/updating
+    // users to role == 'owner'; sensitive owner email lives only in functions/.env.
     function isOwner() {
       return request.auth != null
-        && request.auth.token.email == 'growbuddy@gc.com'
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
     }

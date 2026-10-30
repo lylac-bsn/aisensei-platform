@@ -1759,7 +1759,6 @@
         let bulkMode = 'set'; // 'set' or 'add'
         let activeAdminTab = 'time';
         let isOwnerAdmin = false;
-        const OWNER_EMAIL = 'growbuddy@gc.com';
 
         // ============================================
         // Auth
@@ -1771,8 +1770,9 @@
                 const snap = await getDoc(userRef);
 
                 const profile = snap.exists() ? snap.data() : null;
-                const email = String(profile?.email || user.email || '').trim().toLowerCase();
-                isOwnerAdmin = profile?.role === 'owner' && email === OWNER_EMAIL;
+                // Owner email is never embedded in client code — server callables
+                // re-check against OWNER_EMAIL from functions/.env.
+                isOwnerAdmin = profile?.role === 'owner';
                 const isAdmin = profile?.role === 'admin' || isOwnerAdmin;
                 if (!isAdmin) {
                     showToast('管理者権限がありません。', 'error');
