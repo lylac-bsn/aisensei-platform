@@ -221,6 +221,8 @@ export async function renderCollab(root, { host, uid, role }) {
   let lobbyPhysics = null;
   let lastPoints = 0;
   let lastCorrect = null;
+  let presenting = false;
+  let presentRepaint = false;
 
   const stopClock = () => {
     clockGen += 1;
@@ -231,6 +233,12 @@ export async function renderCollab(root, { host, uid, role }) {
   };
 
   const stopLive = () => {
+    presenting = false;
+    presentRepaint = false;
+    try {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+    } catch { /* ignore */ }
+    root.querySelector(".cb-present-root")?.classList.remove("is-present");
     stopRoom?.();
     stopPlayers?.();
     stopRoom = null;
@@ -642,12 +650,12 @@ export async function renderCollab(root, { host, uid, role }) {
               ${item.official ? `<span class="cb-pill">公式</span>` : ""}
             </div>
             <div class="cb-preview-actions">
-              ${host ? `<button type="button" class="cb-btn cb-btn-primary" id="cb-use">このクイズを使う</button>` : ""}
-              <button type="button" class="cb-btn cb-btn-secondary" id="cb-preview-q">プレビュー</button>
               ${host ? `<button type="button" class="cb-btn cb-btn-primary" id="cb-start-room">ルームを作成</button>` : ""}
+              <button type="button" class="cb-btn cb-btn-secondary" id="cb-preview-q">プレビュー</button>
               ${mineItem ? `<button type="button" class="cb-btn cb-btn-secondary" id="cb-edit">編集</button>` : ""}
               ${mineItem && item.visibility !== "private" ? `<button type="button" class="cb-btn cb-btn-ghost" id="cb-unpublish">非公開にする</button>` : ""}
               ${isOwner ? `<button type="button" class="cb-btn cb-btn-ghost" id="cb-official">${item.official ? "公式を解除" : "公式にする"}</button>` : ""}
+              ${mineItem || isOwner ? `<button type="button" class="cb-btn cb-btn-danger" id="cb-delete-template">テンプレートを削除</button>` : ""}
             </div>
           </div>
         </div>
@@ -664,17 +672,6 @@ export async function renderCollab(root, { host, uid, role }) {
       selected = null;
       paintHome();
     };
-    root.querySelector("#cb-use")?.addEventListener("click", async () => {
-      try {
-        const result = await callFunction("duplicateCollabTemplate", { id: item.id });
-        const full = await getDoc(doc(db, "quizTemplates", result.id));
-        await openEditor(result.id, { id: result.id, ...full.data() }, true);
-      } catch (error) {
-        note = error.message;
-        noteKind = "error";
-        paintPreview();
-      }
-    });
     root.querySelector("#cb-edit")?.addEventListener("click", async () => {
       if (!mineItem) {
         note = "ほかの先生のテンプレートはコピーして使えます。";
@@ -716,6 +713,33 @@ export async function renderCollab(root, { host, uid, role }) {
         paintPreview();
       }
     });
+    root.querySelector("#cb-delete-template")?.addEventListener("click", () => deleteTemplate(item));
+  };
+
+  const deleteTemplate = async (item) => {
+    if (!item?.id) return;
+    const title = item.title || editor?.meta?.title || "このテンプレート";
+    if (!window.confirm(`「${title}」を削除しますか？\nこの操作は取り消せません。`)) return;
+    try {
+      await callFunction("deleteCollabTemplate", { id: item.id });
+      if (editor?.id === item.id) {
+        editor = null;
+        root._confirmLeave = null;
+        window.removeEventListener("beforeunload", onBeforeUnload);
+      }
+      if (selected?.id === item.id) selected = null;
+      await loadTemplates();
+      note = "テンプレートを削除しました。";
+      noteKind = "ok";
+      view = "home";
+      paintHome();
+    } catch (error) {
+      note = error.message;
+      noteKind = "error";
+      if (view === "edit") paintEditor();
+      else if (view === "preview") paintPreview();
+      else paintHome();
+    }
   };
 
   const paintQuestionPreview = (item) => {
@@ -899,6 +923,7 @@ export async function renderCollab(root, { host, uid, role }) {
           <button type="button" class="cb-btn cb-btn-secondary" id="cb-save">保存</button>
           <button type="button" class="cb-btn cb-btn-secondary" id="cb-publish">COllABリストに追加</button>
           <button type="button" class="cb-btn cb-btn-primary" id="cb-room">ルームを作成</button>
+          ${editor.id ? `<button type="button" class="cb-btn cb-btn-danger" id="cb-delete-template">テンプレートを削除</button>` : ""}
           <p id="cb-status" class="cb-save-note${noteKind ? ` is-${noteKind}` : ""}${!note && dirty() ? " is-dirty" : ""}">${escapeHtml(note || (dirty() ? "未保存の変更があります。" : ""))}</p>
         </div>
         <div class="cb-editor-shell">
@@ -1091,6 +1116,13 @@ export async function renderCollab(root, { host, uid, role }) {
       paintEditor();
     };
     root.querySelector("#cb-save").onclick = () => saveEditor(false);
+    root.querySelector("#cb-delete-template")?.addEventListener("click", () => {
+      deleteTemplate({
+        id: editor.id,
+        title: editor.meta.title,
+        ownerId: uid,
+      });
+    });
     root.querySelector("#cb-publish").onclick = async () => {
       readEditor();
       openPublishModal({ ...editor.meta, id: editor.id });
@@ -1180,10 +1212,123 @@ export async function renderCollab(root, { host, uid, role }) {
     });
   };
 
-  const rankedPlayers = () => (Array.isArray(roomData.ranking) && roomData.ranking.length
-    ? roomData.ranking
-    : [...players].filter((player) => player.id !== roomData.hostId).sort((a, b) => Number(b.score || 0) - Number(a.score || 0)))
-    .map((player, index) => ({ ...player, place: index + 1 }));
+  const rankedPlayers = () => {
+    const base = Array.isArray(roomData.ranking) && roomData.ranking.length
+      ? roomData.ranking
+      : [...players]
+        .filter((player) => player.id !== roomData.hostId)
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || String(a.name || "").localeCompare(String(b.name || ""), "ja"));
+    return base.map((player, index) => {
+      const live = players.find((row) => row.id === player.id) || {};
+      const rankScore = Number(player.score);
+      const liveScore = Number(live.score);
+      const score = Math.max(
+        Number.isFinite(rankScore) ? rankScore : 0,
+        Number.isFinite(liveScore) ? liveScore : 0,
+      );
+      return {
+        ...live,
+        ...player,
+        place: index + 1,
+        ballColor: player.ballColor || live.ballColor || "#C9EBD8",
+        correctCount: Math.max(Number(player.correctCount || 0), Number(live.correctCount || 0)),
+        score,
+        name: player.name || live.name || "プレイヤー",
+      };
+    });
+  };
+
+  const playerInitials = (name) => {
+    const text = String(name || "?").trim();
+    if (!text) return "?";
+    const parts = text.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+    return text.slice(0, 2);
+  };
+
+  const accuracyPct = (correct, total) => {
+    if (!total) return 0;
+    return Math.round((Math.max(0, Number(correct) || 0) / total) * 100);
+  };
+
+  const medalFor = (place) => ({ 1: "🥇", 2: "🥈", 3: "🥉" }[place] || String(place));
+
+  const cheerFor = (pct) => {
+    if (pct >= 80) return "すごい！よくできたね！";
+    if (pct >= 50) return "いいね！そのちょうし！";
+    return "ナイスチャレンジ！またやってみよう！";
+  };
+
+  const animateScore = (rootEl, target) => {
+    const node = rootEl?.querySelector?.(".cb-score-num");
+    if (!node) return;
+    const goal = Math.max(0, Math.round(Number(target) || 0));
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || goal === 0) {
+      node.textContent = String(goal);
+      return;
+    }
+    const start = performance.now();
+    const duration = Math.min(1400, 600 + goal * 0.15);
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      node.textContent = String(Math.round(goal * eased));
+      if (t < 1) requestAnimationFrame(tick);
+      else node.classList.add("is-done");
+    };
+    requestAnimationFrame(tick);
+  };
+
+  const studentResultMarkup = ({
+    name,
+    initials,
+    color,
+    place,
+    totalPlayers,
+    score,
+    correct,
+    qTotal,
+  }) => {
+    const pct = accuracyPct(correct, qTotal);
+    const medal = place > 0 && place <= 3 ? medalFor(place) : "";
+    const placeLabel = place > 0 ? `${place}位` : "—";
+    const among = totalPlayers > 0 && place > 0 ? `全${totalPlayers}人中` : "";
+    return `
+      <section class="cb-live cb-finish cb-finish-student">
+        <div class="cb-burst" aria-hidden="true"></div>
+        <div class="cb-student-card" style="--ball:${escapeHtml(color)};--acc:${pct}%">
+          <div class="cb-student-sparkles" aria-hidden="true"></div>
+          <div class="cb-student-avatar">${escapeHtml(initials)}</div>
+          <h2 class="cb-finish-title">おつかれさま！</h2>
+          <p class="cb-finish-sub">${escapeHtml(name || "プレイヤー")}さん、よくがんばったね！</p>
+          <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
+            ${medal ? `<span class="cb-student-medal">${medal}</span>` : ""}
+            <strong>${placeLabel}</strong>
+            ${among ? `<span>${among}</span>` : ""}
+          </div>
+          <p class="cb-student-points"><span class="cb-score-num" data-target="${score}">0</span><span>ポイント</span></p>
+          <div class="cb-student-acc">
+            <p><strong>${correct} / ${qTotal || "—"}</strong> 問せいかい！</p>
+            <div class="cb-acc-bar" aria-hidden="true"><i style="--fill:${pct}%"></i></div>
+          </div>
+          <p class="cb-student-cheer">${cheerFor(pct)}</p>
+        </div>
+      </section>`;
+  };
+
+  const buildPodiumCard = (player, placeClass, delay) => {
+    if (!player) return `<div class="cb-podium-slot is-empty ${placeClass}" aria-hidden="true"></div>`;
+    const color = escapeHtml(player.ballColor || "#C9EBD8");
+    return `
+      <div class="cb-podium-slot ${placeClass}${player.id === uid ? " is-me" : ""}" style="--delay:${delay}s">
+        <div class="cb-podium-avatar" style="background:${color}">${escapeHtml(playerInitials(player.name))}</div>
+        <p class="cb-podium-medal">${medalFor(player.place)}</p>
+        <strong class="cb-podium-name">${escapeHtml(player.name || "プレイヤー")}</strong>
+        <p class="cb-podium-score"><em>${Number(player.score || 0)}</em><span>ポイント</span></p>
+        <div class="cb-podium-block"><span>${player.place}</span></div>
+      </div>`;
+  };
 
   const bindAdvance = (selector = "#cb-next") => {
     root.querySelector(selector)?.addEventListener("click", async () => {
@@ -1199,6 +1344,101 @@ export async function renderCollab(root, { host, uid, role }) {
     });
   };
 
+  const presentButton = () => (amHost
+    ? `<button type="button" class="cb-btn cb-btn-ghost cb-present-btn" id="cb-present" title="${presenting ? "全画面をやめる" : "全画面表示"}">${presenting ? "✕ 終了" : "⛶ プレゼン"}</button>`
+    : "");
+
+  const syncPresentButton = (button) => {
+    if (!button) return;
+    button.textContent = presenting ? "✕ 終了" : "⛶ プレゼン";
+    button.title = presenting ? "全画面をやめる" : "全画面表示";
+  };
+
+  const bindPresent = () => {
+    if (!amHost) return;
+    const stage = root.querySelector("#cb-present-stage");
+    const button = root.querySelector("#cb-present");
+    if (!stage || !button || button.dataset.bound === "1") return;
+    button.dataset.bound = "1";
+    button.addEventListener("click", async () => {
+      if (presenting) {
+        presenting = false;
+        presentRepaint = false;
+        stage.classList.remove("is-present");
+        try {
+          if (document.fullscreenElement === stage) await document.exitFullscreen?.();
+        } catch { /* ignore */ }
+        syncPresentButton(button);
+        lobbyPhysics?.resize?.();
+        return;
+      }
+      presenting = true;
+      syncPresentButton(button);
+      try {
+        await stage.requestFullscreen?.();
+        stage.classList.add("is-present");
+      } catch {
+        stage.classList.add("is-present");
+      }
+      lobbyPhysics?.resize?.();
+    });
+  };
+
+  /** Keep one stage node so requestFullscreen survives phase paints. */
+  const setHostStage = (innerHtml, sectionClass = "cb-live") => {
+    let stage = root.querySelector("#cb-present-stage");
+    if (!stage) {
+      root.innerHTML = `<section class="cb-present-root ${sectionClass}" id="cb-present-stage"></section>`;
+      stage = root.querySelector("#cb-present-stage");
+    }
+    const classes = ["cb-present-root", ...String(sectionClass || "").split(/\s+/).filter(Boolean)];
+    if (presenting) classes.push("is-present");
+    stage.className = [...new Set(classes)].join(" ");
+    stage.id = "cb-present-stage";
+
+    const keep = new Set(["cb-present"]);
+    [...stage.children].forEach((child) => {
+      if (!keep.has(child.id)) child.remove();
+    });
+
+    const holder = document.createElement("div");
+    holder.innerHTML = innerHtml;
+    while (holder.firstChild) stage.appendChild(holder.firstChild);
+
+    let button = stage.querySelector("#cb-present");
+    if (!button) {
+      stage.insertAdjacentHTML("afterbegin", presentButton());
+      button = stage.querySelector("#cb-present");
+      bindPresent();
+    } else {
+      syncPresentButton(button);
+      if (button.dataset.bound !== "1") bindPresent();
+    }
+    return stage;
+  };
+
+  if (!root._cbPresentFsBound) {
+    root._cbPresentFsBound = true;
+    document.addEventListener("fullscreenchange", () => {
+      const stage = root.querySelector("#cb-present-stage");
+      if (document.fullscreenElement === stage) {
+        presenting = true;
+        stage?.classList.add("is-present");
+        syncPresentButton(root.querySelector("#cb-present"));
+        return;
+      }
+      if (presentRepaint) return;
+      if (!presenting) return;
+      // Esc / browser exit — keep CSS present only if we still intend to present
+      // and fullscreen was lost for another reason; Esc clears intent.
+      if (!document.fullscreenElement) {
+        presenting = false;
+        stage?.classList.remove("is-present");
+        syncPresentButton(root.querySelector("#cb-present"));
+      }
+    });
+  }
+
   const paintLive = () => {
     const questionsLive = roomData.questions || [];
     const index = roomData.questionIndex ?? -1;
@@ -1207,7 +1447,9 @@ export async function renderCollab(root, { host, uid, role }) {
     const students = players.filter((player) => player.id !== roomData.hostId);
 
     if (!roomData.code && status !== "done" && status !== "final_results") {
-      root.innerHTML = `<p class="cb-sub">読み込んでいます。</p>`;
+      if (!(amHost && root.querySelector("#cb-present-stage"))) {
+        root.innerHTML = `<p class="cb-sub">読み込んでいます。</p>`;
+      }
       return;
     }
 
@@ -1228,8 +1470,7 @@ export async function renderCollab(root, { host, uid, role }) {
       if (!keepCanvas) {
         lobbyPhysics?.destroy?.();
         lobbyPhysics = null;
-        root.innerHTML = `
-          <section class="cb-lobby cb-lobby-host">
+        setHostStage(`
             <div class="cb-lobby-join-block">
               <p class="cb-sub">参加コード</p>
               <p class="cb-pin" id="cb-pin">${escapeHtml(roomData.code || "")}</p>
@@ -1240,8 +1481,7 @@ export async function renderCollab(root, { host, uid, role }) {
             </div>
             <div class="cb-lobby-space" aria-hidden="true">
               <canvas id="cb-pit"></canvas>
-            </div>
-          </section>`;
+            </div>`, "cb-lobby cb-lobby-host");
         const canvas = root.querySelector("#cb-pit");
         lobbyPhysics = createBallLobby(canvas);
         bindAdvance();
@@ -1259,6 +1499,15 @@ export async function renderCollab(root, { host, uid, role }) {
         if (pin) pin.textContent = roomData.code || "";
         if (count) count.textContent = `${students.length} 人参加中`;
         if (quiz) quiz.textContent = roomData.title || "COllAB";
+        const stage = root.querySelector("#cb-present-stage") || root.querySelector(".cb-lobby-host");
+        if (stage && !stage.id) stage.id = "cb-present-stage";
+        stage?.classList.add("cb-present-root");
+        if (presenting) stage?.classList.add("is-present");
+        if (!root.querySelector("#cb-present")) {
+          stage?.insertAdjacentHTML("afterbegin", presentButton());
+        }
+        bindPresent();
+        syncPresentButton(root.querySelector("#cb-present"));
         lobbyPhysics?.resize?.();
         lobbyPhysics?.sync(students);
       }
@@ -1269,13 +1518,20 @@ export async function renderCollab(root, { host, uid, role }) {
     lobbyPhysics = null;
 
     if (status === "intro" && question) {
-      root.innerHTML = `
-        <section class="cb-live">
+      if (amHost) {
+        setHostStage(`
           <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
           <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
-          <div class="cb-timer"><span id="cb-clock"></span></div>
-          ${amHost ? `<p class="cb-sub">3びょう後に答えが出ます</p>` : `<p class="cb-sub">もうすぐ答えが出るよ</p>`}
-        </section>`;
+          <div class="cb-timer"><span id="cb-clock"></span></div>`, "cb-live");
+      } else {
+        root.innerHTML = `
+          <section class="cb-live">
+            <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
+            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+            <div class="cb-timer"><span id="cb-clock"></span></div>
+            <p class="cb-sub">もうすぐ答えが出るよ</p>
+          </section>`;
+      }
       armClock(roomData.introEndsAt, 3000);
       return;
     }
@@ -1283,16 +1539,14 @@ export async function renderCollab(root, { host, uid, role }) {
     if (status === "question" && question) {
       if (amHost) {
         const answered = students.filter((player) => Number(player.answeredIndex) === index).length;
-        root.innerHTML = `
-          <section class="cb-live">
+        setHostStage(`
             <div class="cb-timer"><span id="cb-clock"></span></div>
             <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length} ・ ${answered} / ${students.length} 人が回答</p>
             <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
             <div class="cb-answer-grid">${(question.choices || []).map((choice, choiceIndex) => `
               <div class="cb-answer ${COLORS[choiceIndex] || ""}"><span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span></div>
             `).join("")}</div>
-            <button type="button" class="cb-btn cb-btn-primary" id="cb-reveal">答えを見せる</button>
-          </section>`;
+            <button type="button" class="cb-btn cb-btn-primary" id="cb-reveal">答えを見せる</button>`, "cb-live");
         root.querySelector("#cb-reveal")?.addEventListener("click", async () => {
           try {
             await callFunction("advanceQuiz", { roomId, questionIndex: index });
@@ -1363,8 +1617,7 @@ export async function renderCollab(root, { host, uid, role }) {
       const gotIt = lastCorrect == null ? matchesAnswer : lastCorrect === true;
       const points = gotIt ? Number(lastPoints || mine.lastPoints || 0) : 0;
       if (amHost) {
-        root.innerHTML = `
-          <section class="cb-live">
+        setHostStage(`
             <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
             <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
             <p class="cb-sub">正解は ${escapeHtml(answer)}！</p>
@@ -1374,8 +1627,7 @@ export async function renderCollab(root, { host, uid, role }) {
               const correct = String(choice).trim().toLowerCase() === String(answer).trim().toLowerCase();
               return `<div class="cb-answer ${COLORS[choiceIndex] || ""}${correct ? " is-correct" : " is-dim"}" style="--share:${share}%"><span>${correct ? "✓" : (SHAPES[choiceIndex] || "")}</span><span>${escapeHtml(choice)}</span><strong>${count}</strong><span class="cb-meter"></span></div>`;
             }).join("")}</div>
-            <button type="button" class="cb-btn cb-btn-primary" id="cb-next">次へ</button>
-          </section>`;
+            <button type="button" class="cb-btn cb-btn-primary" id="cb-next">次へ</button>`, "cb-live");
         bindAdvance();
         return;
       }
@@ -1391,36 +1643,108 @@ export async function renderCollab(root, { host, uid, role }) {
 
     if (status === "leaderboard") {
       const ranked = rankedPlayers();
-      root.innerHTML = `
-        <section class="cb-live">
+      if (amHost) {
+        setHostStage(`
           <h2 class="cb-brand">リーダーボード</h2>
           <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
-          ${amHost
-            ? `<button type="button" class="cb-btn cb-btn-primary" id="cb-next">${index + 1 >= questionsLive.length ? "結果を表示" : "次の問題へ"}</button>`
-            : `<p class="cb-sub">つぎの問題を待ってね</p>`}
-        </section>`;
-      bindAdvance();
+          <button type="button" class="cb-btn cb-btn-primary" id="cb-next">${index + 1 >= questionsLive.length ? "結果を表示" : "次の問題へ"}</button>`, "cb-live");
+        bindAdvance();
+      } else {
+        root.innerHTML = `
+          <section class="cb-live">
+            <h2 class="cb-brand">リーダーボード</h2>
+            <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
+            <p class="cb-sub">つぎの問題を待ってね</p>
+          </section>`;
+      }
       return;
     }
 
     if (status === "final_results" || status === "done" || !question) {
       const ranked = rankedPlayers();
-      const stand = (player) => player ? `<div class="cb-stand is-${player.place}${player.id === uid ? " is-me" : ""}"><b>${player.place}</b><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></div>` : "";
-      const top = [ranked[1], ranked[0], ranked[2]].filter(Boolean);
-      root.innerHTML = `
-        <section class="cb-live cb-finish">
-          <div class="cb-confetti" aria-hidden="true"></div>
-          <h2 class="cb-brand">けっか</h2>
-          <div class="cb-podium-top">${top.map(stand).join("")}</div>
-          <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
-          ${amHost && status === "final_results" ? `<button type="button" class="cb-btn cb-btn-primary" id="cb-next">完了</button>` : ""}
-          ${amHost ? `<button type="button" class="cb-btn cb-btn-secondary" id="cb-save-session">けっかを保存</button><button type="button" class="cb-btn cb-btn-primary" id="cb-new">COllABホームへ</button>` : ""}
-        </section>`;
-      if (status === "final_results") bindAdvance();
+      const qTotal = questionsLive.length || Number(roomData.questionCount || 0) || 0;
+      const first = ranked[0] || null;
+      const second = ranked[1] || null;
+      const third = ranked[2] || null;
+      const avgAccuracy = ranked.length
+        ? Math.round(ranked.reduce((sum, row) => sum + accuracyPct(row.correctCount, qTotal), 0) / ranked.length)
+        : 0;
+      const topScore = first ? Number(first.score || 0) : 0;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (!amHost) {
+        const mine = ranked.find((player) => player.id === uid)
+          || players.find((player) => player.id === uid)
+          || {};
+        const place = Number(mine.place || (ranked.findIndex((row) => row.id === uid) + 1) || 0);
+        const score = Number(mine.score || 0);
+        const correct = Number(mine.correctCount || 0);
+        root.innerHTML = studentResultMarkup({
+          name: mine.name || "プレイヤー",
+          initials: playerInitials(mine.name || "？"),
+          color: mine.ballColor || "#C9EBD8",
+          place,
+          totalPlayers: ranked.length,
+          score,
+          correct,
+          qTotal,
+        });
+        animateScore(root, score);
+        playTone("done");
+        return;
+      }
+
+      setHostStage(`
+          <div class="cb-burst" aria-hidden="true"></div>
+          <div class="cb-finish-deco" aria-hidden="true"></div>
+          <header class="cb-finish-hero">
+            <p class="cb-finish-kicker">${escapeHtml(roomData.title || "COllAB")}</p>
+            <h2 class="cb-finish-title"><span aria-hidden="true">✨</span> けっか発表！ <span aria-hidden="true">🎉</span></h2>
+            <p class="cb-finish-sub">みんな、よくがんばったね！</p>
+          </header>
+          <div class="cb-podium" data-count="${Math.min(3, ranked.length)}">
+            ${ranked.length === 1
+              ? buildPodiumCard(first, "is-1 is-solo", 0.2)
+              : `${buildPodiumCard(second, "is-2", 0.15)}${buildPodiumCard(first, "is-1", 0.45)}${buildPodiumCard(third, "is-3", 0.05)}`}
+          </div>
+          <div class="cb-finish-stats">
+            <div class="cb-stat is-peach"><strong>${ranked.length}</strong><span>参加人数</span></div>
+            <div class="cb-stat is-lemon"><strong>${qTotal}</strong><span>問題数</span></div>
+            <div class="cb-stat is-mint"><strong>${avgAccuracy}%</strong><span>平均正解率</span></div>
+            <div class="cb-stat is-sky"><strong>${topScore}</strong><span>最高得点</span></div>
+          </div>
+          <div class="cb-board-wrap">
+            <div class="cb-board-head">
+              <span>じゅんい</span>
+              <span>なまえ</span>
+              <span>てんすう</span>
+              <span>せいかい</span>
+            </div>
+            <ol class="cb-board-list">${ranked.map((player) => `
+              <li class="${player.id === uid ? "is-me" : ""}${player.place <= 3 ? ` is-top-${player.place}` : ""}">
+                <span class="cb-board-rank">${player.place <= 3 ? medalFor(player.place) : player.place}</span>
+                <span class="cb-board-player">
+                  <span class="cb-board-dot" style="background:${escapeHtml(player.ballColor || "#C9EBD8")}">${escapeHtml(playerInitials(player.name))}</span>
+                  <strong>${escapeHtml(player.name || "プレイヤー")}</strong>
+                </span>
+                <em class="cb-board-score">${Number(player.score || 0)}</em>
+                <span class="cb-board-acc">${accuracyPct(player.correctCount, qTotal)}%</span>
+              </li>`).join("") || `<li class="cb-board-empty">まだランキングがありません。</li>`}
+            </ol>
+          </div>
+          <div class="cb-finish-actions">
+            ${roomData.templateId ? `<button type="button" class="cb-btn cb-finish-primary" id="cb-replay">もう一度プレイ</button>` : ""}
+            <button type="button" class="cb-btn cb-finish-secondary" id="cb-save-session">結果を保存</button>
+            <button type="button" class="cb-btn cb-finish-ghost" id="cb-new">COllABホームへ</button>
+          </div>
+          <p class="cb-save-note${noteKind ? ` is-${noteKind}` : ""}">${escapeHtml(note)}</p>`, `cb-live cb-finish${reduceMotion ? " is-reduced" : ""}`);
+
       root.querySelector("#cb-save-session")?.addEventListener("click", async () => {
+        const button = root.querySelector("#cb-save-session");
+        if (button) button.disabled = true;
         try {
           await callFunction("saveCollabSession", { roomId });
-          note = "けっかを保存しました。";
+          note = "結果を保存しました。";
           noteKind = "ok";
           await loadSessions();
         } catch (error) {
@@ -1429,11 +1753,32 @@ export async function renderCollab(root, { host, uid, role }) {
         }
         paintLive();
       });
+      root.querySelector("#cb-replay")?.addEventListener("click", async () => {
+        const button = root.querySelector("#cb-replay");
+        if (button) button.disabled = true;
+        try {
+          stopLive();
+          note = "";
+          noteKind = "";
+          await startRoom({
+            id: roomData.templateId || "",
+            title: roomData.title || "COllAB",
+            questions: [],
+          });
+        } catch (error) {
+          note = error.message;
+          noteKind = "error";
+          if (button) button.disabled = false;
+          paintLive();
+        }
+      });
       root.querySelector("#cb-new")?.addEventListener("click", () => {
         stopLive();
         roomId = "";
         roomData = {};
         players = [];
+        note = "";
+        noteKind = "";
         view = "home";
         loadTemplates().then(paintHome);
       });
