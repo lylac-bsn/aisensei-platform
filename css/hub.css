@@ -91,10 +91,10 @@ header.gc-top {
     gap: 0.75rem;
     min-height: 64px;
     padding: 0.75rem 1.25rem;
-    background: rgba(255, 255, 255, 0.92);
-    color: #352521;
+    background: rgba(255, 255, 255, 0.92) !important;
+    color: #352521 !important;
     border-bottom: 1px solid #E9E1D8;
-    box-shadow: none;
+    box-shadow: none !important;
     backdrop-filter: blur(10px);
 }
 
@@ -254,6 +254,8 @@ button.gc-note-card:hover { background: #FFF5EA; }
 }
 
 .gc-workspace {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     padding: 1.5rem;
 }

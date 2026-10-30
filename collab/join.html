@@ -279,49 +279,60 @@
       }
 
       if (status === "question" && question) {
-        const answered = lockedChoice || Number(me?.answeredIndex) === index;
-        root.innerHTML = `
-          <section class="cb-live">
-            <div class="cb-timer"><span id="q-bar"></span></div>
-            <p class="cb-sub">問題 ${index + 1} / ${questions.length}</p>
-            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
-            <div class="cb-answer-grid" id="board"></div>
-            <p class="cb-save-note">${escapeHtml(lockedResult)}</p>
-          </section>`;
-        const board = root.querySelector("#board");
-        (question.choices || []).forEach((choice, choiceIndex) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `cb-answer ${COLORS[choiceIndex] || ""}${lockedChoice === choice ? " is-correct" : ""}`;
-          button.disabled = Boolean(answered);
-          button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
-          button.onclick = async () => {
-            if (lockedChoice || Number(me?.answeredIndex) === index) return;
-            lockedChoice = choice;
-            lockedResult = "こたえを送ったよ！みんなを待ってね！";
-            board.querySelectorAll("button").forEach((item) => { item.disabled = true; });
-            try {
-              const result = await callFunction("submitQuizAnswer", { roomId, choice, questionIndex: index });
-              if (result.duplicate) {
-                /* keep local answer state */
-              } else if (result.expired) {
-                lastCorrect = false;
-                lastPoints = 0;
-              } else if (result.closed) {
-                /* reveal already started — keep choice; score from reveal answer */
-                lastCorrect = null;
-              } else {
-                lastPoints = Number(result.points || 0);
-                lastCorrect = Boolean(result.correct);
+        const answered = Boolean(lockedChoice) || Number(me?.answeredIndex) === index;
+        if (answered) {
+          root.innerHTML = `
+            <section class="cb-live">
+              <div class="cb-timer"><span id="q-bar"></span></div>
+              <section class="cb-wait-card">
+                <p class="cb-wait-copy">答えをおくったよ・・・</p>
+                ${lockedResult && !lockedResult.includes("おくった") && !lockedResult.includes("送った")
+                  ? `<p class="cb-save-note is-error">${escapeHtml(lockedResult)}</p>`
+                  : ""}
+              </section>
+            </section>`;
+        } else {
+          root.innerHTML = `
+            <section class="cb-live">
+              <div class="cb-timer"><span id="q-bar"></span></div>
+              <p class="cb-sub">問題 ${index + 1} / ${questions.length}</p>
+              <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+              <div class="cb-answer-grid" id="board"></div>
+            </section>`;
+          const board = root.querySelector("#board");
+          (question.choices || []).forEach((choice, choiceIndex) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `cb-answer ${COLORS[choiceIndex] || ""}`;
+            button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+            button.onclick = async () => {
+              if (lockedChoice || Number(me?.answeredIndex) === index) return;
+              lockedChoice = choice;
+              lockedResult = "答えをおくったよ・・・";
+              paint();
+              try {
+                const result = await callFunction("submitQuizAnswer", { roomId, choice, questionIndex: index });
+                if (result.duplicate) {
+                  /* keep local answer state */
+                } else if (result.expired) {
+                  lastCorrect = false;
+                  lastPoints = 0;
+                } else if (result.closed) {
+                  /* reveal already started — keep choice; score from reveal answer */
+                  lastCorrect = null;
+                } else {
+                  lastPoints = Number(result.points || 0);
+                  lastCorrect = Boolean(result.correct);
+                }
+                if (!result.expired && !result.closed) syncRoom();
+              } catch (error) {
+                lockedResult = error.message;
+                paint();
               }
-              if (!result.expired && !result.closed) syncRoom();
-            } catch (error) {
-              lockedResult = error.message;
-            }
-            paint();
-          };
-          board.appendChild(button);
-        });
+            };
+            board.appendChild(button);
+          });
+        }
         const limit = Number(question.timeLimitSec || 20) * 1000;
         armClock(roomData.questionEndsAt, limit, "#q-bar");
         return;
@@ -364,53 +375,26 @@
         const ranking = roomData.ranking || [];
         const mine = ranking.findIndex((row) => row.id === auth.currentUser.uid);
         const row = mine >= 0 ? ranking[mine] : null;
-        const total = questions.length || 0;
-        const correct = Number(row?.correctCount ?? me?.correctCount ?? 0);
-        const score = Number(row?.score ?? me?.score ?? 0);
         const place = mine >= 0 ? mine + 1 : 0;
         const color = escapeHtml(me?.ballColor || row?.ballColor || "#C9EBD8");
         const initials = String(name || "?").trim().slice(0, 2) || "?";
-        const pct = total ? Math.round((correct / total) * 100) : 0;
         const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : place === 3 ? "🥉" : "";
-        const cheer = pct >= 80 ? "すごい！よくできたね！" : pct >= 50 ? "いいね！そのちょうし！" : "ナイスチャレンジ！またやってみよう！";
-        const among = ranking.length && place ? `全${ranking.length}人中` : "";
+        const placeLabel = place > 0 ? `${place}位` : "—";
         root.innerHTML = `
           <section class="cb-live cb-finish cb-finish-student">
             <div class="cb-burst" aria-hidden="true"></div>
-            <div class="cb-student-card" style="--ball:${color};--acc:${pct}%">
-              <div class="cb-student-sparkles" aria-hidden="true"></div>
-              <div class="cb-student-avatar">${escapeHtml(initials)}</div>
-              <h2 class="cb-finish-title">おつかれさま！</h2>
-              <p class="cb-finish-sub">${escapeHtml(name)}さん、よくがんばったね！</p>
+            <div class="cb-student-card" style="--ball:${color}">
+              <div class="cb-student-hero">
+                <div class="cb-student-sparkles" aria-hidden="true"></div>
+                <div class="cb-student-avatar">${escapeHtml(initials)}</div>
+              </div>
+              <h2 class="cb-finish-title">Amazing Job ${escapeHtml(name)}!</h2>
               <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
-                ${medal ? `<span class="cb-student-medal">${medal}</span>` : ""}
-                <strong>${place > 0 ? `${place}位` : "—"}</strong>
-                ${among ? `<span>${among}</span>` : ""}
+                ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
+                <strong>${placeLabel}</strong>
               </div>
-              <p class="cb-student-points"><span class="cb-score-num" data-target="${score}">0</span><span>ポイント</span></p>
-              <div class="cb-student-acc">
-                <p><strong>${correct} / ${total || "—"}</strong> 問せいかい！</p>
-                <div class="cb-acc-bar" aria-hidden="true"><i style="--fill:${pct}%"></i></div>
-              </div>
-              <p class="cb-student-cheer">${cheer}</p>
             </div>
           </section>`;
-        const scoreNode = root.querySelector(".cb-score-num");
-        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (scoreNode) {
-          if (reduce || !score) scoreNode.textContent = String(score);
-          else {
-            const start = performance.now();
-            const duration = Math.min(1400, 600 + score * 0.15);
-            const tick = (now) => {
-              const t = Math.min(1, (now - start) / duration);
-              scoreNode.textContent = String(Math.round(score * (1 - (1 - t) ** 3)));
-              if (t < 1) requestAnimationFrame(tick);
-              else scoreNode.classList.add("is-done");
-            };
-            requestAnimationFrame(tick);
-          }
-        }
       }
     }
 

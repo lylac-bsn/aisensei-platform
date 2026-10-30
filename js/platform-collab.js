@@ -160,8 +160,12 @@ function joinUrl(code) {
   return `${location.origin}${path}?code=${encodeURIComponent(code)}`;
 }
 
+function collabSoundEnabled() {
+  return localStorage.getItem("cb-sound") !== "off";
+}
+
 function playTone(kind) {
-  if (localStorage.getItem("cb-sound") === "off") return;
+  if (!collabSoundEnabled()) return;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -180,6 +184,64 @@ function playTone(kind) {
   } catch {
     /* ignore */
   }
+}
+
+const COLLAB_BGM_SRC = "/audio/collab-bgm.wav";
+/** Host BGM plays in lobby / answering / reveal / board / results — paused during intro. */
+const COLLAB_BGM_STATUSES = new Set([
+  "lobby", "question", "reveal", "leaderboard", "final_results", "done",
+]);
+const COLLAB_BGM_PAUSE_STATUSES = new Set(["intro"]);
+let collabBgm = null;
+
+function startCollabBgm() {
+  if (!collabSoundEnabled()) {
+    stopCollabBgm();
+    return;
+  }
+  try {
+    if (!collabBgm) {
+      collabBgm = new Audio(COLLAB_BGM_SRC);
+      collabBgm.loop = true;
+      collabBgm.preload = "auto";
+      collabBgm.volume = 0.28;
+    }
+    if (collabBgm.paused) {
+      const play = collabBgm.play();
+      if (play?.catch) play.catch(() => { /* autoplay blocked until gesture */ });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function pauseCollabBgm() {
+  if (!collabBgm) return;
+  try {
+    collabBgm.pause();
+  } catch {
+    /* ignore */
+  }
+}
+
+function stopCollabBgm() {
+  if (!collabBgm) return;
+  try {
+    collabBgm.pause();
+    collabBgm.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+}
+
+function syncCollabBgm(status, { asHost = false } = {}) {
+  if (!asHost) {
+    stopCollabBgm();
+    return;
+  }
+  if (COLLAB_BGM_PAUSE_STATUSES.has(status)) pauseCollabBgm();
+  else if (COLLAB_BGM_STATUSES.has(status)) startCollabBgm();
+  else stopCollabBgm();
 }
 
 function visibilityLabel(value) {
@@ -232,13 +294,16 @@ export async function renderCollab(root, { host, uid, role }) {
     clockTimer = 0;
   };
 
-  const stopLive = () => {
-    presenting = false;
-    presentRepaint = false;
-    try {
-      if (document.fullscreenElement) document.exitFullscreen?.();
-    } catch { /* ignore */ }
-    root.querySelector(".cb-present-root")?.classList.remove("is-present");
+  const stopLive = ({ keepPresent = false } = {}) => {
+    if (!keepPresent) {
+      presenting = false;
+      presentRepaint = false;
+      try {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+      } catch { /* ignore */ }
+      root.querySelector(".cb-present-root")?.classList.remove("is-present");
+      stopCollabBgm();
+    }
     stopRoom?.();
     stopPlayers?.();
     stopRoom = null;
@@ -250,6 +315,7 @@ export async function renderCollab(root, { host, uid, role }) {
 
   const stop = () => {
     stopLive();
+    stopCollabBgm();
     clearTimeout(autosaveTimer);
     window.removeEventListener("beforeunload", onBeforeUnload);
     root._confirmLeave = null;
@@ -272,8 +338,12 @@ export async function renderCollab(root, { host, uid, role }) {
 
   const loadFavorites = async () => {
     if (!host) return;
-    const snap = await getDocs(collection(db, "users", uid, "collabFavorites"));
-    favorites = new Set(snap.docs.map((item) => item.id));
+    try {
+      const snap = await getDocs(collection(db, "users", uid, "collabFavorites"));
+      favorites = new Set(snap.docs.map((item) => item.id));
+    } catch {
+      favorites = new Set();
+    }
   };
 
   const loadTemplates = async () => {
@@ -301,10 +371,14 @@ export async function renderCollab(root, { host, uid, role }) {
 
   const loadClasses = async () => {
     if (!host) return;
-    const snap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
-    classes = snap.docs.map((item) => ({ id: item.id, ...item.data() }))
-      .sort((a, b) => String(b.startsAt?.toMillis?.() || 0) - String(a.startsAt?.toMillis?.() || 0))
-      .slice(0, 40);
+    try {
+      const snap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
+      classes = snap.docs.map((item) => ({ id: item.id, ...item.data() }))
+        .sort((a, b) => String(b.startsAt?.toMillis?.() || 0) - String(a.startsAt?.toMillis?.() || 0))
+        .slice(0, 40);
+    } catch {
+      classes = [];
+    }
   };
 
   const loadVocab = async (classId) => {
@@ -1186,6 +1260,7 @@ export async function renderCollab(root, { host, uid, role }) {
       lockedResult = "";
       view = "live";
       playTone("start");
+      startCollabBgm();
       watchRoom();
     } catch (error) {
       note = error.message;
@@ -1196,20 +1271,100 @@ export async function renderCollab(root, { host, uid, role }) {
     }
   };
 
-  const paintJoin = () => {
-    root.innerHTML = `
-      <div class="cb-app">
-        <section class="cb-join-page">
+  let joining = false;
+
+  const enterJoinedRoom = async (result) => {
+    roomId = result.id;
+    amHost = false;
+    lockedChoice = "";
+    lockedResult = "";
+    lastPoints = 0;
+    lastCorrect = null;
+    players = [{
+      id: uid,
+      name: result.name,
+      ballColor: result.ballColor,
+      ballSize: result.ballSize,
+      score: 0,
+      answeredIndex: -1,
+    }];
+    view = "live";
+    playTone("start");
+    stopCollabBgm();
+    watchRoom();
+  };
+
+  const paintJoinName = (code, joinNote = "") => {
+    setPresentStage(`
           <h2 class="cb-brand">COllAB</h2>
-          <p class="cb-sub">生徒は専用ページから参加します</p>
-          <p class="cb-sub"><a href="/collab/join" target="_blank" rel="noopener">/collab/join</a> を開くか、ルームのQRをスキャンしてください。</p>
-          ${host ? `<button type="button" class="cb-back" id="cb-back-home">← ホーム</button>` : ""}
-        </section>
-      </div>`;
+          <p class="cb-sub">おなまえを入力してね！</p>
+          <input id="cb-join-name" class="cb-name-bubble" maxlength="12" placeholder="なまえ" autocomplete="nickname" enterkeyhint="done">
+          <button type="button" class="cb-btn cb-btn-primary" id="cb-join-go">参加する</button>
+          <button type="button" class="cb-btn cb-btn-ghost" id="cb-join-back-pin">← コードにもどる</button>
+          <p class="cb-save-note${joinNote ? " is-error" : ""}">${escapeHtml(joinNote)}</p>`, "cb-join-page");
+    const nameInput = root.querySelector("#cb-join-name");
+    const go = async () => {
+      if (joining) return;
+      joining = true;
+      const button = root.querySelector("#cb-join-go");
+      if (button) button.disabled = true;
+      try {
+        const result = await callFunction("joinQuiz", {
+          code,
+          nickname: nameInput?.value || "",
+        });
+        joining = false;
+        await enterJoinedRoom(result);
+      } catch (error) {
+        joining = false;
+        paintJoinName(code, error.message);
+      }
+    };
+    root.querySelector("#cb-join-go")?.addEventListener("click", go);
+    nameInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") go();
+    });
+    root.querySelector("#cb-join-back-pin")?.addEventListener("click", () => {
+      paintJoin(code);
+    });
+    nameInput?.focus();
+  };
+
+  const paintJoin = (presetCode = "", joinNote = "") => {
+    joining = false;
+    setPresentStage(`
+          <h2 class="cb-brand">COllAB</h2>
+          <p class="cb-sub">先生のルームコードを入れて参加しよう！</p>
+          <input id="cb-join-pin" class="cb-name-bubble cb-join-pin" inputmode="numeric" maxlength="8" placeholder="6けたのコード" value="${escapeHtml(presetCode)}" autocomplete="one-time-code">
+          <button type="button" class="cb-btn cb-btn-primary" id="cb-join-next">つぎへ</button>
+          <p class="cb-save-note${joinNote ? " is-error" : ""}">${escapeHtml(joinNote)}</p>
+          ${host ? `<button type="button" class="cb-back" id="cb-back-home">← ホーム</button>` : ""}`, "cb-join-page");
+    const pinInput = root.querySelector("#cb-join-pin");
+    const goNext = async () => {
+      const code = String(pinInput?.value || "").replace(/\s+/g, "");
+      if (!code) {
+        paintJoin("", "コードを入力してね。");
+        return;
+      }
+      const button = root.querySelector("#cb-join-next");
+      if (button) button.disabled = true;
+      try {
+        await callFunction("lookupCollabRoom", { code });
+        paintJoinName(code);
+      } catch (error) {
+        paintJoin(code, error.message);
+      }
+    };
+    root.querySelector("#cb-join-next")?.addEventListener("click", goNext);
+    pinInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") goNext();
+    });
     root.querySelector("#cb-back-home")?.addEventListener("click", () => {
       view = "home";
       paintHome();
     });
+    pinInput?.focus();
+    if (pinInput && presetCode) pinInput.select();
   };
 
   const rankedPlayers = () => {
@@ -1253,80 +1408,44 @@ export async function renderCollab(root, { host, uid, role }) {
 
   const medalFor = (place) => ({ 1: "🥇", 2: "🥈", 3: "🥉" }[place] || String(place));
 
-  const cheerFor = (pct) => {
-    if (pct >= 80) return "すごい！よくできたね！";
-    if (pct >= 50) return "いいね！そのちょうし！";
-    return "ナイスチャレンジ！またやってみよう！";
-  };
-
-  const animateScore = (rootEl, target) => {
-    const node = rootEl?.querySelector?.(".cb-score-num");
-    if (!node) return;
-    const goal = Math.max(0, Math.round(Number(target) || 0));
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || goal === 0) {
-      node.textContent = String(goal);
-      return;
-    }
-    const start = performance.now();
-    const duration = Math.min(1400, 600 + goal * 0.15);
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      node.textContent = String(Math.round(goal * eased));
-      if (t < 1) requestAnimationFrame(tick);
-      else node.classList.add("is-done");
-    };
-    requestAnimationFrame(tick);
-  };
-
   const studentResultMarkup = ({
     name,
     initials,
     color,
     place,
-    totalPlayers,
-    score,
-    correct,
-    qTotal,
   }) => {
-    const pct = accuracyPct(correct, qTotal);
     const medal = place > 0 && place <= 3 ? medalFor(place) : "";
     const placeLabel = place > 0 ? `${place}位` : "—";
-    const among = totalPlayers > 0 && place > 0 ? `全${totalPlayers}人中` : "";
+    const displayName = escapeHtml(name || "プレイヤー");
     return `
-      <section class="cb-live cb-finish cb-finish-student">
         <div class="cb-burst" aria-hidden="true"></div>
-        <div class="cb-student-card" style="--ball:${escapeHtml(color)};--acc:${pct}%">
-          <div class="cb-student-sparkles" aria-hidden="true"></div>
-          <div class="cb-student-avatar">${escapeHtml(initials)}</div>
-          <h2 class="cb-finish-title">おつかれさま！</h2>
-          <p class="cb-finish-sub">${escapeHtml(name || "プレイヤー")}さん、よくがんばったね！</p>
+        <div class="cb-student-card" style="--ball:${escapeHtml(color)}">
+          <div class="cb-student-hero">
+            <div class="cb-student-sparkles" aria-hidden="true"></div>
+            <div class="cb-student-avatar">${escapeHtml(initials)}</div>
+          </div>
+          <h2 class="cb-finish-title">Amazing Job ${displayName}!</h2>
           <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
-            ${medal ? `<span class="cb-student-medal">${medal}</span>` : ""}
+            ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
             <strong>${placeLabel}</strong>
-            ${among ? `<span>${among}</span>` : ""}
           </div>
-          <p class="cb-student-points"><span class="cb-score-num" data-target="${score}">0</span><span>ポイント</span></p>
-          <div class="cb-student-acc">
-            <p><strong>${correct} / ${qTotal || "—"}</strong> 問せいかい！</p>
-            <div class="cb-acc-bar" aria-hidden="true"><i style="--fill:${pct}%"></i></div>
-          </div>
-          <p class="cb-student-cheer">${cheerFor(pct)}</p>
-        </div>
-      </section>`;
+          <button type="button" class="cb-btn cb-student-rejoin" id="cb-student-rejoin">べつのクイズに参加</button>
+        </div>`;
   };
 
   const buildPodiumCard = (player, placeClass, delay) => {
     if (!player) return `<div class="cb-podium-slot is-empty ${placeClass}" aria-hidden="true"></div>`;
-    const color = escapeHtml(player.ballColor || "#C9EBD8");
+    const place = Number(player.place || 0);
+    const badge = place <= 3
+      ? `<span class="cb-podium-badge is-${place}"><span class="cb-podium-medal" aria-hidden="true">${medalFor(place)}</span><strong>${place}位</strong></span>`
+      : `<span class="cb-podium-badge"><strong>${place}位</strong></span>`;
     return `
       <div class="cb-podium-slot ${placeClass}${player.id === uid ? " is-me" : ""}" style="--delay:${delay}s">
-        <div class="cb-podium-avatar" style="background:${color}">${escapeHtml(playerInitials(player.name))}</div>
-        <p class="cb-podium-medal">${medalFor(player.place)}</p>
-        <strong class="cb-podium-name">${escapeHtml(player.name || "プレイヤー")}</strong>
-        <p class="cb-podium-score"><em>${Number(player.score || 0)}</em><span>ポイント</span></p>
-        <div class="cb-podium-block"><span>${player.place}</span></div>
+        <div class="cb-podium-card">
+          ${badge}
+          <strong class="cb-podium-name">${escapeHtml(player.name || "プレイヤー")}</strong>
+          <p class="cb-podium-score"><em>${Number(player.score || 0)}</em><span>ポイント</span></p>
+        </div>
       </div>`;
   };
 
@@ -1344,18 +1463,50 @@ export async function renderCollab(root, { host, uid, role }) {
     });
   };
 
-  const presentButton = () => (amHost
-    ? `<button type="button" class="cb-btn cb-btn-ghost cb-present-btn" id="cb-present" title="${presenting ? "全画面をやめる" : "全画面表示"}">${presenting ? "✕ 終了" : "⛶ プレゼン"}</button>`
-    : "");
+  const presentLabel = () => (amHost ? "プレゼン" : "全画面");
+
+  const presentButton = () => (
+    `<button type="button" class="cb-btn cb-btn-ghost cb-present-btn" id="cb-present" title="${presenting ? "全画面をやめる" : "全画面表示"}">${presenting ? "✕ 終了" : `⛶ ${presentLabel()}`}</button>`
+  );
 
   const syncPresentButton = (button) => {
     if (!button) return;
-    button.textContent = presenting ? "✕ 終了" : "⛶ プレゼン";
+    button.textContent = presenting ? "✕ 終了" : `⛶ ${presentLabel()}`;
     button.title = presenting ? "全画面をやめる" : "全画面表示";
   };
 
+  const soundMuted = () => !collabSoundEnabled();
+  const soundIconSvg = (muted) => muted
+    ? `<svg class="cb-sound-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="m23 9-6 6M17 9l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
+    : `<svg class="cb-sound-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const soundButton = () => {
+    const muted = soundMuted();
+    return `<button type="button" class="cb-btn cb-btn-ghost cb-sound-btn${muted ? " is-muted" : ""}" id="cb-sound" aria-pressed="${muted ? "true" : "false"}" title="${muted ? "BGMをオン" : "BGMをミュート"}" aria-label="${muted ? "BGMをオン" : "BGMをミュート"}">${soundIconSvg(muted)}</button>`;
+  };
+  const syncSoundButton = (button) => {
+    if (!button) return;
+    const muted = soundMuted();
+    button.classList.toggle("is-muted", muted);
+    button.setAttribute("aria-pressed", muted ? "true" : "false");
+    button.title = muted ? "BGMをオン" : "BGMをミュート";
+    button.setAttribute("aria-label", button.title);
+    button.innerHTML = soundIconSvg(muted);
+  };
+  const bindSound = () => {
+    const button = root.querySelector("#cb-sound");
+    if (!button || button.dataset.bound === "1") return;
+    button.dataset.bound = "1";
+    button.addEventListener("click", () => {
+      const next = soundMuted() ? "on" : "off";
+      localStorage.setItem("cb-sound", next);
+      syncSoundButton(button);
+      const status = roomData.status || "lobby";
+      if (next === "off") stopCollabBgm();
+      else syncCollabBgm(status, { asHost: amHost });
+    });
+  };
+
   const bindPresent = () => {
-    if (!amHost) return;
     const stage = root.querySelector("#cb-present-stage");
     const button = root.querySelector("#cb-present");
     if (!stage || !button || button.dataset.bound === "1") return;
@@ -1385,7 +1536,7 @@ export async function renderCollab(root, { host, uid, role }) {
   };
 
   /** Keep one stage node so requestFullscreen survives phase paints. */
-  const setHostStage = (innerHtml, sectionClass = "cb-live") => {
+  const setPresentStage = (innerHtml, sectionClass = "cb-live") => {
     let stage = root.querySelector("#cb-present-stage");
     if (!stage) {
       root.innerHTML = `<section class="cb-present-root ${sectionClass}" id="cb-present-stage"></section>`;
@@ -1396,7 +1547,7 @@ export async function renderCollab(root, { host, uid, role }) {
     stage.className = [...new Set(classes)].join(" ");
     stage.id = "cb-present-stage";
 
-    const keep = new Set(["cb-present"]);
+    const keep = new Set(["cb-present", "cb-sound"]);
     [...stage.children].forEach((child) => {
       if (!keep.has(child.id)) child.remove();
     });
@@ -1413,6 +1564,20 @@ export async function renderCollab(root, { host, uid, role }) {
     } else {
       syncPresentButton(button);
       if (button.dataset.bound !== "1") bindPresent();
+    }
+
+    if (amHost) {
+      let sound = stage.querySelector("#cb-sound");
+      if (!sound) {
+        stage.insertAdjacentHTML("afterbegin", soundButton());
+        sound = stage.querySelector("#cb-sound");
+        bindSound();
+      } else {
+        syncSoundButton(sound);
+        if (sound.dataset.bound !== "1") bindSound();
+      }
+    } else {
+      stage.querySelector("#cb-sound")?.remove();
     }
     return stage;
   };
@@ -1445,6 +1610,7 @@ export async function renderCollab(root, { host, uid, role }) {
     const question = questionsLive[index];
     const status = roomData.status || "lobby";
     const students = players.filter((player) => player.id !== roomData.hostId);
+    syncCollabBgm(status, { asHost: amHost });
 
     if (!roomData.code && status !== "done" && status !== "final_results") {
       if (!(amHost && root.querySelector("#cb-present-stage"))) {
@@ -1456,13 +1622,11 @@ export async function renderCollab(root, { host, uid, role }) {
     if (status === "lobby") {
       if (!amHost) {
         const mine = players.find((player) => player.id === uid) || {};
-        root.innerHTML = `
-          <section class="cb-lobby">
+        setPresentStage(`
             <h2 class="cb-brand">GET READY!</h2>
             <p class="cb-sub">${escapeHtml(mine.name || "プレイヤー")}さん、じゅんびはいい？</p>
             <div class="cb-ball-me" style="--size:${Number(mine.ballSize || 88)}px;background:${escapeHtml(mine.ballColor || "#C9EBD8")}">${escapeHtml(String(mine.name || "?").slice(0, 6))}</div>
-            <p class="cb-sub">先生がゲームを始めるまで待ってね！</p>
-          </section>`;
+            <p class="cb-sub">先生がゲームを始めるまで待ってね！</p>`, "cb-lobby");
         return;
       }
       const link = joinUrl(roomData.code || "");
@@ -1470,7 +1634,7 @@ export async function renderCollab(root, { host, uid, role }) {
       if (!keepCanvas) {
         lobbyPhysics?.destroy?.();
         lobbyPhysics = null;
-        setHostStage(`
+        setPresentStage(`
             <div class="cb-lobby-join-block">
               <p class="cb-sub">参加コード</p>
               <p class="cb-pin" id="cb-pin">${escapeHtml(roomData.code || "")}</p>
@@ -1508,6 +1672,13 @@ export async function renderCollab(root, { host, uid, role }) {
         }
         bindPresent();
         syncPresentButton(root.querySelector("#cb-present"));
+        if (amHost) {
+          if (!root.querySelector("#cb-sound")) {
+            stage?.insertAdjacentHTML("afterbegin", soundButton());
+          }
+          bindSound();
+          syncSoundButton(root.querySelector("#cb-sound"));
+        }
         lobbyPhysics?.resize?.();
         lobbyPhysics?.sync(students);
       }
@@ -1518,20 +1689,11 @@ export async function renderCollab(root, { host, uid, role }) {
     lobbyPhysics = null;
 
     if (status === "intro" && question) {
-      if (amHost) {
-        setHostStage(`
+      setPresentStage(`
           <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
           <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
-          <div class="cb-timer"><span id="cb-clock"></span></div>`, "cb-live");
-      } else {
-        root.innerHTML = `
-          <section class="cb-live">
-            <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
-            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
-            <div class="cb-timer"><span id="cb-clock"></span></div>
-            <p class="cb-sub">もうすぐ答えが出るよ</p>
-          </section>`;
-      }
+          <div class="cb-timer"><span id="cb-clock"></span></div>
+          ${amHost ? "" : `<p class="cb-sub">もうすぐ答えが出るよ</p>`}`, "cb-live");
       armClock(roomData.introEndsAt, 3000);
       return;
     }
@@ -1539,7 +1701,7 @@ export async function renderCollab(root, { host, uid, role }) {
     if (status === "question" && question) {
       if (amHost) {
         const answered = students.filter((player) => Number(player.answeredIndex) === index).length;
-        setHostStage(`
+        setPresentStage(`
             <div class="cb-timer"><span id="cb-clock"></span></div>
             <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length} ・ ${answered} / ${students.length} 人が回答</p>
             <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
@@ -1555,50 +1717,57 @@ export async function renderCollab(root, { host, uid, role }) {
           }
         });
       } else {
-        const answered = lockedChoice || Number(root._playerAnswered) === index;
-        root.innerHTML = `
-          <section class="cb-live">
-            <div class="cb-timer"><span id="cb-clock"></span></div>
-            <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
-            <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
-            <div class="cb-answer-grid" id="cb-board"></div>
-            <p class="cb-save-note">${escapeHtml(lockedResult)}</p>
-          </section>`;
-        const board = root.querySelector("#cb-board");
-        (question.choices || []).forEach((choice, choiceIndex) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `cb-answer ${COLORS[choiceIndex] || ""}${lockedChoice === choice ? " is-correct" : ""}`;
-          button.disabled = Boolean(answered);
-          button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
-          button.onclick = async () => {
-            if (lockedChoice || Number(root._playerAnswered) === index) return;
-            lockedChoice = choice;
-            lockedResult = "こたえを送ったよ！みんなを待ってね！";
-            board.querySelectorAll("button").forEach((item) => { item.disabled = true; });
-            try {
-              const result = await callFunction("submitQuizAnswer", { roomId, choice, questionIndex: index });
-              if (result.duplicate) {
-                /* keep local answer state */
-              } else if (result.expired) {
-                lastCorrect = false;
-                lastPoints = 0;
-                playTone("bad");
-              } else if (result.closed) {
-                lastCorrect = null;
-              } else {
-                lastPoints = Number(result.points || 0);
-                lastCorrect = Boolean(result.correct);
-                playTone(result.correct ? "ok" : "bad");
+        const answered = Boolean(lockedChoice) || Number(root._playerAnswered) === index;
+        if (answered) {
+          setPresentStage(`
+              <div class="cb-timer"><span id="cb-clock"></span></div>
+              <section class="cb-wait-card">
+                <p class="cb-wait-copy">答えをおくったよ・・・</p>
+                ${lockedResult && !lockedResult.includes("おくった") && !lockedResult.includes("送った")
+                  ? `<p class="cb-save-note is-error">${escapeHtml(lockedResult)}</p>`
+                  : ""}
+              </section>`, "cb-live");
+        } else {
+          setPresentStage(`
+              <div class="cb-timer"><span id="cb-clock"></span></div>
+              <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
+              <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
+              <div class="cb-answer-grid" id="cb-board"></div>`, "cb-live");
+          const board = root.querySelector("#cb-board");
+          (question.choices || []).forEach((choice, choiceIndex) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `cb-answer ${COLORS[choiceIndex] || ""}`;
+            button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+            button.onclick = async () => {
+              if (lockedChoice || Number(root._playerAnswered) === index) return;
+              lockedChoice = choice;
+              lockedResult = "答えをおくったよ・・・";
+              paintLive();
+              try {
+                const result = await callFunction("submitQuizAnswer", { roomId, choice, questionIndex: index });
+                if (result.duplicate) {
+                  /* keep local answer state */
+                } else if (result.expired) {
+                  lastCorrect = false;
+                  lastPoints = 0;
+                  playTone("bad");
+                } else if (result.closed) {
+                  lastCorrect = null;
+                } else {
+                  lastPoints = Number(result.points || 0);
+                  lastCorrect = Boolean(result.correct);
+                  playTone(result.correct ? "ok" : "bad");
+                }
+                if (!result.expired && !result.closed) syncRoom();
+              } catch (error) {
+                lockedResult = error.message;
+                paintLive();
               }
-              if (!result.expired && !result.closed) syncRoom();
-            } catch (error) {
-              lockedResult = error.message;
-            }
-            paintLive();
-          };
-          board.appendChild(button);
-        });
+            };
+            board.appendChild(button);
+          });
+        }
       }
       armClock(roomData.questionEndsAt, (Number(question.timeLimitSec) || 20) * 1000);
       return;
@@ -1617,7 +1786,7 @@ export async function renderCollab(root, { host, uid, role }) {
       const gotIt = lastCorrect == null ? matchesAnswer : lastCorrect === true;
       const points = gotIt ? Number(lastPoints || mine.lastPoints || 0) : 0;
       if (amHost) {
-        setHostStage(`
+        setPresentStage(`
             <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length}</p>
             <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
             <p class="cb-sub">正解は ${escapeHtml(answer)}！</p>
@@ -1631,31 +1800,27 @@ export async function renderCollab(root, { host, uid, role }) {
         bindAdvance();
         return;
       }
-      root.innerHTML = `
-        <section class="cb-live">
+      setPresentStage(`
           <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
           <p class="cb-banner ${gotIt ? "is-ok" : "is-bad"}">${gotIt ? "せいかい！" : "ふせいかい"}</p>
           <p class="cb-pin" style="font-size:clamp(1.8rem,6vw,2.6rem);letter-spacing:0.04em;">+${points}</p>
-          <p class="cb-sub">てん</p>
-        </section>`;
+          <p class="cb-sub">てん</p>`, "cb-live");
       return;
     }
 
     if (status === "leaderboard") {
       const ranked = rankedPlayers();
       if (amHost) {
-        setHostStage(`
+        setPresentStage(`
           <h2 class="cb-brand">リーダーボード</h2>
           <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
           <button type="button" class="cb-btn cb-btn-primary" id="cb-next">${index + 1 >= questionsLive.length ? "結果を表示" : "次の問題へ"}</button>`, "cb-live");
         bindAdvance();
       } else {
-        root.innerHTML = `
-          <section class="cb-live">
+        setPresentStage(`
             <h2 class="cb-brand">リーダーボード</h2>
             <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
-            <p class="cb-sub">つぎの問題を待ってね</p>
-          </section>`;
+            <p class="cb-sub">つぎの問題を待ってね</p>`, "cb-live");
       }
       return;
     }
@@ -1677,41 +1842,45 @@ export async function renderCollab(root, { host, uid, role }) {
           || players.find((player) => player.id === uid)
           || {};
         const place = Number(mine.place || (ranked.findIndex((row) => row.id === uid) + 1) || 0);
-        const score = Number(mine.score || 0);
-        const correct = Number(mine.correctCount || 0);
-        root.innerHTML = studentResultMarkup({
+        setPresentStage(studentResultMarkup({
           name: mine.name || "プレイヤー",
           initials: playerInitials(mine.name || "？"),
           color: mine.ballColor || "#C9EBD8",
           place,
-          totalPlayers: ranked.length,
-          score,
-          correct,
-          qTotal,
+        }), "cb-live cb-finish cb-finish-student");
+        root.querySelector("#cb-student-rejoin")?.addEventListener("click", () => {
+          stopLive();
+          roomId = "";
+          roomData = {};
+          players = [];
+          note = "";
+          noteKind = "";
+          view = "join";
+          paintJoin();
         });
-        animateScore(root, score);
         playTone("done");
         return;
       }
 
-      setHostStage(`
+      setPresentStage(`
           <div class="cb-burst" aria-hidden="true"></div>
           <div class="cb-finish-deco" aria-hidden="true"></div>
-          <header class="cb-finish-hero">
+          <div class="cb-finish-sparkles" aria-hidden="true"></div>
+          <div class="cb-finish-hero">
             <p class="cb-finish-kicker">${escapeHtml(roomData.title || "COllAB")}</p>
-            <h2 class="cb-finish-title"><span aria-hidden="true">✨</span> けっか発表！ <span aria-hidden="true">🎉</span></h2>
-            <p class="cb-finish-sub">みんな、よくがんばったね！</p>
-          </header>
+            <h2 class="cb-finish-title"><span aria-hidden="true">✨</span> Rankings! <span aria-hidden="true">🎉</span></h2>
+            <p class="cb-finish-sub">Well done everyone!</p>
+          </div>
           <div class="cb-podium" data-count="${Math.min(3, ranked.length)}">
             ${ranked.length === 1
               ? buildPodiumCard(first, "is-1 is-solo", 0.2)
               : `${buildPodiumCard(second, "is-2", 0.15)}${buildPodiumCard(first, "is-1", 0.45)}${buildPodiumCard(third, "is-3", 0.05)}`}
           </div>
           <div class="cb-finish-stats">
-            <div class="cb-stat is-peach"><strong>${ranked.length}</strong><span>参加人数</span></div>
-            <div class="cb-stat is-lemon"><strong>${qTotal}</strong><span>問題数</span></div>
-            <div class="cb-stat is-mint"><strong>${avgAccuracy}%</strong><span>平均正解率</span></div>
-            <div class="cb-stat is-sky"><strong>${topScore}</strong><span>最高得点</span></div>
+            <div class="cb-stat is-peach" style="--d:0.05s"><strong>${ranked.length}</strong><span>参加人数</span></div>
+            <div class="cb-stat is-lemon" style="--d:0.12s"><strong>${qTotal}</strong><span>問題数</span></div>
+            <div class="cb-stat is-mint" style="--d:0.19s"><strong>${avgAccuracy}%</strong><span>平均正解率</span></div>
+            <div class="cb-stat is-sky" style="--d:0.26s"><strong>${topScore}</strong><span>最高得点</span></div>
           </div>
           <div class="cb-board-wrap">
             <div class="cb-board-head">
@@ -1722,14 +1891,18 @@ export async function renderCollab(root, { host, uid, role }) {
             </div>
             <ol class="cb-board-list">${ranked.map((player) => `
               <li class="${player.id === uid ? "is-me" : ""}${player.place <= 3 ? ` is-top-${player.place}` : ""}">
-                <span class="cb-board-rank">${player.place <= 3 ? medalFor(player.place) : player.place}</span>
+                <span class="cb-board-rank${player.place <= 3 ? ` is-badge is-${player.place}` : ""}">${player.place <= 3 ? medalFor(player.place) : player.place}</span>
                 <span class="cb-board-player">
                   <span class="cb-board-dot" style="background:${escapeHtml(player.ballColor || "#C9EBD8")}">${escapeHtml(playerInitials(player.name))}</span>
                   <strong>${escapeHtml(player.name || "プレイヤー")}</strong>
                 </span>
                 <em class="cb-board-score">${Number(player.score || 0)}</em>
                 <span class="cb-board-acc">${accuracyPct(player.correctCount, qTotal)}%</span>
-              </li>`).join("") || `<li class="cb-board-empty">まだランキングがありません。</li>`}
+              </li>`).join("") || `<li class="cb-board-empty">
+                <span class="cb-board-empty-art" aria-hidden="true"></span>
+                <strong>まだランキングがありません</strong>
+                <span>クイズがおわると、ここにじゅんいがひょうじされます</span>
+              </li>`}
             </ol>
           </div>
           <div class="cb-finish-actions">
@@ -1841,8 +2014,10 @@ export async function renderCollab(root, { host, uid, role }) {
   };
 
   const watchRoom = () => {
-    stopLive();
-    root.innerHTML = `<p class="cb-sub">読み込んでいます。</p>`;
+    stopLive({ keepPresent: true });
+    if (!root.querySelector("#cb-present-stage")) {
+      root.innerHTML = `<p class="cb-sub">読み込んでいます。</p>`;
+    }
     stopRoom = onSnapshot(doc(db, "quizRooms", roomId), (snap) => {
       const data = snap.data() || {};
       if (data.questionIndex !== roomData.questionIndex) {
@@ -1910,7 +2085,20 @@ export async function renderCollab(root, { host, uid, role }) {
   }
   root.innerHTML = `<p class="cb-sub">COllAB を読み込んでいます…</p>`;
   try {
-    await Promise.all([loadTemplates(), loadFavorites(), loadSessions(), loadClasses()]);
+    const results = await Promise.allSettled([
+      loadTemplates(),
+      loadFavorites(),
+      loadSessions(),
+      loadClasses(),
+    ]);
+    const failed = results.find((item) => item.status === "rejected");
+    if (failed && results.every((item) => item.status === "rejected")) {
+      throw failed.reason;
+    }
+    if (failed) {
+      note = failed.reason?.message || "一部のデータを読めませんでした。";
+      noteKind = "error";
+    }
     if (isOwner && !templates.some((item) => item.official)) {
       try {
         await callFunction("seedOfficialCollabTemplates", {});
@@ -1921,6 +2109,14 @@ export async function renderCollab(root, { host, uid, role }) {
     }
     paintHome();
   } catch (error) {
-    root.innerHTML = `<p class="cb-save-note is-error">${escapeHtml(error.message)}</p>`;
+    root.innerHTML = `
+      <div class="cb-app">
+        <h2 class="cb-brand">COllAB</h2>
+        <p class="cb-save-note is-error">${escapeHtml(error.message || "読み込みに失敗しました。")}</p>
+        <button type="button" class="cb-btn cb-btn-primary" id="cb-boot-retry">もう一度試す</button>
+      </div>`;
+    root.querySelector("#cb-boot-retry")?.addEventListener("click", () => {
+      renderCollab(root, { host, uid, role });
+    });
   }
 }
