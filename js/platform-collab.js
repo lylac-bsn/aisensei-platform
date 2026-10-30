@@ -2,6 +2,15 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth
 import { getFirestore, collection, doc, getDoc, getDocs, query, where, onSnapshot, limit } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-storage.js";
 import { createBallLobby } from "./collab-physics.js";
+import {
+  checkIcon,
+  confettiIcon,
+  coverIconMarkup,
+  heartIcon,
+  presentIcon,
+  shapeIcon,
+  sparkleIcon,
+} from "./collab-icons.js";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -25,8 +34,25 @@ function escapeHtml(value) {
 }
 
 const COLORS = ["cb-red", "cb-blue", "cb-yellow", "cb-green"];
-const SHAPES = ["▲", "◆", "●", "■"];
 const TIMES = [5, 10, 20, 30, 60, 90, 120];
+
+/** Fisher–Yates — keep correct answers from always landing top-left (red). */
+function shuffleChoices(list) {
+  const copy = [...(Array.isArray(list) ? list : [])];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function withShuffledChoices(question) {
+  const type = question?.type || "multipleChoice";
+  if (type !== "multipleChoice" && type !== "trueFalse") return question;
+  const choices = question.choices || [];
+  if (choices.length < 2) return question;
+  return { ...question, choices: shuffleChoices(choices) };
+}
 const LEVEL_LABEL = { beginner: "初級", intermediate: "中級", advanced: "上級" };
 const GAME_LABEL = { minecraft: "Minecraft", roblox: "Roblox" };
 const CATEGORY_LABEL = {
@@ -360,15 +386,19 @@ export async function renderCollab(root, { host, uid, role }) {
   };
 
   const loadTemplates = async () => {
-    const [publishedSnap, mineSnap] = await Promise.all([
+    const results = await Promise.allSettled([
       getDocs(query(collection(db, "quizTemplates"), where("visibility", "==", "published"))),
       host ? getDocs(query(collection(db, "quizTemplates"), where("ownerId", "==", uid))) : Promise.resolve({ docs: [] }),
     ]);
     const map = new Map();
+    const publishedSnap = results[0].status === "fulfilled" ? results[0].value : { docs: [] };
+    const mineSnap = results[1].status === "fulfilled" ? results[1].value : { docs: [] };
     publishedSnap.docs.forEach((item) => map.set(item.id, { id: item.id, ...item.data() }));
     mineSnap.docs.forEach((item) => map.set(item.id, { id: item.id, ...item.data() }));
     templates = [...map.values()].sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
     mine = templates.filter((item) => item.ownerId === uid);
+    const failed = results.find((item) => item.status === "rejected");
+    if (failed) throw failed.reason;
   };
 
   const loadSessions = async () => {
@@ -446,7 +476,7 @@ export async function renderCollab(root, { host, uid, role }) {
   const cardMarkup = (item) => {
     const cover = item.coverUrl
       ? `<img src="${escapeHtml(item.coverUrl)}" alt="">`
-      : `<span>${escapeHtml(item.coverEmoji || "🎮")}</span>`;
+      : coverIconMarkup(item, 64);
     const favOn = favorites.has(item.id);
     return `
       <article class="cb-card-wrap">
@@ -464,7 +494,7 @@ export async function renderCollab(root, { host, uid, role }) {
             </div>
           </div>
         </button>
-        ${host ? `<button type="button" class="cb-fav${favOn ? " is-on" : ""}" data-fav="${escapeHtml(item.id)}" aria-label="お気に入り">${favOn ? "♥" : "♡"}</button>` : ""}
+        ${host ? `<button type="button" class="cb-fav${favOn ? " is-on" : ""}" data-fav="${escapeHtml(item.id)}" aria-label="お気に入り">${heartIcon(favOn)}</button>` : ""}
       </article>`;
   };
 
@@ -718,7 +748,7 @@ export async function renderCollab(root, { host, uid, role }) {
     const mineItem = item.ownerId === uid;
     const cover = item.coverUrl
       ? `<img src="${escapeHtml(item.coverUrl)}" alt="">`
-      : escapeHtml(item.coverEmoji || "🎮");
+      : coverIconMarkup(item, 80);
     root.innerHTML = `
       <div class="cb-app cb-preview">
         <button type="button" class="cb-back" id="cb-back">← COllABホーム</button>
@@ -840,7 +870,7 @@ export async function renderCollab(root, { host, uid, role }) {
           <p class="cb-sub">プレビュー ${index + 1} / ${questions.length}</p>
           <h2 class="cb-question">${escapeHtml(question?.prompt || "")}</h2>
           <div class="cb-answer-grid">${(question?.choices || []).map((choice, choiceIndex) => `
-            <div class="cb-answer ${COLORS[choiceIndex] || "cb-red"}"><span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span></div>
+            <div class="cb-answer ${COLORS[choiceIndex] || "cb-red"}"><span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span></div>
           `).join("")}</div>
           <div class="cb-tools">
             <button type="button" class="cb-btn cb-btn-secondary" id="cb-prev" ${index === 0 ? "disabled" : ""}>前へ</button>
@@ -1138,7 +1168,7 @@ export async function renderCollab(root, { host, uid, role }) {
         const tile = document.createElement("div");
         const correct = q.type === "trueFalse" ? q.answer === choice : q.answer === index;
         tile.className = `cb-tile ${COLORS[index]}${correct ? " is-correct" : ""}`;
-        tile.innerHTML = `<button type="button" class="cb-mark" aria-pressed="${correct}">${correct ? "✓" : ""}</button><span>${SHAPES[index]}</span><input data-choice maxlength="80" placeholder="答えを入力" value="${escapeHtml(choice)}" ${q.type === "trueFalse" ? "readonly" : ""}>`;
+        tile.innerHTML = `<button type="button" class="cb-mark" aria-pressed="${correct}">${correct ? checkIcon(14) : ""}</button><span>${shapeIcon(index)}</span><input data-choice maxlength="80" placeholder="答えを入力" value="${escapeHtml(choice)}" ${q.type === "trueFalse" ? "readonly" : ""}>`;
         tile.querySelector(".cb-mark").onclick = () => {
           readEditor();
           if (q.type === "trueFalse") q.answer = choice;
@@ -1260,7 +1290,9 @@ export async function renderCollab(root, { host, uid, role }) {
 
   const startRoom = async (item) => {
     try {
-      const questions = (item.questions || []).map((row) => (row.ok !== undefined ? row : pack(fromStored(row))));
+      const questions = (item.questions || [])
+        .map((row) => (row.ok !== undefined ? row : pack(fromStored(row))))
+        .map(withShuffledChoices);
       const ready = questions.filter((row) => row.prompt);
       const result = await callFunction("startCollabRoom", {
         templateId: item.id || "",
@@ -1419,7 +1451,18 @@ export async function renderCollab(root, { host, uid, role }) {
     return Math.round((Math.max(0, Number(correct) || 0) / total) * 100);
   };
 
-  const medalFor = (place) => ({ 1: "🥇", 2: "🥈", 3: "🥉" }[place] || String(place));
+  const placeMedalMarkup = (place, { student = false } = {}) => {
+    const n = Number(place) || 0;
+    const placeLabel = n > 0 ? `${n}位` : "—";
+    const tier = n >= 1 && n <= 3 ? ` is-${n}` : "";
+    const root = student
+      ? `cb-student-place${n > 0 && n <= 3 ? ` is-top-${n}` : ""}`
+      : `cb-podium-badge${tier}`;
+    return `<span class="${root} cb-medal">
+      <span class="cb-medal-ribbon" aria-hidden="true"><i></i><i></i></span>
+      <span class="cb-medal-face"><strong>${placeLabel}</strong></span>
+    </span>`;
+  };
 
   const studentResultMarkup = ({
     name,
@@ -1428,8 +1471,6 @@ export async function renderCollab(root, { host, uid, role }) {
     place,
     score = 0,
   }) => {
-    const medal = place > 0 && place <= 3 ? medalFor(place) : "";
-    const placeLabel = place > 0 ? `${place}位` : "—";
     const displayName = escapeHtml(name || "プレイヤー");
     const points = Math.max(0, Number(score) || 0);
     return `
@@ -1442,10 +1483,7 @@ export async function renderCollab(root, { host, uid, role }) {
             <div class="cb-student-avatar">${escapeHtml(initials)}</div>
           </div>
           <h2 class="cb-finish-title">Amazing Job ${displayName}!</h2>
-          <div class="cb-student-place${place > 0 && place <= 3 ? ` is-top-${place}` : ""}">
-            ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
-            <strong>${placeLabel}</strong>
-          </div>
+          ${placeMedalMarkup(place, { student: true })}
           <p class="cb-student-points"><em>${points}</em><span>ポイント</span></p>
           <button type="button" class="cb-btn cb-student-rejoin" id="cb-student-rejoin">べつのクイズに参加</button>
         </div>`;
@@ -1454,9 +1492,7 @@ export async function renderCollab(root, { host, uid, role }) {
   const buildPodiumCard = (player, placeClass, delay) => {
     if (!player) return `<div class="cb-podium-slot is-empty ${placeClass}" aria-hidden="true"></div>`;
     const place = Number(player.place || 0);
-    const badge = place <= 3
-      ? `<span class="cb-podium-badge is-${place}"><span class="cb-podium-medal" aria-hidden="true">${medalFor(place)}</span><strong>${place}位</strong></span>`
-      : `<span class="cb-podium-badge"><strong>${place}位</strong></span>`;
+    const badge = placeMedalMarkup(place);
     return `
       <div class="cb-podium-slot ${placeClass}${player.id === uid ? " is-me" : ""}" style="--delay:${delay}s">
         <div class="cb-podium-card">
@@ -1493,12 +1529,12 @@ export async function renderCollab(root, { host, uid, role }) {
   const presentLabel = () => (amHost ? "プレゼン" : "全画面");
 
   const presentButton = () => (
-    `<button type="button" class="cb-btn cb-btn-ghost cb-present-btn" id="cb-present" title="${presenting ? "全画面をやめる" : "全画面表示"}">${presenting ? "✕ 終了" : `⛶ ${presentLabel()}`}</button>`
+    `<button type="button" class="cb-btn cb-btn-ghost cb-present-btn" id="cb-present" title="${presenting ? "全画面をやめる" : "全画面表示"}">${presenting ? `${presentIcon(true)} <span>終了</span>` : `${presentIcon(false)} <span>${presentLabel()}</span>`}</button>`
   );
 
   const syncPresentButton = (button) => {
     if (!button) return;
-    button.textContent = presenting ? "✕ 終了" : `⛶ ${presentLabel()}`;
+    button.innerHTML = presenting ? `${presentIcon(true)} <span>終了</span>` : `${presentIcon(false)} <span>${presentLabel()}</span>`;
     button.title = presenting ? "全画面をやめる" : "全画面表示";
   };
 
@@ -1733,7 +1769,7 @@ export async function renderCollab(root, { host, uid, role }) {
             <p class="cb-sub">問題 ${index + 1} / ${questionsLive.length} ・ ${answered} / ${students.length} 人が回答</p>
             <h2 class="cb-question">${escapeHtml(question.prompt)}</h2>
             <div class="cb-answer-grid">${(question.choices || []).map((choice, choiceIndex) => `
-              <div class="cb-answer ${COLORS[choiceIndex] || ""}"><span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span></div>
+              <div class="cb-answer ${COLORS[choiceIndex] || ""}"><span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span></div>
             `).join("")}</div>
             <button type="button" class="cb-btn cb-btn-primary" id="cb-reveal">答えを見せる</button>`, "cb-live");
         root.querySelector("#cb-reveal")?.addEventListener("click", async () => {
@@ -1765,7 +1801,7 @@ export async function renderCollab(root, { host, uid, role }) {
             const button = document.createElement("button");
             button.type = "button";
             button.className = `cb-answer ${COLORS[choiceIndex] || ""}`;
-            button.innerHTML = `<span>${SHAPES[choiceIndex] || ""}</span><span>${escapeHtml(choice)}</span>`;
+            button.innerHTML = `<span>${shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span>`;
             button.onclick = async () => {
               if (lockedChoice || Number(root._playerAnswered) === index) return;
               lockedChoice = choice;
@@ -1821,7 +1857,7 @@ export async function renderCollab(root, { host, uid, role }) {
               const count = Number(counts[choiceIndex] || 0);
               const share = Math.round((count / total) * 100);
               const correct = String(choice).trim().toLowerCase() === String(answer).trim().toLowerCase();
-              return `<div class="cb-answer ${COLORS[choiceIndex] || ""}${correct ? " is-correct" : " is-dim"}" style="--share:${share}%"><span>${correct ? "✓" : (SHAPES[choiceIndex] || "")}</span><span>${escapeHtml(choice)}</span><strong>${count}</strong><span class="cb-meter"></span></div>`;
+              return `<div class="cb-answer ${COLORS[choiceIndex] || ""}${correct ? " is-correct" : " is-dim"}" style="--share:${share}%"><span>${correct ? checkIcon() : shapeIcon(choiceIndex)}</span><span>${escapeHtml(choice)}</span><strong>${count}</strong><span class="cb-meter"></span></div>`;
             }).join("")}</div>
             <button type="button" class="cb-btn cb-btn-primary" id="cb-next">次へ</button>`, "cb-live");
         bindAdvance();
@@ -1904,7 +1940,7 @@ export async function renderCollab(root, { host, uid, role }) {
           <div class="cb-finish-sparkles" aria-hidden="true"></div>
           <div class="cb-finish-hero">
             <p class="cb-finish-kicker">${escapeHtml(roomData.title || "COllAB")}</p>
-            <h2 class="cb-finish-title"><span aria-hidden="true">✨</span> Rankings! <span aria-hidden="true">🎉</span></h2>
+            <h2 class="cb-finish-title"><span class="cb-finish-title-icon" aria-hidden="true">${sparkleIcon(40)}</span> Rankings! <span class="cb-finish-title-icon" aria-hidden="true">${confettiIcon(40)}</span></h2>
             <p class="cb-finish-sub">Well done everyone!</p>
           </div>
           <div class="cb-podium" data-count="${Math.min(3, ranked.length)}">
@@ -1927,7 +1963,7 @@ export async function renderCollab(root, { host, uid, role }) {
             </div>
             <ol class="cb-board-list">${ranked.map((player) => `
               <li class="${player.id === uid ? "is-me" : ""}${player.place <= 3 ? ` is-top-${player.place}` : ""}">
-                <span class="cb-board-rank${player.place <= 3 ? ` is-badge is-${player.place}` : ""}">${player.place <= 3 ? medalFor(player.place) : player.place}</span>
+                <span class="cb-board-rank${player.place <= 3 ? ` is-badge is-${player.place}` : ""}">${player.place}</span>
                 <span class="cb-board-player">
                   <span class="cb-board-dot" style="background:${escapeHtml(player.ballColor || "#C9EBD8")}">${escapeHtml(playerInitials(player.name))}</span>
                   <strong>${escapeHtml(player.name || "プレイヤー")}</strong>

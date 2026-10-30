@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+
+// Fixture email for unit tests only — not a real account identifier in source.
+process.env.OWNER_EMAIL = process.env.OWNER_EMAIL || "owner-test@example.com";
+
 const {
-  OWNER_EMAIL,
+  getOwnerEmail,
   clampDays,
   costRange,
   costPeriod,
@@ -10,6 +14,8 @@ const {
   summarizeCosts,
   validateCostEntry,
 } = require("../cost-summary");
+
+const OWNER_EMAIL = getOwnerEmail();
 
 test("range is clamped and uses Tokyo dates", () => {
   assert.equal(clampDays("abc"), 30);

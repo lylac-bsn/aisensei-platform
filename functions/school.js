@@ -13,7 +13,12 @@ async function callerUser(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "ログインが必要です。");
   const snap = await db().collection("users").doc(request.auth.uid).get();
   if (!snap.exists) throw new HttpsError("permission-denied", "アカウントが見つかりません。");
-  return { uid: request.auth.uid, ...snap.data() };
+  // Auth token email must win over any client-writable Firestore email field.
+  return {
+    uid: request.auth.uid,
+    ...snap.data(),
+    email: request.auth.token?.email || snap.data()?.email || "",
+  };
 }
 
 function isTeacher(user) {
@@ -861,17 +866,29 @@ function quizTimeLimit(value) {
 }
 
 function quizQuestions(raw) {
-  return (Array.isArray(raw) ? raw : []).slice(0, 30).map((row) => ({
-    type: clean(row?.type, 24) || "multipleChoice",
-    prompt: clean(row?.prompt, 160),
-    choices: (Array.isArray(row?.choices) ? row.choices : []).map((choice) => clean(choice, 80)).filter(Boolean).slice(0, 4),
-    answer: clean(row?.answer, 80),
-    answers: (Array.isArray(row?.answers) ? row.answers : []).map((item) => clean(item, 80)).filter(Boolean).slice(0, 8),
-    pairs: Array.isArray(row?.pairs) ? row.pairs : undefined,
-    words: Array.isArray(row?.words) ? row.words.map((word) => clean(word, 40)).filter(Boolean) : undefined,
-    timeLimitSec: quizTimeLimit(row?.timeLimitSec),
-    points: Math.min(1000, Math.max(0, Number(row?.points) || 1000)),
-  })).filter((row) => {
+  return (Array.isArray(raw) ? raw : []).slice(0, 30).map((row) => {
+    const type = clean(row?.type, 24) || "multipleChoice";
+    let choices = (Array.isArray(row?.choices) ? row.choices : [])
+      .map((choice) => clean(choice, 80))
+      .filter(Boolean)
+      .slice(0, 4);
+    if ((type === "multipleChoice" || type === "trueFalse") && choices.length >= 2) {
+      choices = shuffle(choices);
+    } else if (type === "trueFalse" && !choices.length) {
+      choices = shuffle(["○ ほんとう", "× うそ"]);
+    }
+    return {
+      type,
+      prompt: clean(row?.prompt, 160),
+      choices,
+      answer: clean(row?.answer, 80),
+      answers: (Array.isArray(row?.answers) ? row.answers : []).map((item) => clean(item, 80)).filter(Boolean).slice(0, 8),
+      pairs: Array.isArray(row?.pairs) ? row.pairs : undefined,
+      words: Array.isArray(row?.words) ? row.words.map((word) => clean(word, 40)).filter(Boolean) : undefined,
+      timeLimitSec: quizTimeLimit(row?.timeLimitSec),
+      points: Math.min(1000, Math.max(0, Number(row?.points) || 1000)),
+    };
+  }).filter((row) => {
     if (!row.prompt) return false;
     if (row.type === "typeAnswer") return (row.answers.length || row.answer);
     if (row.type === "wordOrder") return (row.words || []).length >= 2 && row.answer;
@@ -881,15 +898,23 @@ function quizQuestions(raw) {
 }
 
 function publicQuestions(questions) {
-  return questions.map((row) => ({
-    type: row.type || "multipleChoice",
-    prompt: row.prompt,
-    choices: row.choices || [],
-    pairs: row.pairs || null,
-    words: row.words || null,
-    timeLimitSec: row.timeLimitSec,
-    points: row.points || 1000,
-  }));
+  return questions.map((row) => {
+    const type = row.type || "multipleChoice";
+    let choices = row.choices || [];
+    // Randomize MC / T-F button positions so the correct answer is not always top-left (red).
+    if ((type === "multipleChoice" || type === "trueFalse") && choices.length >= 2) {
+      choices = shuffle(choices);
+    }
+    return {
+      type,
+      prompt: row.prompt,
+      choices,
+      pairs: row.pairs || null,
+      words: row.words || null,
+      timeLimitSec: row.timeLimitSec,
+      points: row.points || 1000,
+    };
+  });
 }
 
 function answerKey(questions) {
