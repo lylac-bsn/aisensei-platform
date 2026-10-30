@@ -1726,6 +1726,63 @@ header.cb-finish-hero,
 .cb-student-medal { font-size: 1.45rem; line-height: 1; }
 .cb-student-place.is-top-1 .cb-student-medal { font-size: 1.65rem; }
 
+.cb-student-points {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3rem;
+  margin: -0.1rem 0 0.05rem;
+  color: #6B4F47;
+  animation: cb-rise 0.5s ease 0.32s both;
+}
+.cb-student-points em {
+  font-style: normal;
+  font-size: clamp(1.45rem, 4.5vw, 1.75rem);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.cb-student-points span {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: rgba(107, 79, 71, 0.68);
+}
+
+.cb-finish-student .cb-finish-deco {
+  z-index: 0;
+  opacity: 1;
+}
+.cb-finish-student .cb-burst {
+  inset: -6% -4% auto;
+  height: 55%;
+  z-index: 0;
+}
+.cb-finish-student .cb-student-bg-sparkles {
+  inset: 0;
+  height: auto;
+  z-index: 0;
+  opacity: 0.85;
+  background:
+    radial-gradient(circle, #FFD86B 3px, transparent 4px) 8% 18% / 12px 12px no-repeat,
+    radial-gradient(circle, #FFB7C5 2.5px, transparent 3.5px) 18% 72% / 10px 10px no-repeat,
+    radial-gradient(circle, #B8DCF8 3px, transparent 4px) 28% 12% / 12px 12px no-repeat,
+    radial-gradient(circle, #FFF 2px, transparent 3px) 38% 88% / 8px 8px no-repeat,
+    radial-gradient(circle, #D9CEF2 2.5px, transparent 3.5px) 48% 8% / 10px 10px no-repeat,
+    radial-gradient(circle, #75D7A3 2.5px, transparent 3.5px) 58% 78% / 10px 10px no-repeat,
+    radial-gradient(circle, #FFE08A 2px, transparent 3px) 68% 22% / 8px 8px no-repeat,
+    radial-gradient(circle, #F2B8C8 3px, transparent 4px) 78% 64% / 12px 12px no-repeat,
+    radial-gradient(circle, #A8D4F0 2.5px, transparent 3.5px) 88% 28% / 10px 10px no-repeat,
+    radial-gradient(circle, #FFF 1.5px, transparent 2.5px) 92% 82% / 7px 7px no-repeat,
+    radial-gradient(circle, #FFD8C8 2px, transparent 3px) 12% 42% / 8px 8px no-repeat,
+    radial-gradient(circle, #C8EBD8 2px, transparent 3px) 84% 48% / 8px 8px no-repeat;
+  animation: cb-student-bg-sparkle 2.6s ease-in-out 0.25s infinite alternate;
+}
+@keyframes cb-student-bg-sparkle {
+  0% { opacity: 0.45; transform: scale(0.98); }
+  50% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0.65; transform: scale(1.02); }
+}
+
 .cb-student-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1881,7 +1938,6 @@ header.cb-finish-hero,
 
 /* legacy */
 .cb-student-rank { display: none; }
-.cb-student-points { display: none; }
 
 @keyframes cb-rise {
   from { opacity: 0; transform: translateY(14px); }
@@ -2197,7 +2253,8 @@ header.cb-finish-hero,
     transition: none;
     animation: none !important;
   }
-  .cb-burst, .cb-student-sparkles, .cb-finish-sparkles { display: none; }
+  .cb-burst, .cb-student-sparkles, .cb-finish-sparkles, .cb-student-bg-sparkles { display: none; }
+  .cb-finish-student .cb-finish-deco { opacity: 0.55; }
   .cb-acc-bar > i { width: var(--fill, 0%); }
   .cb-lobby-space canvas { opacity: 0.92; }
 }

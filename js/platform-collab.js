@@ -169,18 +169,30 @@ function playTone(kind) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
     const now = ctx.currentTime;
-    const map = { start: 520, tick: 880, ok: 660, bad: 220, done: 740 };
-    osc.frequency.value = map[kind] || 440;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-    osc.start(now);
-    osc.stop(now + 0.2);
+    const beep = (freq, startAt, dur = 0.16, peak = 0.09) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+      osc.start(startAt);
+      osc.stop(startAt + dur + 0.02);
+    };
+    if (kind === "happy" || kind === "done") {
+      // Short celebratory arpeggio for results reveal
+      beep(523.25, now, 0.14, 0.08);        // C5
+      beep(659.25, now + 0.12, 0.14, 0.09); // E5
+      beep(783.99, now + 0.24, 0.16, 0.1);  // G5
+      beep(1046.5, now + 0.38, 0.28, 0.11); // C6
+      return;
+    }
+    const map = { start: 520, tick: 880, ok: 660, bad: 220 };
+    beep(map[kind] || 440, now, 0.18, 0.08);
   } catch {
     /* ignore */
   }
@@ -285,6 +297,7 @@ export async function renderCollab(root, { host, uid, role }) {
   let lastCorrect = null;
   let presenting = false;
   let presentRepaint = false;
+  let resultsFanfarePlayed = false;
 
   const stopClock = () => {
     clockGen += 1;
@@ -1413,12 +1426,16 @@ export async function renderCollab(root, { host, uid, role }) {
     initials,
     color,
     place,
+    score = 0,
   }) => {
     const medal = place > 0 && place <= 3 ? medalFor(place) : "";
     const placeLabel = place > 0 ? `${place}位` : "—";
     const displayName = escapeHtml(name || "プレイヤー");
+    const points = Math.max(0, Number(score) || 0);
     return `
         <div class="cb-burst" aria-hidden="true"></div>
+        <div class="cb-finish-deco" aria-hidden="true"></div>
+        <div class="cb-finish-sparkles cb-student-bg-sparkles" aria-hidden="true"></div>
         <div class="cb-student-card" style="--ball:${escapeHtml(color)}">
           <div class="cb-student-hero">
             <div class="cb-student-sparkles" aria-hidden="true"></div>
@@ -1429,6 +1446,7 @@ export async function renderCollab(root, { host, uid, role }) {
             ${medal ? `<span class="cb-student-medal" aria-hidden="true">${medal}</span>` : ""}
             <strong>${placeLabel}</strong>
           </div>
+          <p class="cb-student-points"><em>${points}</em><span>ポイント</span></p>
           <button type="button" class="cb-btn cb-student-rejoin" id="cb-student-rejoin">べつのクイズに参加</button>
         </div>`;
   };
@@ -1453,9 +1471,18 @@ export async function renderCollab(root, { host, uid, role }) {
     root.querySelector(selector)?.addEventListener("click", async () => {
       const button = root.querySelector(selector);
       if (button) button.disabled = true;
+      const questionsLive = roomData.questions || [];
+      const index = roomData.questionIndex ?? -1;
+      const goingToResults = roomData.status === "leaderboard"
+        && index + 1 >= questionsLive.length;
       try {
         await callFunction("advanceQuiz", { roomId, questionIndex: roomData.questionIndex });
-        playTone("start");
+        if (goingToResults) {
+          resultsFanfarePlayed = true;
+          playTone("happy");
+        } else {
+          playTone("start");
+        }
       } catch (error) {
         note = error.message;
         if (button) button.disabled = false;
@@ -1814,7 +1841,7 @@ export async function renderCollab(root, { host, uid, role }) {
         setPresentStage(`
           <h2 class="cb-brand">リーダーボード</h2>
           <ol class="cb-rank-list">${ranked.map((player) => `<li class="${player.id === uid ? "is-me" : ""}"><span>${player.place}</span><strong>${escapeHtml(player.name || "プレイヤー")}</strong><em>${Number(player.score || 0)}</em></li>`).join("")}</ol>
-          <button type="button" class="cb-btn cb-btn-primary" id="cb-next">${index + 1 >= questionsLive.length ? "結果を表示" : "次の問題へ"}</button>`, "cb-live");
+          <button type="button" class="cb-btn cb-btn-primary" id="cb-next">${index + 1 >= questionsLive.length ? "結果を見る" : "次の問題へ"}</button>`, "cb-live");
         bindAdvance();
       } else {
         setPresentStage(`
@@ -1847,6 +1874,7 @@ export async function renderCollab(root, { host, uid, role }) {
           initials: playerInitials(mine.name || "？"),
           color: mine.ballColor || "#C9EBD8",
           place,
+          score: mine.score || 0,
         }), "cb-live cb-finish cb-finish-student");
         root.querySelector("#cb-student-rejoin")?.addEventListener("click", () => {
           stopLive();
@@ -1858,8 +1886,16 @@ export async function renderCollab(root, { host, uid, role }) {
           view = "join";
           paintJoin();
         });
-        playTone("done");
+        if (!resultsFanfarePlayed) {
+          resultsFanfarePlayed = true;
+          playTone("happy");
+        }
         return;
+      }
+
+      if (!resultsFanfarePlayed) {
+        resultsFanfarePlayed = true;
+        playTone("happy");
       }
 
       setPresentStage(`
