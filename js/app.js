@@ -5,9 +5,9 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib85";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib129";
 import { renderHome } from "./platform-home.js";
-import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib85";
+import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib129";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -134,6 +134,11 @@ document.addEventListener("click", (event) => {
         }
         const userName = document.getElementById('hub-user-name');
         if (userName) userName.textContent = name || 'アカウント';
+        const userAvatar = document.getElementById('hub-user-avatar');
+        if (userAvatar) {
+            const initial = (name || '学').trim().charAt(0) || '?';
+            userAvatar.textContent = initial;
+        }
         const hubDate = document.getElementById('hub-date');
         if (hubDate) {
             hubDate.textContent = new Date().toLocaleDateString('ja-JP', { dateStyle: 'full', timeZone: 'Asia/Tokyo' });
@@ -258,7 +263,7 @@ document.addEventListener("click", (event) => {
                 /* ignore */
             }
         };
-        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib85');
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib129');
         const labCall = async (name, data) => {
             if (name === 'saveHomeworkPack') {
                 const id = data.id || `lab${packs.size + 1}`;

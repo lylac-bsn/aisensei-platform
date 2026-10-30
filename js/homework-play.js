@@ -1,7 +1,7 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib85";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib85";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib85";
-import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib85";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib129";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib129";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib129";
+import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib129";
 
 const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！", "やったね！", "いいね！"];
 const ENCOURAGE = ["おしい！", "もういちど！", "だいじょうぶ！", "がんばろう！"];
@@ -9,8 +9,14 @@ let retryCursor = 0;
 let encourageCursor = 0;
 let voiceDb = null;
 
+let playGenerateVoice = true;
+
 function playLine(text, lang) {
-  return playPrompt(text, lang, { db: voiceDb });
+  return playPrompt(text, lang, {
+    db: voiceDb,
+    // Students should use teacher-shared clips. Preview/studio may allow generation.
+    generate: playGenerateVoice,
+  });
 }
 
 const PLAY_ICON = {
@@ -35,21 +41,34 @@ function voiceLang(text) {
   return /[\u3040-\u30ff\u4e00-\u9fff]/.test(text) ? "ja" : "en";
 }
 
+function matchedIdsFromAttempt(attempt) {
+  const matched = new Set();
+  (attempt?.matched || []).forEach((mark) => {
+    const [leftId, rightId] = String(mark || "").split(":");
+    if (leftId) matched.add(leftId);
+    if (rightId) matched.add(rightId);
+  });
+  return matched;
+}
+
 export async function mountHomeworkPlayer(root, options) {
   voiceDb = options.db || null;
+  playGenerateVoice = options.generateVoice !== false;
   const source = Array.isArray(options.questions) ? options.questions : [];
   const outcomes = new Map();
-  const saved = await options.loadProgress?.().catch(() => null);
+  const replay = Boolean(options.replay);
+  const saved = replay ? null : await options.loadProgress?.().catch(() => null);
   if (saved?.attempts) {
     Object.entries(saved.attempts).forEach(([id, attempt]) => {
       if (attempt?.correct) outcomes.set(id, { correct: true, tries: attempt.tries || 1 });
+      else if (attempt) outcomes.set(id, { correct: false, tries: attempt.tries || 1, matched: attempt.matched || [] });
     });
   }
   let order = source.filter((question) => !outcomes.get(question.id)?.correct);
   let reviewing = false;
   let reviewUsed = false;
-  if (saved?.completed && !order.length) {
-    paintDone(saved.correctCount ?? source.length, saved.total || source.length, false);
+  if (!replay && saved?.completed && !order.length) {
+    await paintDone(saved.correctCount ?? source.length, saved.total || source.length, false);
     return;
   }
   if (!order.length) order = source.slice();
@@ -66,9 +85,13 @@ export async function mountHomeworkPlayer(root, options) {
     return playHomeworkSfx(next.name);
   }
 
+  function progressPercent() {
+    const done = source.filter((question) => outcomes.get(question.id)?.correct).length;
+    return Math.round((done / Math.max(source.length, 1)) * 100);
+  }
+
   function paintShell(question) {
-    const seen = outcomes.size;
-    const progress = Math.round((seen / Math.max(source.length, 1)) * 100);
+    const progress = progressPercent();
     root.innerHTML = "";
     const play = document.createElement("section");
     play.className = "hw-play";
@@ -110,6 +133,7 @@ export async function mountHomeworkPlayer(root, options) {
     play.querySelector("[data-close]")?.addEventListener("click", () => {
       stopHomeworkSfx();
       stopPrompt();
+      // Progress is already persisted per answer/pair; leaving resumes from saved state.
       options.onClose();
     });
     const prompt = play.querySelector(".hw-prompt");
@@ -274,6 +298,7 @@ export async function mountHomeworkPlayer(root, options) {
     } else {
       check.hidden = true;
       const next = play.querySelector(".hw-next");
+      const savedAttempt = saved?.attempts?.[question.id] || outcomes.get(question.id) || null;
       buildMatching(question, body, live, playResult, async (leftId, rightId) => options.grade(question.id, {
         kind: "pair",
         leftId,
@@ -284,7 +309,9 @@ export async function mountHomeworkPlayer(root, options) {
         const prev = outcomes.get(question.id);
         outcomes.set(question.id, { correct: true, tries: (prev?.tries || 0) + 1 });
         showCorrect(play, "", false, "");
-      }, (line) => speakAfter(playResult(false), line), next);
+      }, (line) => speakAfter(playResult(false), line), next, {
+        initialMatched: matchedIdsFromAttempt(savedAttempt),
+      });
       return;
     }
 
@@ -350,7 +377,9 @@ export async function mountHomeworkPlayer(root, options) {
     stopHomeworkSfx();
     stopPrompt();
     let summary = { correct, total, percent: total ? Math.round((correct / total) * 100) : 0 };
-    if (options.finish) {
+    // Only call finish when the student just completed a run — not when
+    // re-opening an already-finished homework summary screen.
+    if (options.finish && celebrate) {
       try {
         summary = { ...summary, ...(await options.finish()) };
       } catch (error) {
@@ -386,16 +415,27 @@ export async function mountHomeworkPlayer(root, options) {
       warn.textContent = summary.error;
       done.querySelector(".hw-done-card").appendChild(warn);
     }
+    const actions = done.querySelector("[data-done-actions]");
+    const again = document.createElement("button");
+    again.type = "button";
+    again.className = "hw-check is-ready";
+    again.textContent = "もう一度チャレンジ";
+    again.addEventListener("click", () => {
+      stopHomeworkSfx();
+      stopPrompt();
+      mountHomeworkPlayer(root, { ...options, replay: true });
+    });
+    actions.appendChild(again);
     if (options.onClose) {
       const back = document.createElement("button");
       back.type = "button";
-      back.className = "hw-check is-ready";
+      back.className = "hw-next is-ready";
       back.textContent = "もどる";
       back.addEventListener("click", () => {
         stopHomeworkSfx();
         options.onClose();
       });
-      done.querySelector("[data-done-actions]").appendChild(back);
+      actions.appendChild(back);
     }
     root.appendChild(done);
     if (celebrate) playHomeworkSfx("complete");
@@ -516,7 +556,7 @@ function prefersReducedMotion() {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function buildMatching(question, body, live, playResult, gradePair, onDone, onMiss, nextBtn) {
+function buildMatching(question, body, live, playResult, gradePair, onDone, onMiss, nextBtn, resume = {}) {
   const wrap = document.createElement("div");
   wrap.className = "hw-match-wrap";
   const progress = document.createElement("p");
@@ -530,7 +570,7 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
   let busy = false;
   let finished = false;
   let celebrated = false;
-  const matched = new Set();
+  const matched = new Set(resume.initialMatched || []);
   let wrongIds = new Set();
   let flashIds = new Set();
 
@@ -613,19 +653,25 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     flashIds = new Set();
     if (pairing) busy = true;
     paint();
+
+    // Always speak the tapped word. Await so grading feedback does not cut it off.
+    let spoken = Promise.resolve();
     if (chosen) {
-      stopPrompt();
-      playLine(text, voiceLang(text));
+      spoken = playLine(text, voiceLang(text)).catch((error) => {
+        console.warn("[hw-match] word audio failed", text, error);
+      });
     }
+
     if (!pairing) {
       busy = false;
       return;
     }
+
     const pairLeft = leftId;
     const pairRight = rightId;
     try {
       const result = await gradePair(pairLeft, pairRight);
-      stopPrompt();
+      await spoken;
       if (result.correct) {
         matched.add(pairLeft);
         matched.add(pairRight);
@@ -668,6 +714,7 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
         if (board.isConnected) paint();
       }
     } catch (error) {
+      await spoken;
       live.textContent = error.message;
       leftId = "";
       rightId = "";
@@ -683,4 +730,26 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
   wrap.append(progress, board);
   body.appendChild(wrap);
   paint();
+
+  // Resume: if every pair was already saved, finish the question so "つぎへ" unlocks.
+  if (totalPairs > 0 && pairedCount() >= totalPairs) {
+    finished = true;
+    updateProgress();
+    paint();
+    busy = true;
+    Promise.resolve()
+      .then(() => onDone())
+      .then(() => {
+        celebrated = true;
+        unlockNext();
+      })
+      .catch((error) => {
+        live.textContent = error?.message || "つづきから再開できませんでした。";
+        finished = false;
+      })
+      .finally(() => {
+        busy = false;
+        if (board.isConnected) paint();
+      });
+  }
 }

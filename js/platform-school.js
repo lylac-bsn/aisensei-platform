@@ -69,8 +69,38 @@ export function watchNotifications(uid, role) {
   const family = role === "parent" || role === "student" || role === "user" || !role;
   bell.hidden = !family;
   panel.hidden = true;
+  panel.classList.remove("is-open");
   badge.hidden = true;
   if (!family || !uid) return;
+
+  const BELL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>';
+  const NOTE_ICONS = {
+    homework: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h6.2A2.3 2.3 0 0 1 13.5 6.8V20a1.6 1.6 0 0 0-1.6-1.6H5z"/><path d="M19 4.5h-6.2A2.3 2.3 0 0 0 10.5 6.8V20a1.6 1.6 0 0 1 1.6-1.6H19z"/></svg>',
+    report: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.5 9l5.5 1.5L13.5 12 12 17.5 10.5 12 5 10.5 10.5 9 12 3.5z"/><path d="M18.5 15.2 19 17l1.8.5L19 18l-.5 1.8L18 18l-1.8-.5L18 17l.5-1.8z"/></svg>',
+    booking: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M8 3.5v3M16 3.5v3M4 9.5h16"/></svg>',
+    note: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.3 4.7 5.2.8-3.8 3.6.9 5.2L12 15.8 7.4 17.9l.9-5.2L4.5 9.1l5.2-.8z"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5 20.5 19h-17z"/><path d="M12 10v4M12 16.5h.01"/></svg>',
+  };
+
+  const kindMeta = (kind) => {
+    if (kind === "homework") return { label: "宿題", tone: "peach", icon: "homework" };
+    if (kind === "report") return { label: "レポート", tone: "lavender", icon: "report" };
+    if (kind === "booking") return { label: "お知らせ", tone: "mint", icon: "booking" };
+    if (kind === "alert" || kind === "important") return { label: "重要", tone: "pink", icon: "alert" };
+    return { label: "お知らせ", tone: "yellow", icon: "note" };
+  };
+
+  const previewText = (body) => {
+    const text = String(body || "").replace(/\s+/g, " ").trim();
+    if (!text) return "内容をかくにんしよう";
+    return text.slice(0, 56);
+  };
+
+  const goHubAction = (action) => {
+    if (!action) return;
+    const matches = [...document.querySelectorAll(`[data-hub-action="${action}"]`)];
+    (matches.find((item) => item.offsetParent) || matches[0])?.click();
+  };
 
   const db = getFirestore();
   const lists = new Map();
@@ -98,7 +128,7 @@ export function watchNotifications(uid, role) {
       unread: data.read !== true,
       assignmentId: data.assignmentId || "",
       reportId: data.reportId || "",
-      action: kind === "homework" ? "my-homework" : kind === "booking" ? "book" : "inbox",
+      action: kind === "homework" || kind === "report" ? "my-homework" : kind === "booking" ? "book" : "inbox",
     };
   };
   listen("inbox", collection(db, "inbox", uid, "items"), inboxRow);
@@ -155,57 +185,151 @@ export function watchNotifications(uid, role) {
         rest.push(row);
       });
     });
-    return [...inbox, ...rest].sort((a, b) => b.time - a.time).slice(0, 20);
+    return [...inbox, ...rest].sort((a, b) => b.time - a.time).slice(0, 12);
+  };
+
+  const isUnread = (row, seen) => {
+    if (row.inboxId) return row.unread === true;
+    return !seen.has(row.key);
+  };
+
+  const closePanel = () => {
+    panel.hidden = true;
+    panel.classList.remove("is-open");
+    bell.setAttribute("aria-expanded", "false");
+  };
+
+  const openPanel = () => {
+    panel.hidden = false;
+    bell.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => {
+      if (!panel.hidden) panel.classList.add("is-open");
+    });
+  };
+
+  const markRowsRead = (rows) => {
+    if (!rows.length) return;
+    rememberNoteKeys(uid, rows.map((row) => row.key));
+    rows.forEach((row) => {
+      if (row.inboxId) {
+        row.unread = false;
+        callFunction("markInboxRead", { itemId: row.inboxId }).catch(() => {});
+      }
+    });
   };
 
   const paint = () => {
     const rows = merged();
     const seen = seenNoteKeys(uid);
-    const unseen = rows.filter((row) => !seen.has(row.key) && (row.unread || !row.inboxId)).length;
+    const unreadRows = rows.filter((row) => isUnread(row, seen));
+    const unseen = unreadRows.length;
     badge.hidden = unseen < 1;
-    badge.textContent = unseen > 9 ? "9+" : String(unseen);
-    const kindLabel = { report: "レポート", homework: "宿題", booking: "予約", note: "通知" };
-    panel.innerHTML = rows.length ? rows.map((row) => `
-      <button type="button" class="gc-bell-item${seen.has(row.key) ? "" : " is-new"}" data-note-action="${row.action}">
-        <small>${kindLabel[row.kind] || "通知"}${row.time ? ` · ${escapeHtml(noteWhen(row.time))}` : ""}</small>
-        <strong>${escapeHtml(row.title)}</strong>
-        <span>${escapeHtml(String(row.body || "").replace(/\s+/g, " ").slice(0, 80))}</span>
-      </button>`).join("") : `<p class="gc-bell-empty">通知はありません。</p>`;
+    badge.textContent = unseen > 0 ? String(unseen) : "";
+    badge.setAttribute("aria-label", unseen > 0 ? `未読のおしらせ ${unseen}件` : "通知");
+    badge.title = unseen > 0 ? `未読 ${unseen}件` : "";
+
+    const listHtml = rows.length
+      ? rows.map((row) => {
+        const meta = kindMeta(row.kind);
+        const unread = isUnread(row, seen);
+        const icon = NOTE_ICONS[meta.icon] || NOTE_ICONS.note;
+        return `
+          <button type="button"
+            class="gc-bell-item tone-${meta.tone}${unread ? " is-new" : ""}"
+            data-note-action="${escapeHtml(row.action)}"
+            data-note-key="${escapeHtml(row.key)}"
+            data-inbox-id="${escapeHtml(row.inboxId || "")}">
+            <span class="gc-bell-item-ico" aria-hidden="true">${icon}</span>
+            <span class="gc-bell-item-body">
+              <span class="gc-bell-item-title">${escapeHtml(row.title)}</span>
+              <span class="gc-bell-item-preview">${escapeHtml(previewText(row.body))}</span>
+              <span class="gc-bell-item-tag">${meta.label}</span>
+            </span>
+            <span class="gc-bell-item-meta">
+              <small>${escapeHtml(noteWhen(row.time))}</small>
+              ${unread ? `<span class="gc-bell-dot" aria-label="未読"></span>` : ""}
+            </span>
+          </button>`;
+      }).join("")
+      : `<div class="gc-bell-empty">
+          <span class="gc-bell-empty-ico" aria-hidden="true">${BELL_ICON}</span>
+          <strong>まだ おしらせはないよ！</strong>
+          <p>新しい しゅくだいや レポートが とどいたら ここに でるよ</p>
+        </div>`;
+
+    panel.innerHTML = `
+      <div class="gc-bell-head">
+        <div class="gc-bell-head-left">
+          <span class="gc-bell-head-ico" aria-hidden="true">${BELL_ICON}</span>
+          <strong>おしらせ</strong>
+          ${unseen ? `<span class="gc-bell-head-count">${unseen > 9 ? "9+" : unseen}</span>` : ""}
+        </div>
+        ${unseen ? `<button type="button" class="gc-bell-mark-all" data-bell-mark-all>すべて既読</button>` : ""}
+      </div>
+      <div class="gc-bell-list">${listHtml}</div>
+      <div class="gc-bell-foot">
+        <button type="button" class="gc-bell-inbox-link" data-note-action="inbox">
+          <span>すべてのおしらせを見る</span>
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>`;
   };
 
-  const closePanel = (event) => {
+  const onDocumentClick = (event) => {
     if (panel.hidden || event.target.closest(".gc-bell-wrap")) return;
-    panel.hidden = true;
-    bell.setAttribute("aria-expanded", "false");
+    closePanel();
   };
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape" && !panel.hidden) {
+      closePanel();
+      bell.focus();
+    }
+  };
+
   bell.onclick = (event) => {
     event.stopPropagation();
-    const opening = panel.hidden;
-    panel.hidden = !opening;
-    bell.setAttribute("aria-expanded", String(opening));
-    if (!opening) return;
-    const rows = merged();
-    rememberNoteKeys(uid, rows.map((row) => row.key));
-    rows.filter((row) => row.inboxId && row.unread).forEach((row) => {
-      callFunction("markInboxRead", { itemId: row.inboxId }).catch(() => {});
-    });
-    paint();
+    if (panel.hidden) {
+      paint();
+      openPanel();
+    } else {
+      closePanel();
+    }
   };
+
   panel.onclick = (event) => {
+    event.stopPropagation();
+    if (event.target.closest("[data-bell-mark-all]")) {
+      markRowsRead(merged().filter((row) => isUnread(row, seenNoteKeys(uid))));
+      paint();
+      return;
+    }
     const button = event.target.closest("[data-note-action]");
     if (!button) return;
-    panel.hidden = true;
-    bell.setAttribute("aria-expanded", "false");
-    const matches = [...document.querySelectorAll(`[data-hub-action="${button.dataset.noteAction}"]`)];
-    (matches.find((item) => item.offsetParent) || matches[0])?.click();
+    const key = button.dataset.noteKey || "";
+    const inboxId = button.dataset.inboxId || "";
+    const action = button.dataset.noteAction || "inbox";
+    if (key || inboxId) {
+      markRowsRead([{ key: key || `tmp-${inboxId}`, inboxId, unread: Boolean(inboxId) }]);
+    }
+    closePanel();
+    paint();
+    goHubAction(action);
   };
-  document.addEventListener("click", closePanel);
+
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onKeyDown);
+  paint();
+
   stopNotifications = () => {
     cancelled = true;
     unsubs.forEach((stop) => stop());
-    document.removeEventListener("click", closePanel);
+    document.removeEventListener("click", onDocumentClick);
+    document.removeEventListener("keydown", onKeyDown);
+    bell.onclick = null;
+    panel.onclick = null;
     bell.hidden = true;
-    panel.hidden = true;
+    closePanel();
     badge.hidden = true;
   };
 }
@@ -902,70 +1026,1272 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
   await paintSession();
 }
 
+
+const LEARN_ICON = {
+  book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.2c-1.6-1.1-3.5-1.7-5.6-1.7-1.1 0-2.1.2-3 .5v12.2c.9-.3 1.9-.5 3-.5 2.1 0 4 .6 5.6 1.7" fill="none"/><path d="M12 6.2c1.6-1.1 3.5-1.7 5.6-1.7 1.1 0 2.1.2 3 .5v12.2c-.9-.3-1.9-.5-3-.5-2.1 0-4 .6-5.6 1.7" fill="none"/><path d="M12 6.2v12.2" fill="none"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>',
+  star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.2 2.55 5.17 5.7.83-4.12 4.02.97 5.68L12 16.2l-5.1 2.7.97-5.68L3.75 9.2l5.7-.83L12 3.2z"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.2s-6.8-4.2-8.8-8.1C1.4 8.8 3.1 5.6 6.4 5.2c1.8-.2 3.4.7 4.4 2.1 1-1.4 2.6-2.3 4.4-2.1 3.3.4 5 3.6 3.2 7-2 3.9-8.8 8-8.8 8z"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.2 3.4A8.8 8.8 0 1 0 20.6 14 7.2 7.2 0 0 1 15.2 3.4z"/></svg>',
+  flower: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.4"/><circle cx="12" cy="5.4" r="2.5"/><circle cx="12" cy="18.6" r="2.5"/><circle cx="5.4" cy="12" r="2.5"/><circle cx="18.6" cy="12" r="2.5"/><circle cx="7.3" cy="7.3" r="2.2"/><circle cx="16.7" cy="7.3" r="2.2"/><circle cx="7.3" cy="16.7" r="2.2"/><circle cx="16.7" cy="16.7" r="2.2"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 18.5h9.1A4.2 4.2 0 0 0 21 13.6a4 4 0 0 0-3.5-3.9A5.1 5.1 0 0 0 8.2 8.4 3.8 3.8 0 0 0 4.4 14a3.7 3.7 0 0 0 3.8 4.5z"/></svg>',
+  smile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><circle cx="9" cy="10.2" r="1.15"/><circle cx="15" cy="10.2" r="1.15"/><path d="M8.4 14.1c1.1 1.5 2.3 2.2 3.6 2.2s2.5-.7 3.6-2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  clover: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.2" r="3.1"/><circle cx="7.2" cy="12.2" r="3.1"/><circle cx="16.8" cy="12.2" r="3.1"/><circle cx="12" cy="16.8" r="3.1"/><path d="M12 15.5v5.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  notebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10.5A1.5 1.5 0 0 1 19 5v14.5A1.5 1.5 0 0 1 17.5 21H7A1.5 1.5 0 0 1 5.5 19.5V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 13.8 9l6.2 1.8L13.8 12.6 12 18.8 10.2 12.6 4 10.8 10.2 9 12 2.8z"/><path d="m18.2 15.2.9 2.4 2.4.8-2.4.8-.9 2.4-.9-2.4-2.4-.8 2.4-.8z"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M8 3.5v3M16 3.5v3M4 9.5h16"/></svg>',
+  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5 20.5 19h-17z"/><path d="M12 10v4M12 16.5h.01"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h12M13 6l6 6-6 6"/></svg>',
+  person: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.2-3.2 3.4-4.8 6.5-4.8s5.3 1.6 6.5 4.8"/></svg>',
+  mcq: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14M5 12h14M5 16.5h10"/><circle cx="7.2" cy="7.5" r="1"/><circle cx="7.2" cy="12" r="1"/><circle cx="7.2" cy="16.5" r="1"/></svg>',
+  match: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="16" r="2.4"/><path d="M9 9.2 15 14.8"/></svg>',
+  spell: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6.5" width="17" height="11" rx="2"/><path d="M7 15.5v-4M10.5 15.5v-2.5M14 15.5V9.5M17.5 15.5v-3"/></svg>',
+  sentence: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5.5" width="6.5" height="5" rx="1.4"/><rect x="13.5" y="5.5" width="6.5" height="5" rx="1.4"/><rect x="7.5" y="13.5" width="9" height="5" rx="1.4"/></svg>',
+};
+
+const WHEEL_CUTE_ICONS = ["star", "heart", "moon", "flower", "sparkle", "cloud", "smile", "clover"];
+
+function wheelBubbleIcon(index, { completed = false, warn = false, report = false } = {}) {
+  if (completed) return LEARN_ICON.star;
+  if (warn) return LEARN_ICON.heart;
+  if (report) return LEARN_ICON.sparkle;
+  const name = WHEEL_CUTE_ICONS[Math.abs(Number(index) || 0) % WHEEL_CUTE_ICONS.length];
+  return LEARN_ICON[name] || LEARN_ICON.star;
+}
 async function renderInbox(root, db, uid) {
   const snap = await getDocs(collection(db, "inbox", uid, "items"));
   const rows = snap.docs.map((item) => ({ id: item.id, ...item.data(), time: noteMillis(item.data().createdAt) }))
     .sort((a, b) => b.time - a.time);
+
+  const typeMeta = (type) => {
+    const key = String(type || "note");
+    if (key === "homework") {
+      return { key: "homework", label: "宿題", tone: "peach", cta: "宿題をひらく", action: "my-homework", icon: "book" };
+    }
+    if (key === "report") {
+      return { key: "report", label: "レポート", tone: "lavender", cta: "レポートを見る", action: "my-homework", icon: "sparkle" };
+    }
+    if (key === "booking") {
+      return { key: "booking", label: "お知らせ", tone: "mint", cta: "予約をみる", action: "book", icon: "calendar" };
+    }
+    return { key: "note", label: "お知らせ", tone: "mint", cta: "くわしく見る", action: "", icon: "star" };
+  };
+
+  const counts = {
+    all: rows.length,
+    unread: rows.filter((row) => row.read !== true).length,
+    homework: rows.filter((row) => row.type === "homework").length,
+    report: rows.filter((row) => row.type === "report").length,
+    notice: rows.filter((row) => row.type !== "homework" && row.type !== "report").length,
+  };
+
   root.innerHTML = `
-    <div class="gc-learn">
-      <section class="gc-panel">
-        <h2>受信箱</h2>
-        <div class="gc-note-list">${rows.map((row) => `
-          <article class="gc-note-card${row.read ? "" : " is-new"}">
-            <small>${escapeHtml(noteWhen(row.time))}</small>
-            <h3>${escapeHtml(row.title || "通知")}</h3>
-            <p>${escapeHtml(row.body || "")}</p>
-          </article>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
-      </section>
+    <div class="gc-inbox" id="gc-inbox">
+      <header class="gc-inbox-hero">
+        <div class="gc-inbox-hero-copy">
+          <h2>受信箱</h2>
+          <p>しゅくだいや レッスンの おしらせを チェックしよう！</p>
+        </div>
+        <img class="gc-inbox-mascot" src="images/fukurou.svg" alt="" width="64" height="70" decoding="async">
+      </header>
+
+      <div class="gc-inbox-filters" role="tablist" aria-label="フィルタ">
+        <button type="button" class="gc-inbox-filter is-active" data-inbox-filter="all" aria-selected="true">すべて <em>${counts.all}</em></button>
+        <button type="button" class="gc-inbox-filter" data-inbox-filter="homework" aria-selected="false">宿題 <em>${counts.homework}</em></button>
+        <button type="button" class="gc-inbox-filter" data-inbox-filter="report" aria-selected="false">レポート <em>${counts.report}</em></button>
+        <button type="button" class="gc-inbox-filter" data-inbox-filter="notice" aria-selected="false">お知らせ <em>${counts.notice}</em></button>
+        <button type="button" class="gc-inbox-filter" data-inbox-filter="unread" aria-selected="false">未読 <em>${counts.unread}</em></button>
+      </div>
+
+      <div class="gc-inbox-stage" id="gc-inbox-stage">
+        <div class="gc-inbox-list" id="gc-inbox-list" role="list"></div>
+        <aside class="gc-inbox-detail" id="gc-inbox-detail" aria-live="polite"></aside>
+      </div>
     </div>`;
-  rows.filter((row) => !row.read).forEach((row) => {
+
+  const stage = root.querySelector("#gc-inbox-stage");
+  const listHost = root.querySelector("#gc-inbox-list");
+  const detailHost = root.querySelector("#gc-inbox-detail");
+  const filterButtons = [...root.querySelectorAll("[data-inbox-filter]")];
+  let filter = "all";
+  let selectedId = rows.find((row) => row.read !== true)?.id || rows[0]?.id || "";
+  let detailOpen = false;
+
+  const iconSvg = (name) => LEARN_ICON[name] || LEARN_ICON.star;
+  const isMobileInbox = () => window.matchMedia("(max-width: 900px)").matches;
+
+  const filteredRows = () => rows.filter((row) => {
+    if (filter === "unread") return row.read !== true;
+    if (filter === "homework") return row.type === "homework";
+    if (filter === "report") return row.type === "report";
+    if (filter === "notice") return row.type !== "homework" && row.type !== "report";
+    return true;
+  });
+
+  const previewText = (row) => {
+    const body = String(row.body || "").trim();
+    if (!body) return "内容はありません";
+    return body.replace(/\s+/g, " ").slice(0, 72);
+  };
+
+  const goAction = (action) => {
+    if (!action) return;
+    document.querySelector(`[data-hub-action="${action}"]`)?.click();
+  };
+
+  const syncDetailOpen = () => {
+    stage?.classList.toggle("is-detail-open", Boolean(detailOpen && isMobileInbox()));
+  };
+
+  const refreshCounts = () => {
+    counts.unread = rows.filter((row) => row.read !== true).length;
+    const unreadFilter = root.querySelector('[data-inbox-filter="unread"] em');
+    if (unreadFilter) unreadFilter.textContent = String(counts.unread);
+  };
+
+  const markRead = (row) => {
+    if (!row || row.read === true) return false;
+    row.read = true;
     callFunction("markInboxRead", { itemId: row.id }).catch(() => {});
+    refreshCounts();
+    return true;
+  };
+
+  const detailContentHtml = (row, meta) => {
+    const body = String(row.body || "").trim();
+    if (meta.key === "homework") {
+      return body
+        ? `<p class="gc-inbox-detail-related">${escapeHtml(body)}</p>`
+        : `<p class="gc-inbox-detail-body is-muted">内容はありません</p>`;
+    }
+    if (!body) return `<p class="gc-inbox-detail-body is-muted">内容はありません</p>`;
+    return `<div class="gc-inbox-detail-body">${escapeHtml(body)}</div>`;
+  };
+
+  const bindDetailActions = () => {
+    detailHost.querySelector("[data-inbox-go]")?.addEventListener("click", (event) => {
+      goAction(event.currentTarget.dataset.inboxGo);
+    });
+    detailHost.querySelector("[data-inbox-back]")?.addEventListener("click", () => {
+      detailOpen = false;
+      syncDetailOpen();
+    });
+  };
+
+  const renderDetail = (row) => {
+    if (!row) {
+      detailHost.innerHTML = `
+        <div class="gc-inbox-empty">
+          <img src="images/fukurou.svg" alt="" width="64" height="70" decoding="async">
+          <p>メッセージを 選んでね</p>
+        </div>`;
+      return;
+    }
+    const meta = typeMeta(row.type);
+    const unread = row.read !== true;
+    detailHost.innerHTML = `
+      <article class="gc-inbox-detail-card tone-${meta.tone}${unread ? " is-unread" : ""}">
+        <button type="button" class="gc-inbox-back" data-inbox-back>
+          <span aria-hidden="true">←</span> もどる
+        </button>
+        <header class="gc-inbox-detail-head">
+          <span class="gc-inbox-detail-ico" aria-hidden="true">${iconSvg(meta.icon)}</span>
+          <div class="gc-inbox-detail-head-copy">
+            <div class="gc-inbox-detail-top">
+              <span class="gc-inbox-badge tone-${meta.tone}">${meta.label}</span>
+              ${unread ? `<span class="gc-inbox-badge is-unread">未読</span>` : `<span class="gc-inbox-badge is-read">既読</span>`}
+              <small>${escapeHtml(noteWhen(row.time))}</small>
+            </div>
+            <h3>${escapeHtml(row.title || "通知")}</h3>
+          </div>
+        </header>
+        <div class="gc-inbox-detail-panel">
+          ${detailContentHtml(row, meta)}
+        </div>
+        ${meta.action ? `
+          <button type="button" class="gc-inbox-cta" data-inbox-go="${escapeHtml(meta.action)}">
+            <span>${escapeHtml(meta.cta)}</span>
+            <span aria-hidden="true">${LEARN_ICON.arrow}</span>
+          </button>` : ""}
+      </article>`;
+    detailHost.classList.remove("is-fade");
+    void detailHost.offsetWidth;
+    detailHost.classList.add("is-fade");
+    bindDetailActions();
+  };
+
+  const renderList = ({ keepScroll = false } = {}) => {
+    const scrollTop = keepScroll ? listHost.scrollTop : 0;
+    const visible = filteredRows();
+    if (!visible.some((row) => row.id === selectedId)) {
+      selectedId = visible[0]?.id || "";
+    }
+    if (!visible.length) {
+      listHost.innerHTML = `<div class="gc-inbox-empty is-list"><p>この条件のメッセージは ないよ</p></div>`;
+      renderDetail(null);
+      detailOpen = false;
+      syncDetailOpen();
+      return;
+    }
+    listHost.innerHTML = visible.map((row) => {
+      const meta = typeMeta(row.type);
+      const unread = row.read !== true;
+      const active = row.id === selectedId;
+      return `
+        <button type="button"
+          class="gc-inbox-item tone-${meta.tone}${unread ? " is-unread" : ""}${active ? " is-active" : ""}"
+          data-inbox-id="${escapeHtml(row.id)}"
+          role="listitem"
+          aria-current="${active ? "true" : "false"}">
+          <span class="gc-inbox-item-accent" aria-hidden="true"></span>
+          <span class="gc-inbox-item-ico" aria-hidden="true">${iconSvg(meta.icon)}</span>
+          <span class="gc-inbox-item-main">
+            <span class="gc-inbox-item-top">
+              <span class="gc-inbox-badge tone-${meta.tone}">${meta.label}</span>
+              <small>${escapeHtml(noteWhen(row.time))}</small>
+            </span>
+            <strong>${escapeHtml(row.title || "通知")}</strong>
+            <span class="gc-inbox-item-preview">${escapeHtml(previewText(row))}</span>
+          </span>
+          <span class="gc-inbox-item-side">
+            ${unread ? `<span class="gc-inbox-dot" aria-label="未読"></span>` : ""}
+          </span>
+        </button>`;
+    }).join("");
+
+    listHost.querySelectorAll("[data-inbox-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedId = button.dataset.inboxId;
+        const row = rows.find((item) => item.id === selectedId);
+        markRead(row);
+        if (isMobileInbox()) detailOpen = true;
+        renderList({ keepScroll: true });
+      });
+    });
+
+    if (keepScroll) listHost.scrollTop = scrollTop;
+    renderDetail(rows.find((row) => row.id === selectedId) || null);
+    syncDetailOpen();
+  };
+
+  filterButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      filter = button.dataset.inboxFilter || "all";
+      filterButtons.forEach((item) => {
+        const active = item === button;
+        item.classList.toggle("is-active", active);
+        item.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      detailOpen = false;
+      renderList();
+    });
+  });
+
+  window.matchMedia("(max-width: 900px)").addEventListener("change", () => {
+    if (!isMobileInbox()) detailOpen = false;
+    syncDetailOpen();
+  });
+
+  renderList();
+}
+
+
+
+function tokyoDateText(ms = Date.now()) {
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
+}
+
+function formatDueLabel(dueOn) {
+  if (!dueOn) return "";
+  const date = new Date(`${dueOn}T12:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return dueOn;
+  return date.toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "long",
+    day: "numeric",
   });
 }
 
-async function renderStudentLearning(root, db, uid) {
-  root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
-  const [homeworkSnap, reportSnap] = await Promise.all([
-    getDocs(collection(db, "studentHomework", uid, "items")),
-    getDocs(query(collection(db, "classReports"), where("attendeeIds", "array-contains", uid))).catch(() => null),
-  ]);
-  const homework = homeworkSnap.docs.map((item) => ({ id: item.id, ...item.data(), time: noteMillis(item.data().createdAt) }))
-    .sort((a, b) => b.time - a.time);
-  const reports = (reportSnap?.docs || []).map((item) => ({ id: item.id, ...item.data(), time: noteMillis(item.data().createdAt) }))
-    .sort((a, b) => b.time - a.time);
-  root.innerHTML = `
-    <div class="gc-learn">
-      <section class="gc-panel">
-        <h2>先生の宿題</h2>
-        <div id="hw-list" class="gc-note-list">${homework.map((item) => `
-          <button type="button" class="gc-note-card" data-hw="${escapeHtml(item.id)}" data-format="${escapeHtml(item.format || "")}">
-            <small>${escapeHtml(noteWhen(item.time))}${item.dueOn ? ` · 期日 ${escapeHtml(item.dueOn)}` : ""}</small>
-            <strong>${escapeHtml(item.title || "宿題")}</strong>
-          </button>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
-        <div id="hw-play"></div>
-      </section>
-      <section class="gc-panel">
-        <h2>クラスレポート</h2>
-        <div class="gc-note-list">${reports.map((item) => `
-          <article class="gc-note-card">
-            <small>${escapeHtml(noteWhen(item.time))}</small>
-            <p>${escapeHtml(item.summary || "")}</p>
-            <ul>${(item.phrases || []).map((phrase) => `<li>${escapeHtml(phrase.en || "")} / ${escapeHtml(phrase.ja || "")}</li>`).join("")}</ul>
-          </article>`).join("") || `<p class="gc-muted">まだ届いていません。</p>`}</div>
-      </section>
+function formatLessonDate(ms) {
+  if (!ms) return "レッスン";
+  return `${new Date(ms).toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "long",
+    day: "numeric",
+  })}のレッスン`;
+}
+
+function addDaysYmd(ymd, days) {
+  const date = new Date(`${ymd}T12:00:00+09:00`);
+  date.setDate(date.getDate() + days);
+  return tokyoDateText(date.getTime());
+}
+
+function homeworkProgressState(item, progress) {
+  const completed = Boolean(progress?.completed);
+  const started = Boolean(
+    progress?.startedAt
+    || (Array.isArray(progress?.doneIds) && progress.doneIds.length)
+    || Number(progress?.correctCount) > 0
+    || Number(progress?.percent) > 0
+    || (progress?.attempts && Object.keys(progress.attempts).length)
+  );
+  const today = tokyoDateText();
+  const dueOn = String(item.dueOn || "");
+  const overdue = Boolean(dueOn && dueOn < today && !completed);
+  const dueSoon = Boolean(dueOn && !completed && !overdue && dueOn <= addDaysYmd(today, 3));
+  let status = "not_started";
+  if (completed) status = "completed";
+  else if (overdue) status = "overdue";
+  else if (dueSoon) status = started ? "due_soon_progress" : "due_soon";
+  else if (started) status = "in_progress";
+  return { status, completed, started, overdue, dueSoon, percent: Number(progress?.percent) || 0 };
+}
+
+function homeworkStatusMeta(state) {
+  if (state.status === "completed") {
+    return { key: "done", label: "完了", tone: "mint", action: "結果を見る", cheer: "できた！" };
+  }
+  if (state.status === "overdue") {
+    return { key: "late", label: "期限切れ", tone: "coral", action: state.started ? "つづける" : "はじめる" };
+  }
+  if (state.status === "due_soon" || state.status === "due_soon_progress") {
+    return {
+      key: "soon",
+      label: "締切間近",
+      tone: "yellow",
+      action: state.started ? "つづける" : "はじめる",
+      warn: true,
+    };
+  }
+  if (state.status === "in_progress") {
+    return { key: "progress", label: "進行中", tone: "blue", action: "つづける" };
+  }
+  return { key: "new", label: "未開始", tone: "peach", action: "はじめる" };
+}
+
+async function loadHomeworkProgressMap(db, uid, homework) {
+  const entries = await Promise.all(homework.map(async (item) => {
+    const assignmentId = item.assignmentId || item.id;
+    try {
+      const snap = await getDoc(doc(db, "homeworkProgress", `${assignmentId}_${uid}`));
+      return [assignmentId, snap.exists() ? snap.data() : null];
+    } catch {
+      return [assignmentId, null];
+    }
+  }));
+  return new Map(entries);
+}
+
+function learnEmptyHtml(kind) {
+  if (kind === "homework") {
+    return `
+      <div class="gc-learn-empty">
+        <img src="images/fukurou.svg" alt="" width="72" height="78" decoding="async">
+        <p>いまは宿題がないよ！</p>
+      </div>`;
+  }
+  return `
+    <div class="gc-learn-empty is-report">
+      <span class="gc-learn-empty-ico" aria-hidden="true">${LEARN_ICON.sparkle}</span>
+      <p>まだレポートはありません</p>
     </div>`;
-  root.querySelectorAll("[data-hw]").forEach((button) => {
-    button.onclick = () => {
-      if (button.dataset.format === "pack-v1") {
-        playPackHomework(root.querySelector("#hw-play"), button.dataset.hw, uid).catch((error) => {
-          root.querySelector("#hw-play").textContent = error.message;
-        });
-        return;
-      }
-      playHomework(root.querySelector("#hw-play"), button.dataset.hw);
+}
+
+const TYPE_CHIP = {
+  multipleChoice: "4択",
+  matching: "線つなぎ",
+  spelling: "スペリング",
+  sentence: "文づくり",
+};
+
+/** Collect practice words from public question payloads (no answer keys). */
+function previewWordsFromQuestions(questions = []) {
+  const ja = [];
+  const en = [];
+  const seenJa = new Set();
+  const seenEn = new Set();
+  const pushJa = (text) => {
+    const value = String(text || "").trim();
+    if (!value || seenJa.has(value)) return;
+    seenJa.add(value);
+    ja.push(value);
+  };
+  const pushEn = (text) => {
+    const value = String(text || "").trim();
+    if (!value || seenEn.has(value)) return;
+    seenEn.add(value);
+    en.push(value);
+  };
+  questions.forEach((question) => {
+    if (question?.type === "matching") {
+      (question.left || []).forEach((item) => pushJa(item?.text));
+      (question.right || []).forEach((item) => pushEn(item?.text));
+      return;
+    }
+    const prompt = String(question?.promptJa || "");
+    const match = prompt.match(/^(.+?)は英語で/);
+    if (match?.[1]) pushJa(match[1]);
+    if (question?.type === "multipleChoice") {
+      (question.choices || []).forEach((choice) => {
+        if (/[A-Za-z]/.test(choice) && !/[\u3040-\u30ff\u4e00-\u9fff]/.test(choice)) pushEn(choice);
+      });
+    }
+    if (question?.promptEn) pushEn(question.promptEn);
+  });
+  return { ja, en };
+}
+
+function typeSummaryFromQuestions(questions = []) {
+  const counts = {};
+  questions.forEach((question) => {
+    const key = question?.type;
+    if (!TYPE_CHIP[key]) return;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return Object.entries(counts).map(([type, count]) => ({
+    type,
+    label: TYPE_CHIP[type],
+    count,
+  }));
+}
+
+const LEARN_HUB_UI_KEY = "gc-learn-hub-ui";
+
+function defaultLearnHubUi() {
+  return { mode: "homework", homeworkId: "", reportId: "" };
+}
+
+function readLearnHubUi(uid = "") {
+  try {
+    const raw = sessionStorage.getItem(uid ? `${LEARN_HUB_UI_KEY}-${uid}` : LEARN_HUB_UI_KEY);
+    if (!raw) return defaultLearnHubUi();
+    const parsed = JSON.parse(raw);
+    const mode = parsed?.mode === "reports" ? "reports" : "homework";
+    return {
+      mode,
+      homeworkId: String(parsed?.homeworkId || ""),
+      reportId: String(parsed?.reportId || ""),
+    };
+  } catch {
+    return defaultLearnHubUi();
+  }
+}
+
+function writeLearnHubUi(uid = "") {
+  try {
+    const payload = JSON.stringify({
+      mode: learnHubUi.mode === "reports" ? "reports" : "homework",
+      homeworkId: String(learnHubUi.homeworkId || ""),
+      reportId: String(learnHubUi.reportId || ""),
+    });
+    sessionStorage.setItem(uid ? `${LEARN_HUB_UI_KEY}-${uid}` : LEARN_HUB_UI_KEY, payload);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+let learnHubUi = defaultLearnHubUi();
+
+function shortBubbleLabel(text, max = 8) {
+  const value = String(text || "").trim();
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
+function sortHomeworkRows(rows) {
+  // Keep bubble positions stable — never reorder by completion/progress.
+  return [...rows].sort((a, b) => (
+    (b.item.time || 0) - (a.item.time || 0)
+    || String(a.assignmentId).localeCompare(String(b.assignmentId))
+  ));
+}
+
+function homeworkBubbleHtml(row, index) {
+  const meta = homeworkStatusMeta(row.state);
+  const title = row.item.title || "宿題";
+  const done = Boolean(row.state.completed);
+  const tone = done ? "mint" : "peach";
+  const icon = done ? LEARN_ICON.check : LEARN_ICON.book;
+  const incompleteDot = done
+    ? ""
+    : `<span class="gc-wheel-bubble-dot" aria-hidden="true"></span>`;
+  return `
+    <button type="button"
+      class="gc-wheel-bubble tone-${tone}${done ? " is-done" : " is-todo"}"
+      data-wheel-index="${index}"
+      data-wheel-id="${escapeHtml(row.assignmentId)}"
+      aria-label="${escapeHtml(title)}（${escapeHtml(meta.label)}）">
+      ${incompleteDot}
+      <span class="gc-wheel-bubble-ico is-outline" aria-hidden="true">${icon}</span>
+      <span class="gc-wheel-bubble-label">${escapeHtml(shortBubbleLabel(title))}</span>
+    </button>`;
+}
+
+function reportBubbleHtml(item, index) {
+  const label = formatLessonDate(item.time).replace("のレッスン", "");
+  return `
+    <button type="button"
+      class="gc-wheel-bubble tone-lavender"
+      data-wheel-index="${index}"
+      data-wheel-id="${escapeHtml(item.id)}"
+      aria-label="${escapeHtml(formatLessonDate(item.time))}">
+      <span class="gc-wheel-bubble-ico is-cute" aria-hidden="true">${wheelBubbleIcon(index, { report: true })}</span>
+      <span class="gc-wheel-bubble-label">${escapeHtml(shortBubbleLabel(label, 7))}</span>
+    </button>`;
+}
+
+function homeworkDetailHtml(row) {
+  if (!row) {
+    return `
+      <div class="gc-wheel-detail-empty">
+        <img src="images/fukurou.svg" alt="" width="88" height="96" decoding="async">
+        <p>いまは宿題がないよ！</p>
+      </div>`;
+  }
+  const meta = homeworkStatusMeta(row.state);
+  const due = formatDueLabel(row.item.dueOn);
+  const teacherName = String(row.item.teacherName || "").trim() || "先生";
+  const className = String(row.item.className || "").trim();
+  const questionCount = Number(row.item.questionCount) || 0;
+  const action = row.state.completed
+    ? "もう一度チャレンジ"
+    : (row.state.started ? "つづきから" : "はじめる");
+  const cheer = row.state.completed
+    ? "できたね！もういちど挑戦してみよう"
+    : (row.state.started ? "つづきからチャレンジしよう！" : "さあ、英語にチャレンジしよう！");
+  const progress = row.state.started && !row.state.completed
+    ? `<div class="gc-wheel-progress" aria-label="進捗 ${Math.min(100, Math.max(0, row.state.percent))}%">
+        <span style="width:${Math.max(8, Math.min(100, row.state.percent))}%"></span>
+      </div>
+      <p class="gc-wheel-progress-label">${Math.min(100, Math.max(0, row.state.percent))}% 完了</p>`
+    : "";
+  return `
+    <div class="gc-wheel-detail-card tone-${meta.tone}" data-detail-id="${escapeHtml(row.assignmentId)}">
+      <div class="gc-wheel-detail-deco" aria-hidden="true"></div>
+      <p class="gc-wheel-detail-status">${meta.warn ? LEARN_ICON.warn : (row.state.completed ? LEARN_ICON.check : LEARN_ICON.book)} ${escapeHtml(meta.label)}</p>
+      <h2 class="gc-wheel-detail-title">${escapeHtml(row.item.title || "宿題")}</h2>
+      <p class="gc-wheel-detail-cheer">${escapeHtml(cheer)}</p>
+      <div class="gc-wheel-detail-facts">
+        <span>${LEARN_ICON.calendar} ${due ? `${escapeHtml(due)}まで` : "期日なし"}</span>
+        ${questionCount ? `<span>${LEARN_ICON.notebook} ${questionCount}もん</span>` : ""}
+        <span>${LEARN_ICON.person} ${escapeHtml(teacherName)}</span>
+        ${className ? `<span>${LEARN_ICON.sparkle} ${escapeHtml(className)}</span>` : ""}
+      </div>
+      ${progress}
+      <button type="button" class="gc-wheel-cta" data-hw="${escapeHtml(row.assignmentId)}" data-format="${escapeHtml(row.item.format || "")}" data-replay="${row.state.completed ? "1" : ""}">
+        <span>${escapeHtml(action)}</span>
+        <span aria-hidden="true">${LEARN_ICON.arrow}</span>
+      </button>
+    </div>`;
+}
+
+function reportDetailHtml(item) {
+  if (!item) {
+    return `
+      <div class="gc-wheel-detail-empty is-report">
+        <span class="gc-learn-empty-ico" aria-hidden="true">${LEARN_ICON.sparkle}</span>
+        <p>まだレポートはありません</p>
+      </div>`;
+  }
+  const phrases = Array.isArray(item.phrases) ? item.phrases.filter((row) => row?.en || row?.ja) : [];
+  const summary = String(item.summary || "").trim();
+  const preview = phrases.slice(0, 6).map((phrase) => `
+    <span class="gc-learn-chip">
+      <strong>${escapeHtml(phrase.en || "")}</strong>
+      ${phrase.ja ? `<small>${escapeHtml(phrase.ja)}</small>` : ""}
+    </span>`).join("");
+  return `
+    <div class="gc-wheel-detail-card tone-lavender" data-detail-id="${escapeHtml(item.id)}">
+      <div class="gc-wheel-detail-deco is-report" aria-hidden="true"></div>
+      <p class="gc-wheel-detail-status">${LEARN_ICON.sparkle} レッスンレポート</p>
+      <h2 class="gc-wheel-detail-title">${escapeHtml(formatLessonDate(item.time))}</h2>
+      <p class="gc-wheel-detail-cheer">${summary ? escapeHtml(summary) : "コメントはありません"}</p>
+      ${preview ? `
+        <div class="gc-wheel-vocab">
+          <p class="gc-wheel-vocab-label">今日の単語</p>
+          <div class="gc-learn-chips">${preview}</div>
+        </div>` : ""}
+      <button type="button" class="gc-wheel-cta is-report" data-report-open="${escapeHtml(item.id)}" aria-expanded="false">
+        <span>レポートを見る</span>
+        <span aria-hidden="true">${LEARN_ICON.arrow}</span>
+      </button>
+      <div class="gc-wheel-report-full" id="report-detail-${escapeHtml(item.id)}" hidden>
+        ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
+        ${phrases.length
+          ? `<ul>${phrases.map((phrase) => `<li><strong>${escapeHtml(phrase.en || "")}</strong>${phrase.ja ? ` — ${escapeHtml(phrase.ja)}` : ""}</li>`).join("")}</ul>`
+          : "<p>単語の記録はありません。</p>"}
+      </div>
+    </div>`;
+}
+
+async function enrichHomeworkMeta(db, homework) {
+  const needsLookup = homework.some((item) => !item.teacherName || !item.className);
+  if (!homework.length || !needsLookup) return homework;
+
+  const assignmentIds = [...new Set(homework.map((item) => item.assignmentId || item.id).filter(Boolean))];
+  const assignmentMap = new Map();
+  const classIds = new Set();
+  await Promise.all(assignmentIds.map(async (id) => {
+    try {
+      const snap = await getDoc(doc(db, "homeworkAssignments", id));
+      if (!snap.exists()) return;
+      const data = snap.data() || {};
+      assignmentMap.set(id, data);
+      (Array.isArray(data.classIds) ? data.classIds : []).forEach((classId) => {
+        if (classId) classIds.add(classId);
+      });
+      if (data.classId) classIds.add(data.classId);
+    } catch {
+      /* ignore missing assignment */
+    }
+  }));
+
+  const classNameMap = new Map();
+  await Promise.all([...classIds].map(async (classId) => {
+    try {
+      const snap = await getDoc(doc(db, "classes", classId));
+      if (!snap.exists()) return;
+      const title = String(snap.data()?.title || snap.data()?.name || "").trim();
+      if (title) classNameMap.set(classId, title);
+    } catch {
+      /* ignore */
+    }
+  }));
+
+  return homework.map((item) => {
+    const id = item.assignmentId || item.id;
+    const pack = assignmentMap.get(id) || {};
+    const ids = Array.isArray(pack.classIds) && pack.classIds.length
+      ? pack.classIds
+      : (pack.classId ? [pack.classId] : (Array.isArray(item.classIds) ? item.classIds : []));
+    const resolvedClass = item.className
+      || ids.map((classId) => classNameMap.get(classId)).filter(Boolean).join("・");
+    return {
+      ...item,
+      teacherName: item.teacherName || pack.creatorName || "先生",
+      className: resolvedClass || "",
+      dueOn: item.dueOn || pack.dueOn || "",
+      title: item.title || pack.title || "宿題",
     };
   });
 }
+
+function reportCardHtml(item) {
+  const phrases = Array.isArray(item.phrases) ? item.phrases.filter((row) => row?.en || row?.ja) : [];
+  const summary = String(item.summary || "").trim();
+  const chips = phrases.slice(0, 8).map((phrase) => `
+    <span class="gc-learn-chip">
+      <strong>${escapeHtml(phrase.en || "")}</strong>
+      ${phrase.ja ? `<small>${escapeHtml(phrase.ja)}</small>` : ""}
+    </span>`).join("");
+  return `
+    <article class="gc-learn-report-card" data-report="${escapeHtml(item.id)}">
+      <div class="gc-learn-report-head">
+        <span class="gc-learn-report-spark" aria-hidden="true">${LEARN_ICON.sparkle}</span>
+        <h3>${escapeHtml(formatLessonDate(item.time))}</h3>
+      </div>
+      ${summary ? `<p class="gc-learn-report-summary">${escapeHtml(summary)}</p>` : `<p class="gc-learn-report-summary is-muted">コメントはありません</p>`}
+      ${chips ? `
+        <div class="gc-learn-report-vocab">
+          <p class="gc-learn-report-vocab-label">今日の単語</p>
+          <div class="gc-learn-chips">${chips}</div>
+        </div>` : ""}
+      <button type="button" class="gc-learn-report-btn" data-report-open="${escapeHtml(item.id)}">
+        <span>レポートを見る</span>
+        <span aria-hidden="true">${LEARN_ICON.arrow}</span>
+      </button>
+      <div class="gc-learn-report-detail" id="report-detail-${escapeHtml(item.id)}" hidden>
+        ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
+        ${phrases.length ? `<ul>${phrases.map((phrase) => `<li><strong>${escapeHtml(phrase.en || "")}</strong>${phrase.ja ? ` — ${escapeHtml(phrase.ja)}` : ""}</li>`).join("")}</ul>` : "<p>単語の記録はありません。</p>"}
+      </div>
+    </article>`;
+}
+
+async function renderStudentLearning(root, db, uid) {
+  document.getElementById("platform-hub")?.classList.remove("is-hw-focus");
+  learnHubUi = readLearnHubUi(uid);
+  root.innerHTML = `
+    <div class="gc-learn-hub" aria-busy="true">
+      <div class="gc-learn-skel">
+        <div class="gc-learn-skel-card"></div>
+        <div class="gc-learn-skel-row">
+          <div class="gc-learn-skel-card"></div>
+          <div class="gc-learn-skel-card"></div>
+          <div class="gc-learn-skel-card"></div>
+        </div>
+        <div class="gc-learn-skel-card is-tall"></div>
+      </div>
+    </div>`;
+
+  let homework = [];
+  let reports = [];
+  let progressMap = new Map();
+  try {
+    const [homeworkSnap, reportSnap] = await Promise.all([
+      getDocs(collection(db, "studentHomework", uid, "items")),
+      getDocs(query(collection(db, "classReports"), where("attendeeIds", "array-contains", uid))).catch(() => null),
+    ]);
+    homework = await enrichHomeworkMeta(db, homeworkSnap.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+      time: noteMillis(item.data().createdAt),
+    })));
+    reports = (reportSnap?.docs || []).map((item) => ({
+      id: item.id,
+      ...item.data(),
+      time: noteMillis(item.data().createdAt),
+    })).sort((a, b) => b.time - a.time);
+    progressMap = await loadHomeworkProgressMap(db, uid, homework);
+  } catch (error) {
+    console.error("[renderStudentLearning]", error);
+    root.innerHTML = `
+      <div class="gc-learn-hub">
+        <div class="gc-learn-error" role="alert">
+          <p>読みこめませんでした。もう一度ためしてみてね。</p>
+          <button type="button" class="gc-learn-retry" id="learn-retry">もう一度</button>
+        </div>
+      </div>`;
+    root.querySelector("#learn-retry")?.addEventListener("click", () => {
+      renderStudentLearning(root, db, uid);
+    });
+    return;
+  }
+
+  const enriched = homework.map((item) => {
+    const assignmentId = item.assignmentId || item.id;
+    const state = homeworkProgressState(item, progressMap.get(assignmentId));
+    return { item, state, assignmentId };
+  });
+  root._learnWheelCleanup?.();
+  root._learnWheelCleanup = null;
+
+  const homeworkRows = sortHomeworkRows(enriched);
+  const byAssignment = new Map(homeworkRows.map((row) => [row.assignmentId, row]));
+
+  const defaultHwIndex = (() => {
+    if (learnHubUi.homeworkId) {
+      const found = homeworkRows.findIndex((row) => row.assignmentId === learnHubUi.homeworkId);
+      if (found >= 0) return found;
+    }
+    return 0;
+  })();
+  const defaultReportIndex = (() => {
+    if (learnHubUi.reportId) {
+      const found = reports.findIndex((item) => item.id === learnHubUi.reportId);
+      if (found >= 0) return found;
+    }
+    return 0;
+  })();
+  if (!["homework", "reports"].includes(learnHubUi.mode)) learnHubUi.mode = "homework";
+
+  root.innerHTML = `
+    <div class="gc-learn-hub is-wheel">
+      <div class="gc-learn-home" id="learn-home">
+        <div class="gc-wheel-stage">
+          <div class="gc-wheel-atmosphere" aria-hidden="true">
+            <span class="gc-wheel-glow a"></span>
+            <span class="gc-wheel-glow b"></span>
+            <span class="gc-wheel-glow c"></span>
+            <span class="gc-wheel-dot a"></span>
+            <span class="gc-wheel-dot b"></span>
+            <span class="gc-wheel-dot c"></span>
+          </div>
+          <div class="gc-wheel" id="learn-wheel" tabindex="0" aria-roledescription="carousel" aria-label="宿題とレポートのせんたく">
+            <div class="gc-wheel-ring" id="learn-wheel-ring" aria-hidden="true"></div>
+            <div class="gc-wheel-mode" id="learn-wheel-mode" role="tablist" aria-label="表示のきりかえ">
+              <button type="button" class="gc-wheel-mode-btn" role="tab" id="learn-mode-homework" data-mode="homework" aria-selected="true">宿題</button>
+              <button type="button" class="gc-wheel-mode-btn" role="tab" id="learn-mode-reports" data-mode="reports" aria-selected="false">レポート</button>
+            </div>
+            <div class="gc-wheel-bubbles" id="learn-wheel-bubbles"></div>
+            <div class="gc-wheel-navs" id="learn-wheel-navs">
+              <button type="button" class="gc-wheel-nav is-prev" id="learn-wheel-prev" aria-label="前の項目">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 14.5 12 8l6 6.5"/></svg>
+              </button>
+              <button type="button" class="gc-wheel-nav is-next" id="learn-wheel-next" aria-label="次の項目">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5 12 16l6-6.5"/></svg>
+              </button>
+            </div>
+            <div class="gc-wheel-bridge" id="learn-wheel-bridge" aria-hidden="true"></div>
+          </div>
+          <div class="gc-wheel-detail" id="learn-detail" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="gc-learn-play" id="hw-play" hidden></div>
+    </div>`;
+
+  const home = root.querySelector("#learn-home");
+  const playHost = root.querySelector("#hw-play");
+  const wheel = root.querySelector("#learn-wheel");
+  const bubblesHost = root.querySelector("#learn-wheel-bubbles");
+  const detailHost = root.querySelector("#learn-detail");
+  const modeButtons = [...root.querySelectorAll("[data-mode]")];
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const hubRoot = root.querySelector(".gc-learn-hub");
+  const platformHub = document.getElementById("platform-hub");
+
+  const setHomeworkFocus = (on) => {
+    hubRoot?.classList.toggle("is-playing", on);
+    platformHub?.classList.toggle("is-hw-focus", on);
+    if (on) platformHub?.classList.remove("is-nav-open");
+  };
+
+  const showHome = () => {
+    playHost.hidden = true;
+    playHost.replaceChildren();
+    home.hidden = false;
+    setHomeworkFocus(false);
+  };
+
+  const showPlay = () => {
+    home.hidden = true;
+    playHost.hidden = false;
+    setHomeworkFocus(true);
+  };
+
+  const refreshHome = () => {
+    renderStudentLearning(root, db, uid);
+  };
+
+  const startHomework = async (assignmentId, format, extras = {}) => {
+    if (!playHost || !home) return;
+    showPlay();
+    playHost.innerHTML = `<p class="gc-learn-loading">よみこみ中…</p>`;
+    const backToList = () => {
+      showHome();
+      refreshHome();
+    };
+    try {
+      if (format === "pack-v1") {
+        await playPackHomework(playHost, assignmentId, uid, {
+          onClose: backToList,
+          replay: Boolean(extras.replay),
+        });
+      } else {
+        await playHomework(playHost, assignmentId);
+        const back = document.createElement("button");
+        back.type = "button";
+        back.className = "gc-learn-back";
+        back.textContent = "もどる";
+        back.onclick = backToList;
+        playHost.prepend(back);
+      }
+    } catch (error) {
+      playHost.innerHTML = `
+        <div class="gc-learn-error" role="alert">
+          <p>宿題を開けませんでした。もう一度ためしてみてね。</p>
+          <button type="button" class="gc-learn-retry" id="learn-play-back">もどる</button>
+        </div>`;
+      playHost.querySelector("#learn-play-back")?.addEventListener("click", backToList);
+      console.error("[startHomework]", error);
+    }
+  };
+
+  const wheelState = {
+    mode: learnHubUi.mode,
+    homeworkIndex: Math.min(defaultHwIndex, Math.max(0, homeworkRows.length - 1)),
+    reportIndex: Math.min(defaultReportIndex, Math.max(0, reports.length - 1)),
+    position: 0,
+    metrics: null,
+    dragging: false,
+    dragMoved: false,
+    pointerId: null,
+    dragStartY: 0,
+    dragStartX: 0,
+    dragStartPos: 0,
+    dragTargetIndex: null,
+    suppressClick: false,
+  };
+  wheelState.position = wheelState.mode === "reports" ? wheelState.reportIndex : wheelState.homeworkIndex;
+
+  const ring = root.querySelector("#learn-wheel-ring");
+  const modeHost = root.querySelector("#learn-wheel-mode");
+  const navsHost = root.querySelector("#learn-wheel-navs");
+  const bridge = root.querySelector("#learn-wheel-bridge");
+  const prevBtn = root.querySelector("#learn-wheel-prev");
+  const nextBtn = root.querySelector("#learn-wheel-next");
+
+  const currentItems = () => (wheelState.mode === "reports" ? reports : homeworkRows);
+  const currentIndex = () => Math.round(wheelState.position);
+  const syncIndexFromPosition = () => {
+    const index = Math.max(0, Math.min(Math.max(currentItems().length - 1, 0), currentIndex()));
+    if (wheelState.mode === "reports") wheelState.reportIndex = index;
+    else wheelState.homeworkIndex = index;
+    return index;
+  };
+
+  const computeMetrics = () => {
+    const bounds = wheel.getBoundingClientRect();
+    // Match CSS: stack layout at <=980px.
+    const mobile = window.matchMedia("(max-width: 980px)").matches;
+    const narrow = !mobile && (bounds.width < 360 || window.matchMedia("(max-width: 1200px)").matches);
+    const height = Math.max(bounds.height, mobile ? 200 : (narrow ? 360 : 420));
+    const width = Math.max(bounds.width, mobile ? 200 : 240);
+    const selectedSize = mobile
+      ? Math.min(96, Math.max(78, Math.min(width, height) * 0.26))
+      : narrow
+        ? Math.min(118, Math.max(100, height * 0.16))
+        : Math.min(132, Math.max(118, height * 0.17));
+    const gap = mobile ? 16 : (narrow ? 22 : 28);
+    const radius = mobile
+      ? Math.min(width * 0.62, Math.max(120, height * 0.78))
+      : Math.min(height * (narrow ? 0.46 : 0.5), Math.max(narrow ? 220 : 280, height * (narrow ? 0.44 : 0.48)));
+    // All bubbles stay selectedSize — space them so neighbors don't overlap.
+    const minChord = selectedSize + gap;
+    const step = Math.max(
+      mobile ? 0.38 : 0.36,
+      2 * Math.asin(Math.min(0.9, minChord / (2 * Math.max(radius, 1)))),
+    );
+    // Keep the selected bubble near the right edge of the wheel column,
+    // so it sits close to the details panel.
+    const selectedX = mobile
+      ? width * 0.5
+      : Math.min(width - selectedSize * 0.55 - 12, width * (narrow ? 0.92 : 0.88));
+    const cx = mobile ? width * 0.5 : selectedX - radius;
+    const cy = mobile ? height * 1.12 : height * 0.5;
+    const maxVisible = Math.max(2, Math.floor((mobile ? 0.9 : 1.2) / step));
+    return {
+      mobile,
+      narrow,
+      width,
+      height,
+      radius,
+      cx,
+      cy,
+      step,
+      selectedSize,
+      gap,
+      maxVisible,
+      selectedX: mobile ? width * 0.5 : selectedX,
+      selectedY: mobile ? height * 0.42 : cy,
+    };
+  };
+
+  const layoutBubbles = ({ animate } = {}) => {
+    if (!wheel || !bubblesHost) return;
+    const metrics = computeMetrics();
+    wheelState.metrics = metrics;
+    const nodes = [...bubblesHost.querySelectorAll(".gc-wheel-bubble")];
+    const pos = wheelState.position;
+    const size = metrics.selectedSize;
+    const fontSize = `${Math.max(0.7, Math.min(0.98, size / 118))}rem`;
+    nodes.forEach((node, i) => {
+      const offset = i - pos;
+      const angle = metrics.mobile
+        ? -Math.PI / 2 + offset * metrics.step
+        : offset * metrics.step;
+      const x = metrics.cx + metrics.radius * Math.cos(angle);
+      const y = metrics.cy + metrics.radius * Math.sin(angle);
+      const dist = Math.abs(offset);
+      const visible = dist <= metrics.maxVisible + 0.55;
+      const opacity = !visible ? 0 : Math.max(0.4, 1 - dist * 0.14);
+      if (!animate || reduceMotion) node.style.transition = "none";
+      else node.style.transition = "";
+      node.style.width = `${size}px`;
+      node.style.height = `${size}px`;
+      node.style.fontSize = fontSize;
+      node.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      node.style.opacity = String(opacity);
+      node.style.zIndex = String(Math.round(50 - dist * 10));
+      node.style.pointerEvents = visible ? "auto" : "none";
+      node.classList.toggle("is-active", Math.round(pos) === i);
+      node.setAttribute("aria-current", Math.round(pos) === i ? "true" : "false");
+      node.setAttribute("aria-hidden", visible ? "false" : "true");
+    });
+    if (ring) {
+      const diameter = metrics.radius * 2;
+      ring.style.width = `${diameter}px`;
+      ring.style.height = `${diameter}px`;
+      ring.style.left = `${metrics.cx}px`;
+      ring.style.top = `${metrics.cy}px`;
+      ring.style.transform = "translate(-50%, -50%)";
+    }
+    if (!metrics.mobile) {
+      if (modeHost) {
+        // Sit in the open bowl of the semicircle (near geometric center, still on-screen).
+        const modeX = Math.max(
+          72,
+          Math.min(
+            metrics.selectedX - metrics.selectedSize * 0.95,
+            metrics.cx + metrics.radius * 0.48,
+          ),
+        );
+        modeHost.style.left = `${modeX}px`;
+        modeHost.style.top = `${metrics.cy}px`;
+        modeHost.style.transform = "translate(-50%, -50%)";
+      }
+      if (navsHost) {
+        const navX = metrics.selectedX + metrics.selectedSize * 0.55 + 14;
+        navsHost.style.left = `${navX}px`;
+        navsHost.style.top = `${metrics.selectedY}px`;
+        navsHost.style.right = "auto";
+        navsHost.style.transform = "translateY(-50%)";
+      }
+      if (bridge) {
+        bridge.style.left = `${metrics.selectedX + metrics.selectedSize * 0.48}px`;
+        bridge.style.top = `${metrics.selectedY}px`;
+        bridge.style.width = `${Math.max(48, metrics.width - metrics.selectedX - metrics.selectedSize * 0.48 + 72)}px`;
+      }
+    } else if (navsHost) {
+      navsHost.style.left = "";
+      navsHost.style.top = "";
+      navsHost.style.right = "";
+      navsHost.style.transform = "";
+    }
+    updateNavButtons();
+  };
+
+  const updateNavButtons = () => {
+    const items = currentItems();
+    const index = syncIndexFromPosition();
+    if (prevBtn) prevBtn.disabled = !items.length || index <= 0;
+    if (nextBtn) nextBtn.disabled = !items.length || index >= items.length - 1;
+  };
+
+  const bindDetailActions = () => {
+    detailHost.querySelector("[data-hw]")?.addEventListener("click", (event) => {
+      const button = event.currentTarget;
+      startHomework(button.dataset.hw, button.dataset.format || "", {
+        replay: button.dataset.replay === "1",
+      });
+    });
+    detailHost.querySelector("[data-report-open]")?.addEventListener("click", (event) => {
+      const button = event.currentTarget;
+      const id = button.dataset.reportOpen;
+      const detail = detailHost.querySelector(`#report-detail-${CSS.escape(id)}`);
+      if (!detail) return;
+      const open = detail.hidden;
+      detail.hidden = !open;
+      const label = button.querySelector("span");
+      if (label) label.textContent = open ? "とじる" : "レポートを見る";
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  };
+
+  const renderDetail = () => {
+    const index = syncIndexFromPosition();
+    if (wheelState.mode === "reports") {
+      const item = reports[index] || null;
+      learnHubUi.reportId = item?.id || "";
+      detailHost.innerHTML = reportDetailHtml(item);
+    } else {
+      const row = homeworkRows[index] || null;
+      learnHubUi.homeworkId = row?.assignmentId || "";
+      detailHost.innerHTML = homeworkDetailHtml(row);
+    }
+    writeLearnHubUi(uid);
+    detailHost.classList.remove("is-swap");
+    void detailHost.offsetWidth;
+    detailHost.classList.add("is-swap");
+    bindDetailActions();
+    updateNavButtons();
+  };
+
+  const renderBubbles = () => {
+    if (wheelState.mode === "reports") {
+      bubblesHost.innerHTML = reports.length
+        ? reports.map((item, index) => reportBubbleHtml(item, index)).join("")
+        : "";
+      wheel.setAttribute("aria-label", "レッスンレポートのせんたく");
+      wheelState.position = Math.min(wheelState.reportIndex, Math.max(0, reports.length - 1));
+    } else {
+      bubblesHost.innerHTML = homeworkRows.length
+        ? homeworkRows.map((row, index) => homeworkBubbleHtml(row, index)).join("")
+        : "";
+      wheel.setAttribute("aria-label", "宿題のせんたく");
+      wheelState.position = Math.min(wheelState.homeworkIndex, Math.max(0, homeworkRows.length - 1));
+    }
+    layoutBubbles({ animate: false });
+    bubblesHost.querySelectorAll(".gc-wheel-bubble").forEach((node) => {
+      node.addEventListener("click", (event) => {
+        if (wheelState.suppressClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        const index = Number(node.dataset.wheelIndex);
+        if (Number.isNaN(index) || index === currentIndex()) return;
+        selectIndex(index);
+      });
+    });
+  };
+
+  const updateModeUi = () => {
+    modeButtons.forEach((button) => {
+      const active = button.dataset.mode === wheelState.mode;
+      button.setAttribute("aria-selected", active ? "true" : "false");
+      button.classList.toggle("is-active", active);
+    });
+    root.querySelector(".gc-wheel-stage")?.classList.toggle("is-reports", wheelState.mode === "reports");
+  };
+
+  const selectIndex = (nextIndex, { silent } = {}) => {
+    const items = currentItems();
+    if (!items.length) {
+      wheelState.position = 0;
+      renderDetail();
+      layoutBubbles({ animate: true });
+      return;
+    }
+    const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
+    if (clamped === currentIndex() && Math.abs(wheelState.position - clamped) < 0.02 && !silent) {
+      wheelState.position = clamped;
+      layoutBubbles({ animate: true });
+      return;
+    }
+    wheelState.position = clamped;
+    syncIndexFromPosition();
+    layoutBubbles({ animate: true });
+    renderDetail();
+    const active = bubblesHost.querySelector(".gc-wheel-bubble.is-active");
+    if (active && !reduceMotion) {
+      active.classList.remove("is-pop");
+      void active.offsetWidth;
+      active.classList.add("is-pop");
+    }
+  };
+
+  const step = (delta) => {
+    const items = currentItems();
+    if (!items.length) return;
+    const next = currentIndex() + delta;
+    if (next < 0 || next >= items.length) return;
+    selectIndex(next);
+  };
+
+  const snapToNearest = () => {
+    const items = currentItems();
+    if (!items.length) {
+      wheelState.position = 0;
+      layoutBubbles({ animate: true });
+      renderDetail();
+      return;
+    }
+    const clamped = Math.max(0, Math.min(items.length - 1, Math.round(wheelState.position)));
+    selectIndex(clamped, { silent: true });
+  };
+
+  const setMode = (mode) => {
+    if (mode !== "homework" && mode !== "reports") return;
+    if (mode === wheelState.mode) return;
+    syncIndexFromPosition();
+    wheelState.mode = mode;
+    learnHubUi.mode = mode;
+    writeLearnHubUi(uid);
+    updateModeUi();
+    renderBubbles();
+    renderDetail();
+  };
+
+  const bubbleIndexFromEvent = (event) => {
+    const bubble = event.target?.closest?.(".gc-wheel-bubble");
+    if (!bubble) return null;
+    const index = Number(bubble.dataset.wheelIndex);
+    return Number.isNaN(index) ? null : index;
+  };
+
+  const onPointerDown = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    if (event.target.closest(".gc-wheel-mode, .gc-wheel-nav")) return;
+    if (!currentItems().length) return;
+    wheelState.dragging = true;
+    wheelState.dragMoved = false;
+    wheelState.pointerId = event.pointerId;
+    wheelState.dragStartY = event.clientY;
+    wheelState.dragStartX = event.clientX;
+    wheelState.dragStartPos = wheelState.position;
+    wheelState.dragTargetIndex = bubbleIndexFromEvent(event);
+    wheel.classList.add("is-dragging");
+  };
+
+  const onPointerMove = (event) => {
+    if (!wheelState.dragging || event.pointerId !== wheelState.pointerId) return;
+    const metrics = wheelState.metrics || computeMetrics();
+    const dy = event.clientY - wheelState.dragStartY;
+    const dx = event.clientX - wheelState.dragStartX;
+    if (!wheelState.dragMoved && Math.hypot(dx, dy) > 8) {
+      wheelState.dragMoved = true;
+      try { wheel.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+    }
+    if (!wheelState.dragMoved) return;
+    event.preventDefault();
+    const items = currentItems();
+    const max = Math.max(items.length - 1, 0);
+    // Drag up → next items (lower on arc move toward focus); invert prior mapping.
+    const deltaPos = metrics.mobile
+      ? -dx / Math.max(metrics.radius * metrics.step, 1)
+      : -dy / Math.max(metrics.radius * metrics.step, 1);
+    let next = wheelState.dragStartPos + deltaPos;
+    if (next < 0) next = next * 0.25;
+    if (next > max) next = max + (next - max) * 0.25;
+    wheelState.position = next;
+    layoutBubbles({ animate: false });
+  };
+
+  const onPointerUp = (event) => {
+    if (!wheelState.dragging || event.pointerId !== wheelState.pointerId) return;
+    wheelState.dragging = false;
+    wheel.classList.remove("is-dragging");
+    try { wheel.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
+    if (wheelState.dragMoved) {
+      wheelState.suppressClick = true;
+      window.setTimeout(() => { wheelState.suppressClick = false; }, 40);
+      snapToNearest();
+    } else {
+      const index = wheelState.dragTargetIndex ?? bubbleIndexFromEvent(event);
+      if (index != null && index !== currentIndex()) {
+        selectIndex(index);
+      }
+    }
+    wheelState.pointerId = null;
+    wheelState.dragTargetIndex = null;
+  };
+
+  updateModeUi();
+  renderBubbles();
+  renderDetail();
+
+  modeButtons.forEach((button) => {
+    button.addEventListener("click", () => setMode(button.dataset.mode));
+  });
+  prevBtn?.addEventListener("click", () => step(-1));
+  nextBtn?.addEventListener("click", () => step(1));
+
+  wheel?.addEventListener("pointerdown", onPointerDown);
+  wheel?.addEventListener("pointermove", onPointerMove);
+  wheel?.addEventListener("pointerup", onPointerUp);
+  wheel?.addEventListener("pointercancel", onPointerUp);
+
+  wheel?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      step(1);
+    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      step(-1);
+    } else if (event.key === "Enter" || event.key === " ") {
+      const cta = detailHost.querySelector(".gc-wheel-cta");
+      if (cta) {
+        event.preventDefault();
+        cta.click();
+      }
+    }
+  });
+
+  const onResize = () => layoutBubbles({ animate: false });
+  const observer = typeof ResizeObserver === "function"
+    ? new ResizeObserver(() => onResize())
+    : null;
+  observer?.observe(wheel);
+  window.addEventListener("resize", onResize, { passive: true });
+  root._learnWheelCleanup = () => {
+    observer?.disconnect();
+    window.removeEventListener("resize", onResize);
+  };
+}
+
 
 export async function renderSchoolPanel(root, action) {
   root._stopQuiz?.();
@@ -973,6 +2299,7 @@ export async function renderSchoolPanel(root, action) {
   root._stopAttendance?.();
   root._stopAttendance = null;
   root._confirmLeave = null;
+  document.getElementById("platform-hub")?.classList.remove("is-hw-focus");
   root.hidden = false;
   const db = getFirestore();
   const uid = getAuth().currentUser.uid;
@@ -1005,7 +2332,7 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib85");
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib129");
     const openHub = ({ landing = false } = {}) => {
       root._stopAttendance?.();
       return mountHomeworkHub(root, {
@@ -1787,16 +3114,20 @@ function renderQuiz(root, { host, uid }) {
   }
 }
 
-async function playPackHomework(root, assignmentId, uid) {
-  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib85");
+async function playPackHomework(root, assignmentId, uid, extras = {}) {
+  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib129");
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
   const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));
+  if (!snap.exists()) throw new Error("宿題が見つかりません。");
   const questions = snap.data()?.questions || [];
   await mountHomeworkPlayer(root, {
     title: snap.data()?.title || "しゅくだい",
     questions,
     db,
+    replay: Boolean(extras.replay),
+    // Students play teacher-shared clips only (no on-device Gemini remake).
+    generateVoice: false,
     loadProgress: async () => (await getDoc(doc(db, "homeworkProgress", `${assignmentId}_${uid}`))).data(),
     grade: (id, payload) => callFunction("submitHomework", {
       assignmentId,
@@ -1809,7 +3140,8 @@ async function playPackHomework(root, assignmentId, uid) {
     }),
     finish: () => callFunction("finishHomework", { assignmentId }),
     onClose: () => {
-      root.replaceChildren();
+      if (typeof extras.onClose === "function") extras.onClose();
+      else root.replaceChildren();
     },
   });
 }

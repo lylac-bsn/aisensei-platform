@@ -4,7 +4,7 @@ import {
   playHomeworkVoice,
   prepareHomeworkVoice,
   stopHomeworkVoice,
-} from "./homework-voice-bank.js?v=20261030-hw-lib85";
+} from "./homework-voice-bank.js?v=20261030-hw-lib129";
 
 let active = null;
 let playToken = 0;
@@ -43,8 +43,11 @@ export async function playPrompt(text, _lang, options = {}) {
   if (await playLearnyClip(spoken)) return "learny";
   if (token !== playToken) return "none";
 
-  // Always synthesize missing lines with Gemini Live — same human voice as Learny.
-  if (options.generate === false) return "none";
+  // Prefer shared teacher clips. Only synthesize when generation is allowed.
+  if (options.generate === false) {
+    console.warn("[homework-audio] shared clip missing", spoken);
+    return "none";
+  }
   try {
     await prepareHomeworkVoice([spoken], { db, force: false });
   } catch (error) {

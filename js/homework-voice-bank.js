@@ -209,6 +209,68 @@ async function loadRemote(db, key) {
   }
 }
 
+async function remoteExists(db, key) {
+  if (!db) return false;
+  try {
+    const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
+    const snap = await getDoc(doc(db, "homeworkVoice", await clipId(key)));
+    return Boolean(snap.exists() && snap.data()?.pcm);
+  } catch (error) {
+    console.warn("homework voice: remote exists check failed", key, error?.code || error?.message || error);
+    return false;
+  }
+}
+
+/**
+ * Upload any locally-cached clips that are missing from Firestore.
+ * Teachers often confirm audio from IndexedDB; without this sync, students
+ * never receive those clips and playback fails on their devices.
+ */
+export async function syncHomeworkVoiceRemote(texts, db) {
+  if (!db) return { synced: 0, missing: [], failed: [] };
+  const items = uniqueLines(texts);
+  let synced = 0;
+  const missing = [];
+  const failed = [];
+  for (const item of items) {
+    try {
+      let samples = memory.get(item.key) || null;
+      if (!longEnough(samples)) {
+        const local = await idbGet(item.key);
+        if (longEnough(local)) samples = remember(item.key, local);
+      }
+      if (!longEnough(samples)) {
+        const remote = await loadRemote(db, item.key);
+        if (longEnough(remote)) {
+          samples = remember(item.key, remote);
+          synced += 1;
+          continue;
+        }
+        missing.push(item.text);
+        continue;
+      }
+      if (await remoteExists(db, item.key)) {
+        synced += 1;
+        continue;
+      }
+      if (await saveRemote(db, item.key, samples, item.text)) synced += 1;
+      else failed.push(item.text);
+    } catch (error) {
+      console.warn("homework voice: sync failed", item.text, error);
+      failed.push(item.text);
+    }
+  }
+  console.info("[homework voice] sync remote", {
+    total: items.length,
+    synced,
+    missing: missing.length,
+    failed: failed.length,
+    failedLines: failed,
+    missingLines: missing,
+  });
+  return { synced, missing, failed };
+}
+
 /**
  * Shared clip bank: one doc per spoken line (hash id) in `homeworkVoice`.
  * Any signed-in teacher/student can reuse the same clip — no re-generation credit.
@@ -255,8 +317,9 @@ async function loadClip(key, db) {
   if (memory.has(key)) return memory.get(key);
   const local = await idbGet(key);
   if (longEnough(local)) return remember(key, local);
+  // Prefer a valid remote clip when local is missing or too short/corrupt.
   const remote = await loadRemote(db, key);
-  if (remote?.length) {
+  if (longEnough(remote)) {
     await idbPut(key, remote);
     return remember(key, remote);
   }
@@ -523,7 +586,6 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     });
   };
   report(cached, 0);
-  if (!missing.length) return { total: items.length, failed: [], cached, shared: 0, missingLines: [] };
   const failed = [];
   let shared = 0;
   let cursor = 0;
@@ -549,14 +611,25 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
       report(cached + makingDone, makingDone);
     }
   }
-  const workers = Math.min(2, missing.length);
-  await Promise.all(Array.from({ length: workers }, () => worker()));
+  if (missing.length) {
+    const workers = Math.min(2, missing.length);
+    await Promise.all(Array.from({ length: workers }, () => worker()));
+  }
+  // Cached local-only clips must still be published for students.
+  const sync = await syncHomeworkVoiceRemote(items.map((item) => item.text), db);
+  shared = Math.max(shared, sync.synced);
+  if (sync.failed.length) {
+    sync.failed.forEach((line) => {
+      if (!failed.includes(line)) failed.push(line);
+    });
+  }
   console.info("[homework voice] done", {
     total: items.length,
     cached,
-    made: missing.length - failed.length,
+    made: Math.max(0, missing.length - failed.length),
     failed: failed.length,
     shared,
+    syncMissing: sync.missing.length,
     failedLines: failed,
   });
   return {
@@ -565,5 +638,7 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     cached,
     shared,
     missingLines: missing.map((item) => item.text),
+    syncFailed: sync.failed,
+    syncMissing: sync.missing,
   };
 }

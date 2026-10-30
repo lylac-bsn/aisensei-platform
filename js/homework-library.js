@@ -1,7 +1,7 @@
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { generateHomework } from "./homework-engine.js?v=20261030-hw-lib85";
+import { generateHomework } from "./homework-engine.js?v=20261030-hw-lib129";
 
-const CACHE = "20261030-hw-lib85";
+const CACHE = "20261030-hw-lib129";
 const RESUME_KEY = "gc-hw-resume";
 const HUB_ACTION_KEY = "gc-hub-action";
 
@@ -241,7 +241,7 @@ export async function mountHomeworkHub(root, options) {
     : (resumeView === "library" || resumeView === "assign" || resumeView === "studio"
       ? "library"
       : "landing");
-  const startTab = ["all", "official", "mine"].includes(options.initialTab)
+  const startTab = ["all", "official", "mine", "sent"].includes(options.initialTab)
     ? options.initialTab
     : "all";
   const state = {
@@ -257,6 +257,12 @@ export async function mountHomeworkHub(root, options) {
     loadError: "",
     classes: [],
     classStudents: {},
+    sentItems: [],
+    sentClasses: [],
+    sentClassFilter: "all",
+    sentDetail: null,
+    sentLoading: false,
+    sentError: "",
   };
 
   const hub = document.createElement("div");
@@ -285,10 +291,16 @@ export async function mountHomeworkHub(root, options) {
       await bindAssign(state.selected);
       return;
     }
+    if (state.view === "sent-detail" && state.sentDetail?.assignment?.id) {
+      rememberView("library");
+      hub.innerHTML = sentDetailHtml(state.sentDetail);
+      bindSentDetail();
+      return;
+    }
     rememberView("library");
     hub.innerHTML = libraryHtml();
     bindLibrary();
-    await refreshLibrary();
+    await Promise.all([refreshLibrary(), refreshSent({ quiet: true })]);
   };
 
   function landingHtml() {
@@ -317,7 +329,12 @@ export async function mountHomeworkHub(root, options) {
     const all = state.items.filter((item) => item.official || item.teacherId === options.uid || item.published);
     const official = state.items.filter((item) => item.official);
     const mine = state.items.filter((item) => !item.official && item.teacherId === options.uid);
-    return { all: all.length, official: official.length, mine: mine.length };
+    return {
+      all: all.length,
+      official: official.length,
+      mine: mine.length,
+      sent: state.sentItems.length,
+    };
   }
 
   function libraryHtml() {
@@ -376,9 +393,22 @@ export async function mountHomeworkHub(root, options) {
           <button type="button" class="hw-lib-tab${state.tab === "all" ? " is-current" : ""}" data-tab="all" role="tab">すべて <em>${counts.all}</em></button>
           <button type="button" class="hw-lib-tab${state.tab === "official" ? " is-current" : ""}" data-tab="official" role="tab">公式テンプレート <em>${counts.official}</em></button>
           <button type="button" class="hw-lib-tab${state.tab === "mine" ? " is-current" : ""}" data-tab="mine" role="tab">マイライブラリ <em>${counts.mine}</em></button>
+          <button type="button" class="hw-lib-tab${state.tab === "sent" ? " is-current" : ""}" data-tab="sent" role="tab">送信済み <em>${counts.sent}</em></button>
+        </div>
+        <div class="hw-sent-toolbar" id="hw-sent-toolbar" ${state.tab === "sent" ? "" : "hidden"}>
+          <label class="hw-lib-filter">
+            <span class="visually-hidden">クラス</span>
+            <select id="hw-sent-class" aria-label="クラスで絞り込み">
+              <option value="all">すべてのクラス</option>
+              ${state.sentClasses.map((row) => `
+                <option value="${escapeHtml(row.id)}"${state.sentClassFilter === row.id ? " selected" : ""}>${escapeHtml(row.title)}</option>
+              `).join("")}
+            </select>
+          </label>
+          <p class="hw-sent-hint">クラスごとの送信済み宿題と、生徒の正誤・進捗を確認できます。</p>
         </div>
         <div id="hw-lib-banner" class="hw-lib-banner" hidden></div>
-        <div id="hw-lib-grid" class="hw-lib-grid" aria-live="polite"></div>
+        <div id="hw-lib-grid" class="hw-lib-grid${state.tab === "sent" ? " is-sent" : ""}" aria-live="polite"></div>
         <p id="hw-lib-status" class="hw-lib-status" hidden></p>
         <div id="hw-lib-preview" class="hw-lib-preview" hidden></div>
       </div>`;
@@ -454,12 +484,22 @@ export async function mountHomeworkHub(root, options) {
     });
     hub.querySelector('[data-lib="create"]').onclick = () => openCreate();
     hub.querySelectorAll("[data-tab]").forEach((btn) => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         state.tab = btn.dataset.tab || "all";
         updateTabs();
-        paintLibraryGrid();
+        syncSentToolbar();
+        if (state.tab === "sent") await refreshSent();
+        else paintLibraryGrid();
       };
     });
+    const sentClass = hub.querySelector("#hw-sent-class");
+    if (sentClass) {
+      sentClass.value = state.sentClassFilter;
+      sentClass.onchange = () => {
+        state.sentClassFilter = sentClass.value || "all";
+        paintLibraryGrid();
+      };
+    }
     const search = hub.querySelector("#hw-lib-q");
     const clear = hub.querySelector("#hw-lib-clear");
     search.value = state.query;
@@ -525,12 +565,15 @@ export async function mountHomeworkHub(root, options) {
         <p>${escapeHtml(message)}</p>
         ${retry ? `<button type="button" class="hw-lib-banner-retry" id="hw-lib-retry">再読み込み</button>` : ""}
       </div>`;
-    banner.querySelector("#hw-lib-retry")?.addEventListener("click", () => refreshLibrary());
+    banner.querySelector("#hw-lib-retry")?.addEventListener("click", () => {
+      if (state.tab === "sent") refreshSent();
+      else refreshLibrary();
+    });
   }
 
   async function refreshLibrary() {
     const grid = hub.querySelector("#hw-lib-grid");
-    if (grid) grid.innerHTML = skeletonHtml();
+    if (grid && state.tab !== "sent") grid.innerHTML = skeletonHtml();
     showBanner("");
     state.loadError = "";
     try {
@@ -538,13 +581,58 @@ export async function mountHomeworkHub(root, options) {
       const mineAndShared = Array.isArray(remote.items) ? remote.items : [];
       state.items = [...officialCards(), ...mineAndShared];
       updateTabs();
-      paintLibraryGrid();
+      if (state.tab !== "sent") paintLibraryGrid();
     } catch (error) {
       state.loadError = friendlyLoadError(error);
       state.items = officialCards();
       updateTabs();
-      paintLibraryGrid();
-      showBanner(state.loadError, { retry: true });
+      if (state.tab !== "sent") {
+        paintLibraryGrid();
+        showBanner(state.loadError, { retry: true });
+      }
+    }
+  }
+
+  function syncSentToolbar() {
+    const toolbar = hub.querySelector("#hw-sent-toolbar");
+    const grid = hub.querySelector("#hw-lib-grid");
+    if (toolbar) toolbar.hidden = state.tab !== "sent";
+    if (grid) grid.classList.toggle("is-sent", state.tab === "sent");
+    const select = hub.querySelector("#hw-sent-class");
+    if (select) {
+      const current = state.sentClassFilter;
+      select.innerHTML = `
+        <option value="all">すべてのクラス</option>
+        ${state.sentClasses.map((row) => `
+          <option value="${escapeHtml(row.id)}">${escapeHtml(row.title)}</option>
+        `).join("")}`;
+      select.value = state.sentClasses.some((row) => row.id === current) ? current : "all";
+      state.sentClassFilter = select.value;
+    }
+  }
+
+  async function refreshSent({ quiet = false } = {}) {
+    if (!quiet && state.tab === "sent") {
+      const grid = hub.querySelector("#hw-lib-grid");
+      if (grid) grid.innerHTML = skeletonHtml();
+    }
+    state.sentLoading = true;
+    state.sentError = "";
+    try {
+      const remote = await options.callFunction("listSentHomework", {});
+      state.sentItems = Array.isArray(remote.items) ? remote.items : [];
+      state.sentClasses = Array.isArray(remote.classes) ? remote.classes : [];
+      updateTabs();
+      syncSentToolbar();
+      if (state.tab === "sent") paintLibraryGrid();
+    } catch (error) {
+      state.sentError = friendlyLoadError(error);
+      if (!quiet && state.tab === "sent") {
+        showBanner(state.sentError, { retry: true });
+        paintLibraryGrid();
+      }
+    } finally {
+      state.sentLoading = false;
     }
   }
 
@@ -572,7 +660,33 @@ export async function mountHomeworkHub(root, options) {
     return rows;
   }
 
+  function filteredSentItems() {
+    const q = state.query.toLowerCase();
+    let rows = state.sentItems.filter((item) => {
+      if (state.sentClassFilter !== "all" && !(item.classIds || []).includes(state.sentClassFilter)) return false;
+      if (state.level !== "all" && item.level !== state.level) return false;
+      if (!q) return true;
+      const hay = `${item.title} ${(item.classNames || []).join(" ")}`.toLowerCase();
+      return hay.includes(q);
+    });
+    if (state.sort === "alpha") {
+      rows = [...rows].sort((a, b) => String(a.title).localeCompare(String(b.title), "ja"));
+    } else {
+      rows = [...rows].sort((a, b) => (b.createdAt || b.updatedAt || 0) - (a.createdAt || a.updatedAt || 0));
+    }
+    return rows;
+  }
+
   function emptyHtml() {
+    if (state.tab === "sent") {
+      const filtering = Boolean(state.query || state.sentClassFilter !== "all" || state.level !== "all");
+      return `
+        <div class="hw-lib-empty-state">
+          <div class="hw-lib-empty-art" aria-hidden="true">${THEME_ART.default.svg}</div>
+          <h3>${filtering ? "条件に合う送信済み宿題がありません" : "まだ送信した宿題がありません"}</h3>
+          <p>${filtering ? "クラスや検索条件を変えてみてください。" : "ライブラリから宿題を配信すると、ここに結果が集まります。"}</p>
+        </div>`;
+    }
     const searching = Boolean(state.query || state.level !== "all" || state.type !== "all");
     if (searching) {
       return `
@@ -600,10 +714,93 @@ export async function mountHomeworkHub(root, options) {
       </div>`;
   }
 
+  function formatSentDate(ms) {
+    if (!ms) return "";
+    try {
+      return new Date(ms).toLocaleDateString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  function formatDueShort(dueOn) {
+    if (!dueOn) return "期日なし";
+    try {
+      return `${new Date(`${dueOn}T12:00:00+09:00`).toLocaleDateString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+        month: "short",
+        day: "numeric",
+      })}まで`;
+    } catch {
+      return dueOn;
+    }
+  }
+
+  function sentCardHtml(item) {
+    const classes = (item.classNames || []).join("・") || "クラス未設定";
+    const sentOn = formatSentDate(item.createdAt || item.updatedAt);
+    return `
+      <article class="hw-sent-card" data-sent-open="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る">
+        <div class="hw-sent-card-top">
+          <span class="hw-lib-badge is-level-${escapeHtml(item.level || "beginner")}">${escapeHtml(LEVEL_LABEL[item.level] || item.level || "Beginner")}</span>
+          <small>${escapeHtml(sentOn ? `${sentOn} 配信` : "配信済み")}</small>
+        </div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <p class="hw-sent-card-classes">${escapeHtml(classes)}</p>
+        <div class="hw-sent-card-stats">
+          <span>${ICONS.person}<em>${item.assigneeCount || 0}人</em></span>
+          <span>${ICONS.book}<em>${item.questionCount || 0}問</em></span>
+          <span><em>${escapeHtml(formatDueShort(item.dueOn))}</em></span>
+        </div>
+        <div class="hw-sent-card-actions">
+          <button type="button" class="hw-lib-use" data-sent-open="${escapeHtml(item.id)}">進捗・分析を見る →</button>
+          <button type="button" class="hw-sent-delete" data-sent-del="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)}を削除">削除</button>
+        </div>
+      </article>`;
+  }
+
   function paintLibraryGrid() {
     const grid = hub.querySelector("#hw-lib-grid");
     if (!grid) return;
     closeMenus();
+    syncSentToolbar();
+    if (state.tab === "sent") {
+      const items = filteredSentItems();
+      if (!items.length) {
+        grid.innerHTML = emptyHtml();
+        return;
+      }
+      grid.innerHTML = items.map((item) => sentCardHtml(item)).join("");
+      grid.querySelectorAll("[data-sent-open]").forEach((node) => {
+        const open = () => openSentDetail(node.dataset.sentOpen);
+        if (node.tagName === "BUTTON") node.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          open();
+        };
+        else {
+          node.onclick = open;
+          node.onkeydown = (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              open();
+            }
+          };
+        }
+      });
+      grid.querySelectorAll("[data-sent-del]").forEach((btn) => {
+        btn.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteSentItem(btn.dataset.sentDel);
+        };
+      });
+      return;
+    }
     const items = filteredItems();
     if (!items.length) {
       grid.innerHTML = emptyHtml();
@@ -626,6 +823,197 @@ export async function mountHomeworkHub(root, options) {
     }
     grid.innerHTML = items.map((item) => cardHtml(item)).join("");
     bindCardActions(grid);
+  }
+
+  function statusLabel(status) {
+    if (status === "completed") return "完了";
+    if (status === "in_progress") return "進行中";
+    return "未着手";
+  }
+
+  function typeLabel(type) {
+    return QUESTION_TYPE_LABEL[type] || type || "問題";
+  }
+
+  function formatDuration(ms) {
+    const total = Math.max(0, Math.round(Number(ms) / 1000));
+    if (!total) return "—";
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    if (minutes < 1) return `${seconds}秒`;
+    if (minutes < 60) return `${minutes}分`;
+    return `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
+  }
+
+  async function openSentDetail(id) {
+    if (!id) return;
+    state.view = "sent-detail";
+    hub.innerHTML = `
+      <div class="hw-lib hw-sent-detail">
+        <p class="hw-lib-status is-loading">進捗を読み込み中…</p>
+      </div>`;
+    try {
+      const detail = await options.callFunction("getSentHomeworkDetail", { id });
+      state.sentDetail = detail;
+      hub.innerHTML = sentDetailHtml(detail);
+      bindSentDetail();
+    } catch (error) {
+      state.view = "library";
+      state.tab = "sent";
+      hub.innerHTML = libraryHtml();
+      bindLibrary();
+      await refreshSent();
+      showBanner(friendlyLoadError(error), { retry: true });
+      setLibStatus("送信済み宿題の詳細を開けませんでした。");
+    }
+  }
+
+  function sentDetailHtml(detail) {
+    const assignment = detail.assignment || {};
+    const summary = detail.summary || {};
+    const students = Array.isArray(detail.students) ? detail.students : [];
+    const questions = Array.isArray(detail.questions) ? detail.questions : [];
+    const classes = (assignment.classNames || []).join("・") || "クラス未設定";
+    return `
+      <div class="hw-lib hw-sent-detail">
+        <nav class="hw-lib-crumb" aria-label="パンくず">
+          <button type="button" class="hw-lib-crumb-link" data-sent-back>送信済み</button>
+          <span aria-hidden="true">/</span>
+          <span>進捗・分析</span>
+        </nav>
+        <header class="hw-lib-hero hw-lib-hero-compact">
+          <div class="hw-lib-hero-copy">
+            <h2>${escapeHtml(assignment.title || "宿題")}</h2>
+            <p>${escapeHtml(classes)} · ${escapeHtml(formatDueShort(assignment.dueOn))} · ${assignment.questionCount || 0}問</p>
+          </div>
+          <div class="hw-sent-detail-actions">
+            <button type="button" class="hw-quiet" data-sent-back>一覧にもどる</button>
+            <button type="button" class="hw-sent-delete is-solid" data-sent-del="${escapeHtml(assignment.id || "")}">この配信を削除</button>
+          </div>
+        </header>
+        <section class="hw-sent-summary" aria-label="まとめ">
+          <article><strong>${summary.assigneeCount || 0}</strong><span>配信人数</span></article>
+          <article><strong>${summary.completedCount || 0}</strong><span>完了</span></article>
+          <article><strong>${summary.startedCount || 0}</strong><span>着手</span></article>
+          <article><strong>${summary.avgPercent || 0}%</strong><span>平均正答率</span></article>
+        </section>
+        <section class="hw-sent-panel">
+          <div class="hw-sent-panel-head">
+            <h3>生徒の進捗</h3>
+            <p>名前を開くと、問題ごとの正誤が確認できます。</p>
+          </div>
+          <div class="hw-sent-students">
+            ${students.length ? students.map((student) => `
+              <details class="hw-sent-student tone-${escapeHtml(student.status)}">
+                <summary>
+                  <span class="hw-sent-student-name">${escapeHtml(student.name)}</span>
+                  <span class="hw-sent-student-status">${escapeHtml(statusLabel(student.status))}</span>
+                  <span class="hw-sent-student-score">${student.correctCount || 0}/${student.total || 0}</span>
+                  <span class="hw-sent-student-bar" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, student.percent || 0))}%"></i></span>
+                  <span class="hw-sent-student-pct">${student.percent || 0}%</span>
+                </summary>
+                <div class="hw-sent-student-body">
+                  <p class="hw-sent-student-meta">学習時間 ${escapeHtml(formatDuration(student.timeSpentMs))}${student.struggleVocab?.length ? ` · 苦戦単語: ${escapeHtml(student.struggleVocab.join(", "))}` : ""}</p>
+                  <ul class="hw-sent-attempt-list">
+                    ${(student.attempts || []).map((attempt) => `
+                      <li class="${attempt.tried ? (attempt.correct ? "is-ok" : "is-ng") : "is-pending"}">
+                        <span class="hw-sent-attempt-mark" aria-hidden="true">${attempt.tried ? (attempt.correct ? "○" : "×") : "–"}</span>
+                        <span class="hw-sent-attempt-main">
+                          <strong>${escapeHtml(typeLabel(attempt.type))}</strong>
+                          <small>${escapeHtml(attempt.prompt || "（問題文なし）")}</small>
+                        </span>
+                        <span class="hw-sent-attempt-side">
+                          ${attempt.tried
+                            ? `${attempt.firstCorrect === false ? "初回ミス · " : ""}${attempt.tries || 0}回`
+                            : "未回答"}
+                        </span>
+                      </li>
+                    `).join("")}
+                  </ul>
+                </div>
+              </details>
+            `).join("") : `<p class="hw-sent-empty">この宿題に割り当てられた生徒がいません。</p>`}
+          </div>
+        </section>
+        <section class="hw-sent-panel">
+          <div class="hw-sent-panel-head">
+            <h3>問題別の正誤分析</h3>
+            <p>どの問題でつまずいているかを確認できます。</p>
+          </div>
+          <div class="hw-sent-questions">
+            ${questions.length ? `
+              <div class="hw-sent-q-table" role="table" aria-label="問題別分析">
+                <div class="hw-sent-q-row is-head" role="row">
+                  <span role="columnheader">問題</span>
+                  <span role="columnheader">正答</span>
+                  <span role="columnheader">誤答</span>
+                  <span role="columnheader">正答率</span>
+                  <span role="columnheader">初回正解</span>
+                </div>
+                ${questions.map((question) => `
+                  <div class="hw-sent-q-row" role="row">
+                    <span class="hw-sent-q-prompt" role="cell">
+                      <strong>${escapeHtml(typeLabel(question.type))}</strong>
+                      <small>${escapeHtml(question.prompt || "（問題文なし）")}</small>
+                      ${question.struggles ? `<em class="hw-sent-q-warn">苦戦 ${question.struggles}人</em>` : ""}
+                    </span>
+                    <span role="cell">${question.correct || 0}</span>
+                    <span role="cell">${question.incorrect || 0}</span>
+                    <span role="cell">${question.correctRate == null ? "—" : `${question.correctRate}%`}</span>
+                    <span role="cell">${question.firstCorrectRate == null ? "—" : `${question.firstCorrectRate}%`}</span>
+                  </div>
+                `).join("")}
+              </div>
+            ` : `<p class="hw-sent-empty">問題データがありません。</p>`}
+          </div>
+        </section>
+      </div>`;
+  }
+
+  async function backToSentList() {
+    state.view = "library";
+    state.tab = "sent";
+    state.sentDetail = null;
+    hub.innerHTML = libraryHtml();
+    bindLibrary();
+    updateTabs();
+    syncSentToolbar();
+    paintLibraryGrid();
+    if (!state.sentItems.length) await refreshSent();
+  }
+
+  function bindSentDetail() {
+    hub.querySelectorAll("[data-sent-back]").forEach((btn) => {
+      btn.onclick = () => { backToSentList(); };
+    });
+    hub.querySelectorAll("[data-sent-del]").forEach((btn) => {
+      btn.onclick = () => deleteSentItem(btn.dataset.sentDel, { fromDetail: true });
+    });
+  }
+
+  async function deleteSentItem(id, { fromDetail = false } = {}) {
+    if (!id) return;
+    const item = state.sentItems.find((row) => row.id === id);
+    const title = item?.title || state.sentDetail?.assignment?.title || "この宿題";
+    const people = item?.assigneeCount || state.sentDetail?.summary?.assigneeCount || 0;
+    const ok = window.confirm(
+      `「${title}」の配信を削除しますか？\n\n生徒側の宿題と進捗も消えます${people ? `（${people}人分）` : ""}。この操作は取り消せません。`
+    );
+    if (!ok) return;
+    try {
+      await options.callFunction("deleteHomeworkPack", { id });
+      state.sentItems = state.sentItems.filter((row) => row.id !== id);
+      state.sentDetail = null;
+      updateTabs();
+      if (fromDetail || state.view === "sent-detail") {
+        await backToSentList();
+      } else {
+        paintLibraryGrid();
+      }
+      setLibStatus("送信済み宿題を削除しました。", "ok");
+    } catch (error) {
+      setLibStatus(error.message || "削除できませんでした。");
+    }
   }
 
   function bindCardActions(grid) {

@@ -7,11 +7,11 @@ import {
   updateQuestion,
   gradeAnswer,
   toPublic,
-} from "./homework-engine.js?v=20261030-hw-lib85";
-import { mountHomeworkPlayer } from "./homework-play.js?v=20261030-hw-lib85";
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib85";
-import { hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice } from "./homework-voice-bank.js?v=20261030-hw-lib85";
-import { cacheKey, RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib85";
+} from "./homework-engine.js?v=20261030-hw-lib129";
+import { mountHomeworkPlayer } from "./homework-play.js?v=20261030-hw-lib129";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib129";
+import { hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261030-hw-lib129";
+import { cacheKey, RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib129";
 
 const SAMPLE = [
   ["さかな", "Fish"],
@@ -90,6 +90,7 @@ export async function mountTeacherHomework(root, options) {
   root.replaceChildren();
   const studio = document.createElement("div");
   const stage = document.createElement("div");
+  stage.className = "hw-play-stage";
   stage.hidden = true;
   root.append(studio, stage);
 
@@ -776,9 +777,12 @@ export async function mountTeacherHomework(root, options) {
       });
       const made = voice.total - voice.failed.length;
       const newlyMade = Math.max(0, (voice.missingLines?.length || 0) - voice.failed.length);
-      if (voice.failed.length) {
-        state.audioReady = made > 0;
-        const line = `音声は ${made} / ${voice.total} できました（新規 ${newlyMade}・再利用 ${voice.cached}・共有保存 ${voice.shared || 0}）。足りない音声は問題を開いて1つずつ作り直してください。`;
+      if (voice.failed.length || voice.syncFailed?.length || voice.syncMissing?.length) {
+        state.audioReady = made > 0 && !(voice.syncFailed?.length || voice.syncMissing?.length);
+        const shareFail = (voice.syncFailed?.length || 0) + (voice.syncMissing?.length || 0);
+        const line = shareFail
+          ? `音声の共有保存に問題があります（未共有 ${shareFail}件 / 共有 ${voice.shared || 0}件）。もう一度「確認完了」を押すか、問題を開いて作り直してください。`
+          : `音声は ${made} / ${voice.total} できました（新規 ${newlyMade}・再利用 ${voice.cached}・共有保存 ${voice.shared || 0}）。足りない音声は問題を開いて1つずつ作り直してください。`;
         setVoiceWait("", "");
         setStatus("bad", line);
       } else {
@@ -793,7 +797,7 @@ export async function mountTeacherHomework(root, options) {
           audioReviewed.set(question.id, voiceKeyFor(question));
         });
         if (!force) acceptReusableRetryLines();
-        const line = `音声が表示されました（${voice.total}件）。`;
+        const line = `音声が表示されました（${voice.total}件・共有保存 ${voice.shared || 0}件）。`;
         setVoiceWait("", "");
         setStatus("ok", line);
       }
@@ -2539,6 +2543,17 @@ export async function mountTeacherHomework(root, options) {
         // Always keep a My Library copy, then send a separate assigned copy to the class.
         if (!creationComplete()) {
           setStatus("bad", assignBlockReason());
+          return;
+        }
+        // Teacher confirmation often uses local IndexedDB. Re-publish clips so students can load them.
+        setStatus("ok", "音声を生徒と共有しています…");
+        const voiceLines = [...linesForQuestions(state.questions), ...RETRY_LINES];
+        const sync = await syncHomeworkVoiceRemote(voiceLines, options.db);
+        if (sync.missing.length || sync.failed.length) {
+          setStatus(
+            "bad",
+            `音声の共有に失敗しました（未共有 ${(sync.missing.length || 0) + (sync.failed.length || 0)}件）。「確認完了」でもう一度音声を用意してから送ってください。`,
+          );
           return;
         }
         const template = await options.callFunction("saveHomeworkPack", {
