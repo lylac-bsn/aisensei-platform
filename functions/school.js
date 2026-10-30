@@ -252,31 +252,39 @@ exports.publishHomework = onCall({ region: REGION }, async (request) => {
     assigneeIds: presentIds,
     createdAt: FieldValue.serverTimestamp(),
   });
-  for (const studentId of presentIds) {
-    await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
-      assignmentId: ref.id,
-      title,
-      teacherId: user.uid,
-      activityCount: activities.length,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    await inbox(studentId, {
-      type: "homework",
-      title: "あたらしい しゅくだい",
-      body: title,
-      assignmentId: ref.id,
-    });
-    const student = await db().collection("users").doc(studentId).get();
-    const parents = student.data()?.linkedParentIds || [];
-    for (const parentId of parents) {
-      if (!parentId || parentId === studentId) continue;
-      await inbox(parentId, {
+  {
+    const teacherName = clean(user.displayName, 40) || "先生";
+    const classNames = await classTitlesFor([classId]);
+    const className = classNames.join("・");
+    for (const studentId of presentIds) {
+      await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
+        assignmentId: ref.id,
+        title,
+        teacherId: user.uid,
+        teacherName,
+        classIds: [classId],
+        className,
+        activityCount: activities.length,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      await inbox(studentId, {
         type: "homework",
         title: "あたらしい しゅくだい",
-        body: `${student.data()?.displayName || "生徒"} · ${title}`,
+        body: title,
         assignmentId: ref.id,
-        studentId,
       });
+      const student = await db().collection("users").doc(studentId).get();
+      const parents = student.data()?.linkedParentIds || [];
+      for (const parentId of parents) {
+        if (!parentId || parentId === studentId) continue;
+        await inbox(parentId, {
+          type: "homework",
+          title: "あたらしい しゅくだい",
+          body: `${student.data()?.displayName || "生徒"} · ${title}`,
+          assignmentId: ref.id,
+          studentId,
+        });
+      }
     }
   }
   return { id: ref.id, activities: activities.length };
@@ -313,6 +321,17 @@ async function studentsForClasses(user, classIds) {
     });
   }
   return [...ids];
+}
+
+async function classTitlesFor(classIds = []) {
+  const names = [];
+  for (const classId of classIds) {
+    const klass = await db().collection("classes").doc(classId).get();
+    if (!klass.exists) continue;
+    const title = clean(klass.data().title || klass.data().name, 40);
+    if (title) names.push(title);
+  }
+  return names;
 }
 
 exports.saveHomeworkPack = onCall({ region: REGION }, async (request) => {
@@ -397,11 +416,17 @@ exports.saveHomeworkPack = onCall({ region: REGION }, async (request) => {
     answers: prepared.secrets,
   });
   if (status === "assigned") {
+    const teacherName = creatorName;
+    const classNames = await classTitlesFor(classIds);
+    const className = classNames.join("・");
     for (const studentId of assigneeIds) {
       await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
         assignmentId: ref.id,
         title,
         teacherId: user.uid,
+        teacherName,
+        classIds,
+        className,
         format: "pack-v1",
         questionCount: prepared.publicQuestions.length,
         dueOn: dueOn(request.data?.dueOn),
@@ -499,6 +524,241 @@ exports.listHomeworkLibrary = onCall({ region: REGION }, async (request) => {
   return { items };
 });
 
+function millisOf(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value === "number") return value;
+  return 0;
+}
+
+function questionPrompt(question = {}) {
+  return clean(question.promptJa || question.prompt?.text || question.prompt || "", 120);
+}
+
+exports.listSentHomework = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが開けます。");
+  let snap;
+  try {
+    snap = await db().collection("homeworkAssignments")
+      .where("teacherId", "==", user.uid)
+      .limit(120)
+      .get();
+  } catch (error) {
+    console.warn("listSentHomework", error);
+    throw new HttpsError("internal", "送信済み宿題を読み込めませんでした。");
+  }
+  const rows = snap.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .filter((data) => data.format === "pack-v1" && data.status === "assigned");
+  const classIdSet = new Set();
+  rows.forEach((row) => {
+    (Array.isArray(row.classIds) ? row.classIds : []).forEach((id) => {
+      if (id) classIdSet.add(id);
+    });
+  });
+  const classTitleMap = {};
+  await Promise.all([...classIdSet].map(async (classId) => {
+    try {
+      const klass = await db().collection("classes").doc(classId).get();
+      if (!klass.exists) return;
+      classTitleMap[classId] = clean(klass.data().title || klass.data().name, 40) || classId;
+    } catch {
+      classTitleMap[classId] = classId;
+    }
+  }));
+  const items = rows.map((row) => {
+    const classIds = Array.isArray(row.classIds) ? row.classIds.filter(Boolean) : [];
+    return {
+      id: row.id,
+      title: row.title || "きょうのしゅくだい",
+      level: row.level || "beginner",
+      dueOn: row.dueOn || "",
+      questionCount: row.questionCount || (row.questions || []).length || 0,
+      assigneeCount: (row.assigneeIds || []).length,
+      classIds,
+      classNames: classIds.map((id) => classTitleMap[id] || id),
+      sourceTemplateId: row.sourceTemplateId || "",
+      createdAt: millisOf(row.createdAt),
+      updatedAt: millisOf(row.updatedAt),
+    };
+  }).sort((a, b) => (b.createdAt || b.updatedAt || 0) - (a.createdAt || a.updatedAt || 0));
+  return {
+    items,
+    classes: Object.entries(classTitleMap)
+      .map(([id, title]) => ({ id, title }))
+      .sort((a, b) => String(a.title).localeCompare(String(b.title), "ja")),
+  };
+});
+
+exports.getSentHomeworkDetail = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが開けます。");
+  const assignmentId = clean(request.data?.id, 128);
+  if (!/^[A-Za-z0-9]{1,128}$/.test(assignmentId)) {
+    throw new HttpsError("invalid-argument", "無効な宿題です。");
+  }
+  const assignment = await db().collection("homeworkAssignments").doc(assignmentId).get();
+  if (!assignment.exists || assignment.data().format !== "pack-v1") {
+    throw new HttpsError("not-found", "宿題が見つかりません。");
+  }
+  const data = assignment.data();
+  if (data.teacherId !== user.uid && user.role !== "owner") {
+    throw new HttpsError("permission-denied", "この宿題の結果は開けません。");
+  }
+  if (data.status !== "assigned") {
+    throw new HttpsError("failed-precondition", "送信済みの宿題だけ確認できます。");
+  }
+  const assigneeIds = [...new Set((Array.isArray(data.assigneeIds) ? data.assigneeIds : [])
+    .map((id) => clean(id, 128))
+    .filter((id) => /^[A-Za-z0-9]{1,128}$/.test(id)))];
+  const classIds = Array.isArray(data.classIds) ? data.classIds.filter(Boolean) : [];
+  const classNames = await classTitlesFor(classIds);
+  const questions = Array.isArray(data.questions) ? data.questions : [];
+  const totalQuestions = questions.length || data.questionCount || 0;
+
+  let progressSnap;
+  try {
+    progressSnap = await db().collection("homeworkProgress")
+      .where("assignmentId", "==", assignmentId)
+      .get();
+  } catch (error) {
+    console.warn("getSentHomeworkDetail progress", error);
+    progressSnap = { docs: [] };
+  }
+  const progressByStudent = new Map();
+  progressSnap.docs.forEach((item) => {
+    const row = item.data() || {};
+    const studentId = clean(row.studentId, 128) || String(item.id).split("_").pop();
+    if (studentId) progressByStudent.set(studentId, row);
+  });
+
+  const nameById = {};
+  for (let i = 0; i < assigneeIds.length; i += 40) {
+    const chunk = assigneeIds.slice(i, i + 40);
+    const snaps = await db().getAll(...chunk.map((id) => db().collection("users").doc(id)));
+    snaps.forEach((snap, index) => {
+      const id = chunk[index];
+      nameById[id] = clean(snap.exists ? snap.data()?.displayName : "", 40) || "生徒";
+    });
+  }
+
+  const students = assigneeIds.map((studentId) => {
+    const progress = progressByStudent.get(studentId) || null;
+    const attemptsMap = progress?.attempts || {};
+    const correctCount = Number(progress?.correctCount) || 0;
+    const total = Number(progress?.total) || totalQuestions;
+    const percent = Number(progress?.percent) || (total ? Math.round((correctCount / total) * 100) : 0);
+    const completed = Boolean(progress?.completed);
+    const started = Boolean(
+      progress?.startedAt
+      || completed
+      || correctCount > 0
+      || Object.keys(attemptsMap).length
+      || (Array.isArray(progress?.doneIds) && progress.doneIds.length)
+    );
+    let status = "not_started";
+    if (completed) status = "completed";
+    else if (started) status = "in_progress";
+    const attempts = questions.map((question) => {
+      const attempt = attemptsMap[question.id] || null;
+      return {
+        questionId: question.id,
+        type: question.type || "",
+        prompt: questionPrompt(question),
+        correct: Boolean(attempt?.correct),
+        tried: Boolean(attempt && (attempt.tries > 0 || attempt.correct || (attempt.matched || []).length)),
+        tries: Number(attempt?.tries) || 0,
+        misses: Number(attempt?.misses) || 0,
+        firstCorrect: attempt?.firstCorrect === undefined ? null : Boolean(attempt.firstCorrect),
+        sample: clean(attempt?.sample, 80),
+        vocabKey: clean(attempt?.vocabKey || question.vocabKey, 80),
+      };
+    });
+    return {
+      id: studentId,
+      name: nameById[studentId] || "生徒",
+      status,
+      started,
+      completed,
+      percent,
+      correctCount,
+      total,
+      timeSpentMs: Number(progress?.timeSpentMs) || 0,
+      struggleVocab: Array.isArray(progress?.struggleVocab) ? progress.struggleVocab.slice(0, 12) : [],
+      updatedAt: millisOf(progress?.updatedAt),
+      finishedAt: millisOf(progress?.finishedAt),
+      attempts,
+    };
+  }).sort((a, b) => {
+    const rank = { completed: 0, in_progress: 1, not_started: 2 };
+    return (rank[a.status] - rank[b.status]) || String(a.name).localeCompare(String(b.name), "ja");
+  });
+
+  const questionStats = questions.map((question) => {
+    let attempted = 0;
+    let correct = 0;
+    let firstOk = 0;
+    let struggles = 0;
+    let misses = 0;
+    assigneeIds.forEach((studentId) => {
+      const attempt = progressByStudent.get(studentId)?.attempts?.[question.id];
+      if (!attempt) return;
+      const tried = attempt.tries > 0 || attempt.correct || (attempt.matched || []).length;
+      if (!tried) return;
+      attempted += 1;
+      misses += Number(attempt.misses) || 0;
+      if (attempt.correct) correct += 1;
+      if (attempt.firstCorrect === true) firstOk += 1;
+      if (attempt.firstCorrect === false) struggles += 1;
+    });
+    return {
+      id: question.id,
+      type: question.type || "",
+      prompt: questionPrompt(question),
+      vocabKey: clean(question.vocabKey, 80),
+      attempted,
+      correct,
+      incorrect: Math.max(0, attempted - correct),
+      firstOk,
+      struggles,
+      misses,
+      notStarted: Math.max(0, assigneeIds.length - attempted),
+      correctRate: attempted ? Math.round((correct / attempted) * 100) : null,
+      firstCorrectRate: attempted ? Math.round((firstOk / attempted) * 100) : null,
+    };
+  });
+
+  const completedCount = students.filter((row) => row.completed).length;
+  const startedCount = students.filter((row) => row.started).length;
+  const avgPercent = students.length
+    ? Math.round(students.reduce((sum, row) => sum + (row.percent || 0), 0) / students.length)
+    : 0;
+
+  return {
+    assignment: {
+      id: assignmentId,
+      title: data.title || "きょうのしゅくだい",
+      level: data.level || "beginner",
+      dueOn: data.dueOn || "",
+      questionCount: totalQuestions,
+      classIds,
+      classNames,
+      createdAt: millisOf(data.createdAt),
+      updatedAt: millisOf(data.updatedAt),
+    },
+    summary: {
+      assigneeCount: assigneeIds.length,
+      completedCount,
+      startedCount,
+      notStartedCount: Math.max(0, assigneeIds.length - startedCount),
+      avgPercent,
+    },
+    students,
+    questions: questionStats,
+  };
+});
+
 exports.assignHomeworkFromTemplate = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   if (!isTeacher(user)) throw new HttpsError("permission-denied", "先生だけが出せます。");
@@ -562,11 +822,17 @@ exports.assignHomeworkFromTemplate = onCall({ region: REGION }, async (request) 
     answers: prepared.secrets,
     sourceTemplateId: templateId,
   });
+  const teacherName = clean(user.displayName, 40) || "先生";
+  const classNames = await classTitlesFor(classIds);
+  const className = classNames.join("・");
   for (const studentId of assigneeIds) {
     await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
       assignmentId: ref.id,
       title,
       teacherId: user.uid,
+      teacherName,
+      classIds,
+      className,
       format: "pack-v1",
       questionCount: prepared.publicQuestions.length,
       dueOn: due,
@@ -645,12 +911,39 @@ exports.deleteHomeworkPack = onCall({ region: REGION }, async (request) => {
   if (data.teacherId !== user.uid && user.role !== "owner") {
     throw new HttpsError("permission-denied", "自分の宿題だけ削除できます。");
   }
+  const assigneeIds = [...new Set((Array.isArray(data.assigneeIds) ? data.assigneeIds : [])
+    .map((studentId) => clean(studentId, 128))
+    .filter((studentId) => /^[A-Za-z0-9]{1,128}$/.test(studentId)))];
+
+  // Emergency revoke for sent homework: remove student copies + progress first.
   if (data.status === "assigned") {
-    throw new HttpsError("failed-precondition", "出した宿題は削除できません。");
+    for (let i = 0; i < assigneeIds.length; i += 40) {
+      const chunk = assigneeIds.slice(i, i + 40);
+      const batch = db().batch();
+      chunk.forEach((studentId) => {
+        batch.delete(db().collection("studentHomework").doc(studentId).collection("items").doc(id));
+        batch.delete(db().collection("homeworkProgress").doc(`${id}_${studentId}`));
+      });
+      await batch.commit();
+    }
+    try {
+      const progressSnap = await db().collection("homeworkProgress")
+        .where("assignmentId", "==", id)
+        .get();
+      for (let i = 0; i < progressSnap.docs.length; i += 40) {
+        const chunk = progressSnap.docs.slice(i, i + 40);
+        const batch = db().batch();
+        chunk.forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
+      }
+    } catch (error) {
+      console.warn("deleteHomeworkPack progress sweep", error);
+    }
   }
+
   await ref.delete();
   await db().collection("homeworkKeys").doc(id).delete().catch(() => {});
-  return { ok: true };
+  return { ok: true, revoked: data.status === "assigned", assigneeCount: assigneeIds.length };
 });
 
 exports.setHomeworkPublished = onCall({ region: REGION }, async (request) => {

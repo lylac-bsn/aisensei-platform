@@ -420,8 +420,10 @@ header.app-header .header-tab-switcher .tab-btn:disabled {
 
 /* Legacy header rules (login/other pages).
    Keep specificity at one class so hub/COllAB headers (header.gc-top, etc.) still win.
-   :where() exclusions add zero specificity. */
-header:not(.app-header):where(:not(.gc-top):not(.cb-finish-hero):not(.platform-hub__top)) {
+   :where() exclusions add zero specificity — list every in-app header that must stay light. */
+header:not(.app-header):where(
+    :not(.gc-top):not(.cb-finish-hero):not(.platform-hub__top):not(.gc-day-head):not(.hw-page-head):not(.hw-lib-hero):not(.gc-inbox-hero)
+) {
     background: linear-gradient(135deg, #D84315 0%, #E64A19 100%);
     color: var(--text-light);
     padding: 1.5rem 2.5rem;
