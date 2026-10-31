@@ -4,7 +4,7 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { renderPlatformPanel } from "./platform-booking.js?v=20261031-class-delete";
+import { renderPlatformPanel } from "./platform-booking.js?v=20261031-parent-book";
 import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261031-hw-learn-ui";
 import { renderHome } from "./platform-home.js";
 import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
