@@ -188,7 +188,10 @@ export async function renderPlatformPanel(root, action, role) {
         }
       };
       wireClassSearch(root);
-      await paintClasses(root.querySelector("#class-list"), false);
+      const list = root.querySelector("#class-list");
+      list._role = role;
+      list._uid = getAuth().currentUser?.uid || "";
+      await paintClasses(list, false);
       return;
     }
     let childPicker = "";
@@ -200,6 +203,8 @@ export async function renderPlatformPanel(root, action, role) {
     const canBook = role !== "admin" && role !== "owner";
     root.innerHTML = `<h2>講座を予約</h2>${childPicker}<div id="class-list" class="hub-stack"></div>`;
     const list = root.querySelector("#class-list");
+    list._role = role;
+    list._uid = getAuth().currentUser?.uid || "";
     await paintClasses(list, canBook);
     const childSelect = root.querySelector("#book-child");
     if (childSelect) childSelect.onchange = () => paintClasses(list, canBook);
@@ -1091,7 +1096,7 @@ function drawClassCalendar(list) {
   const dialog = document.createElement("dialog");
   dialog.className = "gc-modal";
   dialog.id = "class-detail";
-  dialog.innerHTML = `<h2 id="class-detail-title"></h2><div id="class-detail-body" class="gc-detail"></div><div class="gc-row"><button type="button" class="gc-primary" id="class-detail-book" hidden>予約する</button><button type="button" class="gc-secondary" id="class-detail-close">閉じる</button></div><p id="class-detail-status" class="gc-warn"></p>`;
+  dialog.innerHTML = `<h2 id="class-detail-title"></h2><div id="class-detail-body" class="gc-detail"></div><div class="gc-row"><button type="button" class="gc-primary" id="class-detail-book" hidden>予約する</button><button type="button" class="gc-danger" id="class-detail-delete" hidden>削除する</button><button type="button" class="gc-secondary" id="class-detail-close">閉じる</button></div><p id="class-detail-status" class="gc-warn"></p>`;
   dialog.querySelector("#class-detail-close").onclick = () => dialog.close();
   const navSlot = list.closest(".gc-classes")?.querySelector("#class-cal-nav-slot");
   if (navSlot) navSlot.replaceChildren(nav);
@@ -1265,6 +1270,15 @@ function renderDayPanel(list, sheet) {
   });
 }
 
+function canDeleteClass(list, item) {
+  const role = list._role || "";
+  const uid = list._uid || getAuth().currentUser?.uid || "";
+  if (!item?.id) return false;
+  if (role === "owner") return true;
+  if (role === "admin" && item.teacherId && item.teacherId === uid) return true;
+  return false;
+}
+
 function openClassDetail(list, item, alreadyBooked, canBook) {
   const dialog = list.querySelector("#class-detail");
   const start = item.startsAt;
@@ -1287,6 +1301,7 @@ function openClassDetail(list, item, alreadyBooked, canBook) {
     body.appendChild(row);
   });
   const book = dialog.querySelector("#class-detail-book");
+  const remove = dialog.querySelector("#class-detail-delete");
   const status = dialog.querySelector("#class-detail-status");
   status.textContent = alreadyBooked ? "予約済み" : "";
   book.hidden = !canBook || alreadyBooked;
@@ -1303,6 +1318,39 @@ function openClassDetail(list, item, alreadyBooked, canBook) {
     } catch (error) {
       status.textContent = error.message;
       book.disabled = false;
+    }
+  };
+  const allowDelete = canDeleteClass(list, item);
+  remove.hidden = !allowDelete;
+  remove.disabled = false;
+  remove.onclick = async () => {
+    const booked = Number(item.bookedCount || 0);
+    const ok = await confirmAction({
+      title: "クラスを削除しますか？",
+      message: booked
+        ? `「${item.title || "クラス"}」を削除します。\n予約している ${booked} 人のチケットは返却されます。\nこの操作は取り消せません。`
+        : `「${item.title || "クラス"}」を削除します。\nこの操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    });
+    if (!ok) return;
+    remove.disabled = true;
+    status.textContent = "削除しています…";
+    try {
+      await callFunction("deleteClass", { classId: item.id });
+      dialog.close();
+      await paintClasses(list, list._canBook);
+      const daySheet = calendarHost(list)?.querySelector(":scope > .gc-day-sheet");
+      if (daySheet && !daySheet.hidden) renderDayPanel(list, daySheet);
+      const note = list.closest(".gc-classes")?.querySelector("#class-status");
+      if (note) {
+        note.hidden = false;
+        note.textContent = booked ? `クラスを削除し、${booked}人分のチケットを返却しました。` : "クラスを削除しました。";
+      }
+    } catch (error) {
+      status.textContent = error.message || "削除できませんでした。";
+      remove.disabled = false;
     }
   };
   dialog.showModal();
@@ -1374,6 +1422,7 @@ async function paintClasses(list, canBook) {
     return {
       id: item.id,
       title: data.title || "クラス",
+      teacherId: data.teacherId || "",
       teacherName: data.teacherName || "",
       game: data.game || "",
       difficulty: data.difficulty || "",
@@ -1391,6 +1440,7 @@ async function paintClasses(list, canBook) {
   list._classes = classes;
   list._booked = booked;
   list._canBook = canBook;
+  if (!list._uid) list._uid = getAuth().currentUser?.uid || "";
   list._repaint = () => drawClassCalendar(list);
   drawClassCalendar(list);
 }

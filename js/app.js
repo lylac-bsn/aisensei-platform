@@ -4,8 +4,8 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { renderPlatformPanel } from "./platform-booking.js?v=20261031-hw-voicefix";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261031-hw-teachers";
+import { renderPlatformPanel } from "./platform-booking.js?v=20261031-class-delete";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261031-hw-learn-ui";
 import { renderHome } from "./platform-home.js";
 import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
@@ -237,7 +237,7 @@ document.addEventListener("click", (event) => {
         if (hubMenu) hubMenu.hidden = true;
         if (hubPanel) hubPanel.hidden = false;
         const pageTitle = document.getElementById('hub-page-title');
-        if (pageTitle) pageTitle.textContent = '宿題とレポート';
+        if (pageTitle) pageTitle.textContent = '宿題';
         document.querySelectorAll('.gc-nav').forEach((item) => {
             item.classList.toggle('is-current', item.getAttribute('data-hub-action') === 'assign-homework');
         });
@@ -478,7 +478,13 @@ document.addEventListener("click", (event) => {
             /* ignore */
         }
         const pageTitle = document.getElementById('hub-page-title');
-        if (pageTitle) pageTitle.textContent = actionBtn.getAttribute('data-hub-label') || 'Gamecollege';
+        if (pageTitle) {
+            const fullLabel = actionBtn.getAttribute('data-hub-label') || 'Gamecollege';
+            // Mobile header is tight — keep homework page title short so it never ellipsizes.
+            pageTitle.textContent = (action === 'my-homework' || action === 'assign-homework')
+                ? '宿題'
+                : fullLabel;
+        }
         platformHub.classList.remove('is-nav-open');
         platformHub.querySelectorAll('.gc-nav').forEach((item) => {
             item.classList.toggle('is-current', item.getAttribute('data-hub-action') === action);

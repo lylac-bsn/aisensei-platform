@@ -334,6 +334,97 @@ exports.bookClass = onCall({ region: REGION }, async (request) => {
   return { id: bookingId };
 });
 
+exports.deleteClass = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (!isTeacher(user)) {
+    throw new HttpsError("permission-denied", "先生だけがクラスを削除できます。");
+  }
+  const classId = String(request.data?.classId || "");
+  if (!/^[A-Za-z0-9]{1,128}$/.test(classId)) {
+    throw new HttpsError("invalid-argument", "クラスを確認してください。");
+  }
+  const classRef = db().collection("classes").doc(classId);
+  const classSnap = await classRef.get();
+  if (!classSnap.exists) {
+    throw new HttpsError("not-found", "クラスが見つかりません。");
+  }
+  const klass = classSnap.data() || {};
+  if (klass.status !== "open") {
+    throw new HttpsError("failed-precondition", "このクラスはすでに削除されています。");
+  }
+  const owner = callerIsOwner(user, request.auth.token?.email);
+  if (klass.teacherId !== user.uid && !owner) {
+    throw new HttpsError("permission-denied", "自分のクラスだけ削除できます。");
+  }
+
+  const bookings = await db().collection("bookings")
+    .where("classId", "==", classId)
+    .where("status", "==", "booked")
+    .get();
+  const policy = await ticketPolicy();
+  const refundExpires = Timestamp.fromDate(expiryForGrant(new Date(), policy.rolloverMonths));
+  const notices = [];
+
+  for (const bookingDoc of bookings.docs) {
+    await db().runTransaction(async (tx) => {
+      const bookingRef = bookingDoc.ref;
+      const bookingSnap = await tx.get(bookingRef);
+      if (!bookingSnap.exists || bookingSnap.data().status !== "booked") return;
+      const booking = bookingSnap.data();
+      const balanceRef = db().collection("ticketBalances").doc(booking.studentId);
+      const holdRef = db().collection("slotHolds").doc(`${booking.studentId}__${booking.slotKey}`);
+      const balanceSnap = await tx.get(balanceRef);
+      const lots = liveLots(balanceSnap.exists ? balanceSnap.data().lots : [], Date.now());
+      const refundKey = `refund-${bookingDoc.id}`;
+      if (!lots.some((lot) => lot.id === refundKey)) {
+        lots.push({
+          id: refundKey,
+          monthKey: monthKey(new Date()),
+          remaining: 1,
+          expiresAt: refundExpires,
+        });
+      }
+      tx.set(balanceRef, {
+        lots,
+        available: availableOf(lots),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      tx.delete(holdRef);
+      tx.update(bookingRef, {
+        status: "cancelled",
+        cancelledAt: FieldValue.serverTimestamp(),
+        cancelReason: "class_deleted",
+      });
+      notices.push({
+        studentId: booking.studentId,
+        title: String(booking.classTitle || klass.title || "クラス").slice(0, 80),
+      });
+    });
+  }
+
+  await classRef.update({
+    status: "cancelled",
+    bookedCount: 0,
+    cancelledAt: FieldValue.serverTimestamp(),
+    cancelledBy: user.uid,
+  });
+
+  for (const notice of notices) {
+    try {
+      await notifyUser(notice.studentId, {
+        type: "booking",
+        title: "クラスがキャンセルされました",
+        body: notice.title,
+        classId,
+      });
+    } catch (error) {
+      console.error("deleteClass notice failed", error?.message || error);
+    }
+  }
+
+  return { ok: true, refunded: notices.length };
+});
+
 exports.cancelBooking = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   const bookingId = String(request.data?.bookingId || "");
