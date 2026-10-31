@@ -251,6 +251,7 @@ exports.deleteCostEntry = onCall(
   exports.saveHomeworkPack = school.saveHomeworkPack;
   exports.listHomeworkLibrary = school.listHomeworkLibrary;
   exports.listSentHomework = school.listSentHomework;
+  exports.listOwnerTeacherHomework = school.listOwnerTeacherHomework;
   exports.getSentHomeworkDetail = school.getSentHomeworkDetail;
   exports.assignHomeworkFromTemplate = school.assignHomeworkFromTemplate;
   exports.duplicateHomeworkPack = school.duplicateHomeworkPack;

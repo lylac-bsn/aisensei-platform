@@ -2,6 +2,7 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth
 import { getFirestore, collection, doc, documentId, getDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { renderCollab } from "./platform-collab.js";
 import { checkIcon, shapeIcon } from "./collab-icons.js";
+import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -468,9 +469,16 @@ async function renderAttendance(root, db, uid) {
     status.className = `gc-save-note${kind ? ` is-${kind}` : ""}`;
     status.textContent = text || "";
   };
-  const confirmDiscard = (message) => {
+  const confirmDiscard = async (message) => {
     if (!isDirty()) return true;
-    if (!window.confirm(message)) return false;
+    const ok = await confirmAction({
+      title: "保存していない変更があります",
+      message,
+      confirmLabel: "移動する",
+      cancelLabel: "とどまる",
+      danger: true,
+    });
+    if (!ok) return false;
     savedKey = signature();
     return true;
   };
@@ -538,12 +546,12 @@ async function renderAttendance(root, db, uid) {
       button.setAttribute("aria-selected", item.id === currentId ? "true" : "false");
       if (item.id === currentId) button.classList.add("is-on");
       button.innerHTML = `<strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(sessionWhen(item))}</small>`;
-      button.onclick = () => {
+      button.onclick = async () => {
         if (item.id === currentId) {
           closeMenu();
           return;
         }
-        if (!confirmDiscard("保存していない出席の変更があります。クラスを切り替えますか？")) return;
+        if (!await confirmDiscard("保存していない出席の変更があります。クラスを切り替えますか？")) return;
         currentId = item.id;
         closeMenu();
         find.value = "";
@@ -775,9 +783,16 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
   };
   const formKey = () => `${lesson.value}\n${phraseValues().map((row) => `${row.en}\t${row.ja}`).join("\n")}`;
   const isDirty = () => !sending && formKey() !== savedKey;
-  const confirmDiscard = (message) => {
+  const confirmDiscard = async (message) => {
     if (!isDirty()) return true;
-    if (!window.confirm(message)) return false;
+    const ok = await confirmAction({
+      title: "保存していない変更があります",
+      message,
+      confirmLabel: "移動する",
+      cancelLabel: "とどまる",
+      danger: true,
+    });
+    if (!ok) return false;
     savedKey = formKey();
     return true;
   };
@@ -855,12 +870,12 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", item.id === currentId ? "true" : "false");
       button.innerHTML = `<strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(sessionWhen(item))}</small>`;
-      button.onclick = () => {
+      button.onclick = async () => {
         if (item.id === currentId) {
           closeMenu();
           return;
         }
-        if (!confirmDiscard("保存していない内容があります。クラスを切り替えますか？")) return;
+        if (!await confirmDiscard("保存していない内容があります。クラスを切り替えますか？")) return;
         currentId = item.id;
         closeMenu();
         find.value = "";
@@ -1006,7 +1021,12 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
       return;
     }
     const key = `${lessonText}\n${phrases.complete.map((row) => `${row.en}\t${row.ja}`).join("\n")}`;
-    if (key === lastReportKey && !window.confirm("同じ内容のレポートを、もう一度送りますか？")) return;
+    if (key === lastReportKey && !await confirmAction({
+      title: "もう一度送りますか？",
+      message: "同じ内容のレポートをもう一度送ります。よろしいですか？",
+      confirmLabel: "送る",
+      cancelLabel: "やめる",
+    })) return;
     sending = true;
     reportButton.disabled = true;
     setStatus("", "送信しています…");
@@ -2332,12 +2352,15 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountHomeworkHub } = await import("./homework-library.js?v=20261030-hw-lib129");
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261031-hw-teachers");
+    const me = await getDoc(doc(db, "users", uid));
+    const role = me.data()?.role || "";
     const openHub = ({ landing = false } = {}) => {
       root._stopAttendance?.();
       return mountHomeworkHub(root, {
         db,
         uid,
+        role,
         callFunction,
         ...(landing ? { initialView: "landing", skipResume: true } : {}),
         openReport: () => {
@@ -2420,10 +2443,17 @@ function renderQuiz(root, { host, uid }) {
     })),
   });
   const dirty = () => formKey() !== savedKey;
-  const confirmDiscard = (message) => {
+  const confirmDiscard = async (message) => {
     readCurrent();
     if (!dirty()) return true;
-    if (!window.confirm(message)) return false;
+    const ok = await confirmAction({
+      title: "保存していない変更があります",
+      message,
+      confirmLabel: "移動する",
+      cancelLabel: "とどまる",
+      danger: true,
+    });
+    if (!ok) return false;
     savedKey = formKey();
     return true;
   };
@@ -2634,7 +2664,7 @@ function renderQuiz(root, { host, uid }) {
       current += 1;
       paintEdit();
     };
-    root.querySelector("#quiz-delete").onclick = () => {
+    root.querySelector("#quiz-delete").onclick = async () => {
       readCurrent();
       if (questions.length === 1) {
         note = "問題は1つ以上必要です。";
@@ -2644,14 +2674,20 @@ function renderQuiz(root, { host, uid }) {
       }
       const row = questions[current];
       const filled = row.prompt.trim() || row.choices.some((choice) => choice.trim());
-      if (filled && !window.confirm("この問題を削除しますか？")) return;
+      if (filled && !await confirmAction({
+        title: "この問題を削除しますか？",
+        message: "削除した問題はもとにもどせません。",
+        confirmLabel: "削除する",
+        cancelLabel: "やめる",
+        danger: true,
+      })) return;
       questions.splice(current, 1);
       current = Math.min(current, questions.length - 1);
       note = "";
       paintEdit();
     };
-    root.querySelector("#quiz-join-mode").onclick = () => {
-      if (!confirmDiscard("保存していない変更があります。参加画面に移動しますか？")) return;
+    root.querySelector("#quiz-join-mode").onclick = async () => {
+      if (!await confirmDiscard("保存していない変更があります。参加画面に移動しますか？")) return;
       mode = "join";
       note = "";
       noteKind = "";
@@ -2676,14 +2712,20 @@ function renderQuiz(root, { host, uid }) {
     };
     document.addEventListener("click", closeQuizMenu);
     root._closeQuizMenu = () => document.removeEventListener("click", closeQuizMenu);
-    savedMenu.onclick = (event) => {
+    savedMenu.onclick = async (event) => {
       const remove = event.target.closest(".qo-saved-delete");
       if (remove) {
         event.stopPropagation();
         const id = remove.dataset.id;
         const found = templates.find((item) => item.id === id);
         if (!found || remove.disabled) return;
-        if (!window.confirm(`「${found.title || "このクイズ"}」を削除します。\n${templateMeta(found)}`)) return;
+        if (!await confirmAction({
+          title: "このクイズを削除しますか？",
+          message: `「${found.title || "このクイズ"}」を削除します。\n${templateMeta(found)}`,
+          confirmLabel: "削除する",
+          cancelLabel: "やめる",
+          danger: true,
+        })) return;
         remove.disabled = true;
         callFunction("deleteQuizTemplate", { id }).then(() => {
           if (templateId === id) {
@@ -2709,7 +2751,13 @@ function renderQuiz(root, { host, uid }) {
         savedButton.setAttribute("aria-expanded", "false");
         return;
       }
-      if (dirty() && !window.confirm("保存していない変更があります。このクイズに切り替えますか？")) return;
+      if (dirty() && !await confirmAction({
+        title: "保存していない変更があります",
+        message: "このクイズに切り替えますか？編集中の内容は保存されません。",
+        confirmLabel: "切り替える",
+        cancelLabel: "とどまる",
+        danger: true,
+      })) return;
       templateId = found.id;
       title = found.title || "クイズ";
       const rows = (found.questions || []).map(fromStored);
@@ -2762,7 +2810,13 @@ function renderQuiz(root, { host, uid }) {
         paintEdit();
         return;
       }
-      if (dirty() && !window.confirm("保存していない変更があります。保存せずに開始しますか？")) return;
+      if (dirty() && !await confirmAction({
+        title: "保存していない変更があります",
+        message: "保存せずに開始しますか？",
+        confirmLabel: "開始する",
+        cancelLabel: "もどる",
+        danger: true,
+      })) return;
       const button = root.querySelector("#quiz-host");
       button.disabled = true;
       button.textContent = "開始しています…";
@@ -3115,7 +3169,7 @@ function renderQuiz(root, { host, uid }) {
 }
 
 async function playPackHomework(root, assignmentId, uid, extras = {}) {
-  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261030-hw-lib129");
+  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261031-hw-voicefix");
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
   const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));

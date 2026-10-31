@@ -1,7 +1,10 @@
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { generateHomework } from "./homework-engine.js?v=20261030-hw-lib129";
+import { generateHomework } from "./homework-engine.js?v=20261031-hw-voicefix";
+import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
+import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261031-hw-voicefix";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261031-hw-voicefix";
 
-const CACHE = "20261030-hw-lib129";
+const CACHE = "20261031-hw-teachers";
 const RESUME_KEY = "gc-hw-resume";
 const HUB_ACTION_KEY = "gc-hub-action";
 
@@ -241,7 +244,8 @@ export async function mountHomeworkHub(root, options) {
     : (resumeView === "library" || resumeView === "assign" || resumeView === "studio"
       ? "library"
       : "landing");
-  const startTab = ["all", "official", "mine", "sent"].includes(options.initialTab)
+  const isOwner = options.role === "owner";
+  const startTab = ["all", "official", "mine", "sent", ...(isOwner ? ["teachers"] : [])].includes(options.initialTab)
     ? options.initialTab
     : "all";
   const state = {
@@ -261,8 +265,17 @@ export async function mountHomeworkHub(root, options) {
     sentClasses: [],
     sentClassFilter: "all",
     sentDetail: null,
+    sentDetailOrigin: "sent",
     sentLoading: false,
     sentError: "",
+    teacherItems: [],
+    teacherTeachers: [],
+    teacherClasses: [],
+    teacherFilter: "all",
+    teacherClassFilter: "all",
+    teacherStatusFilter: "all",
+    teacherLoading: false,
+    teacherError: "",
   };
 
   const hub = document.createElement("div");
@@ -300,7 +313,11 @@ export async function mountHomeworkHub(root, options) {
     rememberView("library");
     hub.innerHTML = libraryHtml();
     bindLibrary();
-    await Promise.all([refreshLibrary(), refreshSent({ quiet: true })]);
+    await Promise.all([
+      refreshLibrary(),
+      refreshSent({ quiet: true }),
+      isOwner ? refreshTeacherHomework({ quiet: true }) : Promise.resolve(),
+    ]);
   };
 
   function landingHtml() {
@@ -334,6 +351,7 @@ export async function mountHomeworkHub(root, options) {
       official: official.length,
       mine: mine.length,
       sent: state.sentItems.length,
+      teachers: state.teacherItems.length,
     };
   }
 
@@ -394,6 +412,7 @@ export async function mountHomeworkHub(root, options) {
           <button type="button" class="hw-lib-tab${state.tab === "official" ? " is-current" : ""}" data-tab="official" role="tab">公式テンプレート <em>${counts.official}</em></button>
           <button type="button" class="hw-lib-tab${state.tab === "mine" ? " is-current" : ""}" data-tab="mine" role="tab">マイライブラリ <em>${counts.mine}</em></button>
           <button type="button" class="hw-lib-tab${state.tab === "sent" ? " is-current" : ""}" data-tab="sent" role="tab">送信済み <em>${counts.sent}</em></button>
+          ${isOwner ? `<button type="button" class="hw-lib-tab${state.tab === "teachers" ? " is-current" : ""}" data-tab="teachers" role="tab">先生の宿題リスト <em>${counts.teachers}</em></button>` : ""}
         </div>
         <div class="hw-sent-toolbar" id="hw-sent-toolbar" ${state.tab === "sent" ? "" : "hidden"}>
           <label class="hw-lib-filter">
@@ -407,8 +426,37 @@ export async function mountHomeworkHub(root, options) {
           </label>
           <p class="hw-sent-hint">クラスごとの送信済み宿題と、生徒の正誤・進捗を確認できます。</p>
         </div>
+        <div class="hw-sent-toolbar hw-teacher-toolbar" id="hw-teacher-toolbar" ${state.tab === "teachers" ? "" : "hidden"}>
+          <label class="hw-lib-filter">
+            <span class="visually-hidden">先生</span>
+            <select id="hw-teacher-filter" aria-label="先生名で絞り込み">
+              <option value="all">すべての先生</option>
+              ${state.teacherTeachers.map((row) => `
+                <option value="${escapeHtml(row.id)}"${state.teacherFilter === row.id ? " selected" : ""}>${escapeHtml(row.name)}</option>
+              `).join("")}
+            </select>
+          </label>
+          <label class="hw-lib-filter">
+            <span class="visually-hidden">クラス</span>
+            <select id="hw-teacher-class" aria-label="クラスで絞り込み">
+              <option value="all">すべてのクラス</option>
+              ${state.teacherClasses.map((row) => `
+                <option value="${escapeHtml(row.id)}"${state.teacherClassFilter === row.id ? " selected" : ""}>${escapeHtml(row.title)}</option>
+              `).join("")}
+            </select>
+          </label>
+          <label class="hw-lib-filter">
+            <span class="visually-hidden">状態</span>
+            <select id="hw-teacher-status" aria-label="状態で絞り込み">
+              <option value="all"${state.teacherStatusFilter === "all" ? " selected" : ""}>すべて（作成・送信）</option>
+              <option value="draft"${state.teacherStatusFilter === "draft" ? " selected" : ""}>作成のみ</option>
+              <option value="assigned"${state.teacherStatusFilter === "assigned" ? " selected" : ""}>送信済み</option>
+            </select>
+          </label>
+          <p class="hw-sent-hint">先生が作った宿題・送信先クラス・進捗分析をまとめて確認できます。</p>
+        </div>
         <div id="hw-lib-banner" class="hw-lib-banner" hidden></div>
-        <div id="hw-lib-grid" class="hw-lib-grid${state.tab === "sent" ? " is-sent" : ""}" aria-live="polite"></div>
+        <div id="hw-lib-grid" class="hw-lib-grid${state.tab === "sent" || state.tab === "teachers" ? " is-sent" : ""}" aria-live="polite"></div>
         <p id="hw-lib-status" class="hw-lib-status" hidden></p>
         <div id="hw-lib-preview" class="hw-lib-preview" hidden></div>
       </div>`;
@@ -489,6 +537,7 @@ export async function mountHomeworkHub(root, options) {
         updateTabs();
         syncSentToolbar();
         if (state.tab === "sent") await refreshSent();
+        else if (state.tab === "teachers") await refreshTeacherHomework();
         else paintLibraryGrid();
       };
     });
@@ -497,6 +546,30 @@ export async function mountHomeworkHub(root, options) {
       sentClass.value = state.sentClassFilter;
       sentClass.onchange = () => {
         state.sentClassFilter = sentClass.value || "all";
+        paintLibraryGrid();
+      };
+    }
+    const teacherFilter = hub.querySelector("#hw-teacher-filter");
+    if (teacherFilter) {
+      teacherFilter.value = state.teacherFilter;
+      teacherFilter.onchange = () => {
+        state.teacherFilter = teacherFilter.value || "all";
+        paintLibraryGrid();
+      };
+    }
+    const teacherClass = hub.querySelector("#hw-teacher-class");
+    if (teacherClass) {
+      teacherClass.value = state.teacherClassFilter;
+      teacherClass.onchange = () => {
+        state.teacherClassFilter = teacherClass.value || "all";
+        paintLibraryGrid();
+      };
+    }
+    const teacherStatus = hub.querySelector("#hw-teacher-status");
+    if (teacherStatus) {
+      teacherStatus.value = state.teacherStatusFilter;
+      teacherStatus.onchange = () => {
+        state.teacherStatusFilter = teacherStatus.value || "all";
         paintLibraryGrid();
       };
     }
@@ -567,13 +640,14 @@ export async function mountHomeworkHub(root, options) {
       </div>`;
     banner.querySelector("#hw-lib-retry")?.addEventListener("click", () => {
       if (state.tab === "sent") refreshSent();
+      else if (state.tab === "teachers") refreshTeacherHomework();
       else refreshLibrary();
     });
   }
 
   async function refreshLibrary() {
     const grid = hub.querySelector("#hw-lib-grid");
-    if (grid && state.tab !== "sent") grid.innerHTML = skeletonHtml();
+    if (grid && state.tab !== "sent" && state.tab !== "teachers") grid.innerHTML = skeletonHtml();
     showBanner("");
     state.loadError = "";
     try {
@@ -581,12 +655,12 @@ export async function mountHomeworkHub(root, options) {
       const mineAndShared = Array.isArray(remote.items) ? remote.items : [];
       state.items = [...officialCards(), ...mineAndShared];
       updateTabs();
-      if (state.tab !== "sent") paintLibraryGrid();
+      if (state.tab !== "sent" && state.tab !== "teachers") paintLibraryGrid();
     } catch (error) {
       state.loadError = friendlyLoadError(error);
       state.items = officialCards();
       updateTabs();
-      if (state.tab !== "sent") {
+      if (state.tab !== "sent" && state.tab !== "teachers") {
         paintLibraryGrid();
         showBanner(state.loadError, { retry: true });
       }
@@ -595,9 +669,11 @@ export async function mountHomeworkHub(root, options) {
 
   function syncSentToolbar() {
     const toolbar = hub.querySelector("#hw-sent-toolbar");
+    const teacherToolbar = hub.querySelector("#hw-teacher-toolbar");
     const grid = hub.querySelector("#hw-lib-grid");
     if (toolbar) toolbar.hidden = state.tab !== "sent";
-    if (grid) grid.classList.toggle("is-sent", state.tab === "sent");
+    if (teacherToolbar) teacherToolbar.hidden = state.tab !== "teachers";
+    if (grid) grid.classList.toggle("is-sent", state.tab === "sent" || state.tab === "teachers");
     const select = hub.querySelector("#hw-sent-class");
     if (select) {
       const current = state.sentClassFilter;
@@ -608,6 +684,57 @@ export async function mountHomeworkHub(root, options) {
         `).join("")}`;
       select.value = state.sentClasses.some((row) => row.id === current) ? current : "all";
       state.sentClassFilter = select.value;
+    }
+    const teacherSelect = hub.querySelector("#hw-teacher-filter");
+    if (teacherSelect) {
+      const current = state.teacherFilter;
+      teacherSelect.innerHTML = `
+        <option value="all">すべての先生</option>
+        ${state.teacherTeachers.map((row) => `
+          <option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}</option>
+        `).join("")}`;
+      teacherSelect.value = state.teacherTeachers.some((row) => row.id === current) ? current : "all";
+      state.teacherFilter = teacherSelect.value;
+    }
+    const teacherClass = hub.querySelector("#hw-teacher-class");
+    if (teacherClass) {
+      const current = state.teacherClassFilter;
+      teacherClass.innerHTML = `
+        <option value="all">すべてのクラス</option>
+        ${state.teacherClasses.map((row) => `
+          <option value="${escapeHtml(row.id)}">${escapeHtml(row.title)}</option>
+        `).join("")}`;
+      teacherClass.value = state.teacherClasses.some((row) => row.id === current) ? current : "all";
+      state.teacherClassFilter = teacherClass.value;
+    }
+    const teacherStatus = hub.querySelector("#hw-teacher-status");
+    if (teacherStatus) teacherStatus.value = state.teacherStatusFilter;
+  }
+
+  async function refreshTeacherHomework({ quiet = false } = {}) {
+    if (!isOwner) return;
+    if (!quiet && state.tab === "teachers") {
+      const grid = hub.querySelector("#hw-lib-grid");
+      if (grid) grid.innerHTML = skeletonHtml();
+    }
+    state.teacherLoading = true;
+    state.teacherError = "";
+    try {
+      const remote = await options.callFunction("listOwnerTeacherHomework", {});
+      state.teacherItems = Array.isArray(remote.items) ? remote.items : [];
+      state.teacherTeachers = Array.isArray(remote.teachers) ? remote.teachers : [];
+      state.teacherClasses = Array.isArray(remote.classes) ? remote.classes : [];
+      updateTabs();
+      syncSentToolbar();
+      if (state.tab === "teachers") paintLibraryGrid();
+    } catch (error) {
+      state.teacherError = friendlyLoadError(error);
+      if (!quiet && state.tab === "teachers") {
+        showBanner(state.teacherError, { retry: true });
+        paintLibraryGrid();
+      }
+    } finally {
+      state.teacherLoading = false;
     }
   }
 
@@ -677,7 +804,44 @@ export async function mountHomeworkHub(root, options) {
     return rows;
   }
 
+  function filteredTeacherItems() {
+    const q = state.query.toLowerCase();
+    let rows = state.teacherItems.filter((item) => {
+      if (state.teacherFilter !== "all" && item.teacherId !== state.teacherFilter) return false;
+      if (state.teacherClassFilter !== "all" && !(item.classIds || []).includes(state.teacherClassFilter)) return false;
+      if (state.teacherStatusFilter === "draft" && item.status !== "draft") return false;
+      if (state.teacherStatusFilter === "assigned" && item.status !== "assigned") return false;
+      if (state.level !== "all" && item.level !== state.level) return false;
+      if (state.type !== "all" && !(item.types || []).includes(state.type)) return false;
+      if (!q) return true;
+      const hay = `${item.title} ${item.description || ""} ${item.teacherName || ""} ${item.creatorName || ""} ${(item.classNames || []).join(" ")} ${(item.types || []).join(" ")}`.toLowerCase();
+      return hay.includes(q);
+    });
+    if (state.sort === "alpha") {
+      rows = [...rows].sort((a, b) => String(a.title).localeCompare(String(b.title), "ja"));
+    } else {
+      rows = [...rows].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    }
+    return rows;
+  }
+
   function emptyHtml() {
+    if (state.tab === "teachers") {
+      const filtering = Boolean(
+        state.query
+        || state.teacherFilter !== "all"
+        || state.teacherClassFilter !== "all"
+        || state.teacherStatusFilter !== "all"
+        || state.level !== "all"
+        || state.type !== "all"
+      );
+      return `
+        <div class="hw-lib-empty-state">
+          <div class="hw-lib-empty-art" aria-hidden="true">${THEME_ART.default.svg}</div>
+          <h3>${filtering ? "条件に合う先生の宿題がありません" : "先生の宿題はまだありません"}</h3>
+          <p>${filtering ? "先生名・クラス・状態などの条件を変えてみてください。" : "先生が宿題を作成・送信すると、ここに一覧と分析が集まります。"}</p>
+        </div>`;
+    }
     if (state.tab === "sent") {
       const filtering = Boolean(state.query || state.sentClassFilter !== "all" || state.level !== "all");
       return `
@@ -763,11 +927,85 @@ export async function mountHomeworkHub(root, options) {
       </article>`;
   }
 
+  function teacherCardHtml(item) {
+    const assigned = item.status === "assigned";
+    const classes = (item.classNames || []).join("・") || (assigned ? "クラス未設定" : "未配信");
+    const when = formatSentDate(item.updatedAt || item.createdAt);
+    const statusLabelText = assigned ? "送信済み" : "作成のみ";
+    const avg = assigned && item.avgPercent != null ? `${item.avgPercent}%` : "—";
+    const openAttr = assigned ? ` data-sent-open="${escapeHtml(item.id)}"` : "";
+    return `
+      <article class="hw-sent-card hw-teacher-card"${openAttr}${assigned ? ` role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る"` : ""}>
+        <div class="hw-sent-card-top">
+          <span class="hw-lib-badge is-level-${escapeHtml(item.level || "beginner")}">${escapeHtml(LEVEL_LABEL[item.level] || item.level || "Beginner")}</span>
+          <span class="hw-teacher-status${assigned ? " is-sent" : ""}">${escapeHtml(statusLabelText)}</span>
+          <small>${escapeHtml(when || "")}</small>
+        </div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <p class="hw-sent-card-classes">${ICONS.person}<span>${escapeHtml(item.teacherName || "先生")}</span> · ${escapeHtml(classes)}</p>
+        <div class="hw-sent-card-stats">
+          <span>${ICONS.book}<em>${item.questionCount || 0}問</em></span>
+          ${assigned ? `
+            <span>${ICONS.person}<em>${item.assigneeCount || 0}人</em></span>
+            <span><em>完了 ${item.completedCount || 0}</em></span>
+            <span><em>平均 ${escapeHtml(avg)}</em></span>
+          ` : `
+            <span><em>${item.published ? "公開中" : "非公開"}</em></span>
+            <span><em>${escapeHtml((item.types || []).slice(0, 2).join("・") || "—")}</em></span>
+          `}
+        </div>
+        <div class="hw-sent-card-actions">
+          ${assigned
+            ? `<button type="button" class="hw-lib-use" data-sent-open="${escapeHtml(item.id)}">進捗・分析を見る →</button>`
+            : `<button type="button" class="hw-quiet" disabled title="まだ送信されていません">未送信</button>`}
+          <button type="button" class="hw-sent-delete" data-teacher-del="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)}を削除">削除</button>
+        </div>
+      </article>`;
+  }
+
+  function bindSentOpenNodes(grid, origin = "sent") {
+    grid.querySelectorAll("[data-sent-open]").forEach((node) => {
+      const open = () => openSentDetail(node.dataset.sentOpen, origin);
+      if (node.tagName === "BUTTON") {
+        node.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          open();
+        };
+      } else {
+        node.onclick = open;
+        node.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            open();
+          }
+        };
+      }
+    });
+  }
+
   function paintLibraryGrid() {
     const grid = hub.querySelector("#hw-lib-grid");
     if (!grid) return;
     closeMenus();
     syncSentToolbar();
+    if (state.tab === "teachers") {
+      const items = filteredTeacherItems();
+      if (!items.length) {
+        grid.innerHTML = emptyHtml();
+        return;
+      }
+      grid.innerHTML = items.map((item) => teacherCardHtml(item)).join("");
+      bindSentOpenNodes(grid, "teachers");
+      grid.querySelectorAll("[data-teacher-del]").forEach((btn) => {
+        btn.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteTeacherItem(btn.dataset.teacherDel);
+        };
+      });
+      return;
+    }
     if (state.tab === "sent") {
       const items = filteredSentItems();
       if (!items.length) {
@@ -775,23 +1013,7 @@ export async function mountHomeworkHub(root, options) {
         return;
       }
       grid.innerHTML = items.map((item) => sentCardHtml(item)).join("");
-      grid.querySelectorAll("[data-sent-open]").forEach((node) => {
-        const open = () => openSentDetail(node.dataset.sentOpen);
-        if (node.tagName === "BUTTON") node.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          open();
-        };
-        else {
-          node.onclick = open;
-          node.onkeydown = (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              open();
-            }
-          };
-        }
-      });
+      bindSentOpenNodes(grid, "sent");
       grid.querySelectorAll("[data-sent-del]").forEach((btn) => {
         btn.onclick = (event) => {
           event.preventDefault();
@@ -845,8 +1067,9 @@ export async function mountHomeworkHub(root, options) {
     return `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
   }
 
-  async function openSentDetail(id) {
+  async function openSentDetail(id, origin = "sent") {
     if (!id) return;
+    state.sentDetailOrigin = origin === "teachers" ? "teachers" : "sent";
     state.view = "sent-detail";
     hub.innerHTML = `
       <div class="hw-lib hw-sent-detail">
@@ -859,10 +1082,11 @@ export async function mountHomeworkHub(root, options) {
       bindSentDetail();
     } catch (error) {
       state.view = "library";
-      state.tab = "sent";
+      state.tab = state.sentDetailOrigin;
       hub.innerHTML = libraryHtml();
       bindLibrary();
-      await refreshSent();
+      if (state.sentDetailOrigin === "teachers") await refreshTeacherHomework();
+      else await refreshSent();
       showBanner(friendlyLoadError(error), { retry: true });
       setLibStatus("送信済み宿題の詳細を開けませんでした。");
     }
@@ -874,17 +1098,21 @@ export async function mountHomeworkHub(root, options) {
     const students = Array.isArray(detail.students) ? detail.students : [];
     const questions = Array.isArray(detail.questions) ? detail.questions : [];
     const classes = (assignment.classNames || []).join("・") || "クラス未設定";
+    const backLabel = state.sentDetailOrigin === "teachers" ? "先生の宿題リスト" : "送信済み";
+    const teacherMeta = state.sentDetailOrigin === "teachers" && assignment.teacherName
+      ? `${escapeHtml(assignment.teacherName)} · `
+      : "";
     return `
       <div class="hw-lib hw-sent-detail">
         <nav class="hw-lib-crumb" aria-label="パンくず">
-          <button type="button" class="hw-lib-crumb-link" data-sent-back>送信済み</button>
+          <button type="button" class="hw-lib-crumb-link" data-sent-back>${escapeHtml(backLabel)}</button>
           <span aria-hidden="true">/</span>
           <span>進捗・分析</span>
         </nav>
         <header class="hw-lib-hero hw-lib-hero-compact">
           <div class="hw-lib-hero-copy">
             <h2>${escapeHtml(assignment.title || "宿題")}</h2>
-            <p>${escapeHtml(classes)} · ${escapeHtml(formatDueShort(assignment.dueOn))} · ${assignment.questionCount || 0}問</p>
+            <p>${teacherMeta}${escapeHtml(classes)} · ${escapeHtml(formatDueShort(assignment.dueOn))} · ${assignment.questionCount || 0}問</p>
           </div>
           <div class="hw-sent-detail-actions">
             <button type="button" class="hw-quiet" data-sent-back>一覧にもどる</button>
@@ -971,15 +1199,20 @@ export async function mountHomeworkHub(root, options) {
   }
 
   async function backToSentList() {
+    const tab = state.sentDetailOrigin === "teachers" ? "teachers" : "sent";
     state.view = "library";
-    state.tab = "sent";
+    state.tab = tab;
     state.sentDetail = null;
     hub.innerHTML = libraryHtml();
     bindLibrary();
     updateTabs();
     syncSentToolbar();
     paintLibraryGrid();
-    if (!state.sentItems.length) await refreshSent();
+    if (tab === "teachers") {
+      if (!state.teacherItems.length) await refreshTeacherHomework();
+    } else if (!state.sentItems.length) {
+      await refreshSent();
+    }
   }
 
   function bindSentDetail() {
@@ -991,18 +1224,51 @@ export async function mountHomeworkHub(root, options) {
     });
   }
 
+  async function deleteTeacherItem(id) {
+    if (!id) return;
+    const item = state.teacherItems.find((row) => row.id === id);
+    const title = item?.title || "この宿題";
+    const assigned = item?.status === "assigned";
+    const people = item?.assigneeCount || 0;
+    const ok = await confirmAction({
+      title: assigned ? "配信を削除しますか？" : "宿題を削除しますか？",
+      message: assigned
+        ? `「${title}」の配信を削除します。\n生徒側の宿題と進捗も消えます${people ? `（${people}人分）` : ""}。\nこの操作は取り消せません。`
+        : `「${title}」を削除します。この操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await options.callFunction("deleteHomeworkPack", { id });
+      state.teacherItems = state.teacherItems.filter((row) => row.id !== id);
+      updateTabs();
+      paintLibraryGrid();
+      setLibStatus(assigned ? "先生の送信済み宿題を削除しました。" : "先生の宿題を削除しました。", "ok");
+    } catch (error) {
+      setLibStatus(error.message || "削除できませんでした。");
+    }
+  }
+
   async function deleteSentItem(id, { fromDetail = false } = {}) {
     if (!id) return;
-    const item = state.sentItems.find((row) => row.id === id);
+    const item = state.sentItems.find((row) => row.id === id)
+      || state.teacherItems.find((row) => row.id === id);
     const title = item?.title || state.sentDetail?.assignment?.title || "この宿題";
     const people = item?.assigneeCount || state.sentDetail?.summary?.assigneeCount || 0;
-    const ok = window.confirm(
-      `「${title}」の配信を削除しますか？\n\n生徒側の宿題と進捗も消えます${people ? `（${people}人分）` : ""}。この操作は取り消せません。`
-    );
+    const ok = await confirmAction({
+      title: "配信を削除しますか？",
+      message: `「${title}」の配信を削除します。\n生徒側の宿題と進捗も消えます${people ? `（${people}人分）` : ""}。\nこの操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    });
     if (!ok) return;
     try {
       await options.callFunction("deleteHomeworkPack", { id });
       state.sentItems = state.sentItems.filter((row) => row.id !== id);
+      state.teacherItems = state.teacherItems.filter((row) => row.id !== id);
       state.sentDetail = null;
       updateTabs();
       if (fromDetail || state.view === "sent-detail") {
@@ -1549,7 +1815,13 @@ export async function mountHomeworkHub(root, options) {
   }
 
   async function deleteItem(id) {
-    if (!window.confirm("この宿題を削除しますか？この操作は取り消せません。")) return;
+    if (!await confirmAction({
+      title: "この宿題を削除しますか？",
+      message: "この操作は取り消せません。",
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    })) return;
     try {
       await options.callFunction("deleteHomeworkPack", { id });
       await refreshLibrary();
@@ -1792,8 +2064,25 @@ export async function mountHomeworkHub(root, options) {
       return;
     }
     sendBtn.disabled = true;
-    setLibStatus("配信しています…", "");
+    setLibStatus("宿題を生徒に送信しています・・・", "");
     try {
+      const questions = item.official && item._seed?.questions?.length
+        ? item._seed.questions
+        : await ensureAssignQuestions(item);
+      if (options.db && questions?.length) {
+        const sync = await syncHomeworkVoiceRemote(
+          [...linesForQuestions(questions), ...RETRY_LINES],
+          options.db,
+          { force: true },
+        );
+        if (sync.missing.length || sync.failed.length) {
+          setLibStatus(
+            `音声の共有に失敗しました（未共有 ${(sync.missing.length || 0) + (sync.failed.length || 0)}件）。宿題スタジオで音声を確認してから配信してください。`,
+          );
+          sendBtn.disabled = false;
+          return;
+        }
+      }
       if (item.official && item._seed) {
         await options.callFunction("saveHomeworkPack", {
           status: "assigned",

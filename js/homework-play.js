@@ -1,7 +1,7 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib129";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261030-hw-lib129";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib129";
-import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261030-hw-lib129";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-hw-voicefix";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261031-hw-voicefix";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261031-hw-voicefix";
+import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
 const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！", "やったね！", "いいね！"];
 const ENCOURAGE = ["おしい！", "もういちど！", "だいじょうぶ！", "がんばろう！"];

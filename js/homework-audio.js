@@ -4,7 +4,8 @@ import {
   playHomeworkVoice,
   prepareHomeworkVoice,
   stopHomeworkVoice,
-} from "./homework-voice-bank.js?v=20261030-hw-lib129";
+  unlockHomeworkAudio,
+} from "./homework-voice-bank.js?v=20261031-hw-voicefix";
 
 let active = null;
 let playToken = 0;
@@ -34,17 +35,25 @@ export async function playPrompt(text, _lang, options = {}) {
   if (!spoken) return "none";
   const token = playToken;
   const db = options.db;
+  // Unlock during the tap gesture — hydrate/await would otherwise leave AudioContext suspended.
+  unlockHomeworkAudio();
 
   if (await playLearnyClip(spoken)) return "learny";
   if (token !== playToken) return "none";
 
   await hydrateHomeworkVoice([spoken], db);
   if (token !== playToken) return "none";
+  unlockHomeworkAudio();
   if (await playLearnyClip(spoken)) return "learny";
   if (token !== playToken) return "none";
 
   // Prefer shared teacher clips. Only synthesize when generation is allowed.
   if (options.generate === false) {
+    // Retry once — first hydrate can race IndexedDB / Firestore on cold start.
+    await hydrateHomeworkVoice([spoken], db);
+    if (token !== playToken) return "none";
+    unlockHomeworkAudio();
+    if (await playLearnyClip(spoken)) return "learny";
     console.warn("[homework-audio] shared clip missing", spoken);
     return "none";
   }
@@ -56,6 +65,7 @@ export async function playPrompt(text, _lang, options = {}) {
   }
   if (token !== playToken) return "none";
   if (!hasHomeworkVoice(spoken)) return "none";
+  unlockHomeworkAudio();
   if (await playLearnyClip(spoken)) return "learny";
   return "none";
 }

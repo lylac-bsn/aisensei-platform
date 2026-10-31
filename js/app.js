@@ -4,10 +4,10 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { renderPlatformPanel } from "./platform-booking.js";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261030-hw-lib129";
+import { renderPlatformPanel } from "./platform-booking.js?v=20261031-hw-voicefix";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261031-hw-teachers";
 import { renderHome } from "./platform-home.js";
-import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261030-hw-lib129";
+import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD4QAYLn2KBxAZ6HZNpzlHS4aNZE9KwAtQ",
@@ -28,7 +28,7 @@ document.addEventListener("click", (event) => {
     if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains("gc-modal") || !dialog.open) return;
     const box = dialog.getBoundingClientRect();
     const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
-    if (outside) dialog.close();
+    if (outside) dialog.close(dialog.classList.contains("gc-confirm") ? "cancel" : "");
 });
 
     const sfxButton = document.getElementById('hub-sfx');
@@ -263,7 +263,7 @@ document.addEventListener("click", (event) => {
                 /* ignore */
             }
         };
-        const { mountHomeworkHub } = await import('./homework-library.js?v=20261030-hw-lib129');
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261031-hw-teachers');
         const labCall = async (name, data) => {
             if (name === 'saveHomeworkPack') {
                 const id = data.id || `lab${packs.size + 1}`;
@@ -312,6 +312,39 @@ document.addEventListener("click", (event) => {
                             updatedAt: Date.now(),
                         })),
                 };
+            }
+            if (name === 'listOwnerTeacherHomework') {
+                const items = [...packs.values()].map((pack) => ({
+                    id: pack.id,
+                    title: pack.title,
+                    description: pack.description || '',
+                    level: pack.level || 'beginner',
+                    status: pack.status || 'draft',
+                    published: pack.published !== false,
+                    libraryReady: Boolean(pack.libraryReady),
+                    official: false,
+                    teacherId: pack.teacherId || 'lab',
+                    teacherName: pack.creatorName || 'プレビュー',
+                    creatorName: pack.creatorName || 'プレビュー',
+                    questionCount: pack.questionCount || (pack.questions || []).length || 0,
+                    types: ['問題パック'],
+                    classIds: pack.classIds || [],
+                    classNames: (pack.classIds || []).map((id) => `クラス ${id}`),
+                    assigneeCount: pack.status === 'assigned' ? 1 : 0,
+                    completedCount: 0,
+                    startedCount: 0,
+                    avgPercent: pack.status === 'assigned' ? 0 : null,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                }));
+                return {
+                    items,
+                    teachers: [{ id: 'lab', name: 'プレビュー' }],
+                    classes: [...new Set(items.flatMap((row) => row.classIds || []))].map((id) => ({ id, title: `クラス ${id}` })),
+                };
+            }
+            if (name === 'listSentHomework') {
+                return { items: [], classes: [] };
             }
             if (name === 'assignHomeworkFromTemplate') {
                 const pack = packs.get(data.templateId);
@@ -365,9 +398,10 @@ document.addEventListener("click", (event) => {
                 lab: true,
                 db,
                 uid: 'lab',
+                role: 'owner',
                 callFunction: labCall,
                 openReport: async () => {
-                    if (panel._confirmLeave && !panel._confirmLeave()) return;
+                    if (panel._confirmLeave && !(await panel._confirmLeave())) return;
                     panel._stopAttendance?.();
                     await renderReport(panel, null, "lab", {
                         lab: true,
@@ -405,7 +439,7 @@ document.addEventListener("click", (event) => {
 
     document.getElementById('hub-logout')?.addEventListener('click', async () => {
         const panel = document.getElementById('hub-panel-platform');
-        if (panel?._confirmLeave && !panel._confirmLeave()) return;
+        if (panel?._confirmLeave && !(await panel._confirmLeave())) return;
         try {
             await signOut(auth);
         } catch {
@@ -417,15 +451,15 @@ document.addEventListener("click", (event) => {
         platformHub?.classList.toggle('is-nav-open');
     });
 
-    const discardAttendanceEdits = () => {
+    const canLeavePanel = async () => {
         const panel = document.getElementById('hub-panel-platform');
         if (!panel || typeof panel._confirmLeave !== 'function') return true;
-        return panel._confirmLeave();
+        return Boolean(await panel._confirmLeave());
     };
 
-    platformHub?.addEventListener('click', (event) => {
+    platformHub?.addEventListener('click', async (event) => {
         if (event.target.closest('[data-hub-home]')) {
-            if (!discardAttendanceEdits()) return;
+            if (!(await canLeavePanel())) return;
             try {
                 sessionStorage.removeItem('gc-hw-resume');
             } catch {
@@ -436,7 +470,7 @@ document.addEventListener("click", (event) => {
         }
         const actionBtn = event.target.closest('[data-hub-action]');
         if (!actionBtn || !hubPanel) return;
-        if (!discardAttendanceEdits()) return;
+        if (!(await canLeavePanel())) return;
         const action = actionBtn.getAttribute('data-hub-action');
         try {
             sessionStorage.setItem('gc-hub-action', action);
@@ -494,8 +528,8 @@ document.addEventListener("click", (event) => {
         setLoginLoading(true);
         signInWithEmailAndPassword(auth, email, password)
             .then(async (userCredential) => {
-                // Name sync must not block login — rules may reject partial updates
-                // (e.g. accounts without remainingTime). Hub load uses onAuthStateChanged.
+                // Name sync must not block login — rules may reject some profile
+                // updates. Hub load uses onAuthStateChanged.
                 try {
                     const userRef = doc(db, "users", userCredential.user.uid);
                     const snap = await getDoc(userRef);

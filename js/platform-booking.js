@@ -1,5 +1,6 @@
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, collection, getDocs, query, where, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 
 const REGION = "https://asia-northeast1-ai-sensei-8849b.cloudfunctions.net";
 
@@ -339,7 +340,12 @@ async function renderTicketDesk(root, db) {
     if (grantAll) grantAll.onclick = async () => {
       if (busy) return;
       const count = root.querySelector("#ticket-count").value;
-      const ok = window.confirm(`生徒全員に今月分を渡します。基本は1人 ${count} まいで、個人の毎月設定がある生徒はその枚数です。今月すでに渡した生徒には重複しません。自動では取り消せません。`);
+      const ok = await confirmAction({
+        title: "今月分を渡しますか？",
+        message: `生徒全員に今月分を渡します。基本は1人 ${count} まいで、個人の毎月設定がある生徒はその枚数です。\n今月すでに渡した生徒には重複しません。自動では取り消せません。`,
+        confirmLabel: "渡す",
+        cancelLabel: "やめる",
+      });
       if (!ok) return;
       busy = true;
       grantAll.disabled = true;
@@ -371,7 +377,13 @@ async function renderTicketDesk(root, db) {
       const message = action === "clear" || count === 0
         ? "生徒全員のチケットを消します。元に戻すには、もう一度枚数を追加してください。"
         : `生徒全員の残数を ${count} 枚に変更します。いま持っているチケットは、この枚数に置き換わります。`;
-      if (!window.confirm(message)) return;
+      if (!await confirmAction({
+        title: "チケットを更新しますか？",
+        message,
+        confirmLabel: "更新する",
+        cancelLabel: "やめる",
+        danger: true,
+      })) return;
       busy = true;
       const status = root.querySelector("#ticket-status");
       root.querySelectorAll("#ticket-bulk-set, #ticket-bulk-clear").forEach((button) => { button.disabled = true; });
@@ -466,9 +478,15 @@ async function renderTicketDesk(root, db) {
     root.onclick = (event) => {
       if (moreMenu && !moreMenu.hidden && !event.target.closest(".gc-more")) moreMenu.hidden = true;
     };
-    root.querySelector("#gift-clear").onclick = () => {
+    root.querySelector("#gift-clear").onclick = async () => {
       moreMenu.hidden = true;
-      if (window.confirm(`${person.name || "このアカウント"} のチケットをすべて消します。元に戻すには、もう一度枚数を追加してください。`)) run("clear")();
+      if (await confirmAction({
+        title: "チケットをすべて消しますか？",
+        message: `${person.name || "このアカウント"} のチケットをすべて消します。元に戻すには、もう一度枚数を追加してください。`,
+        confirmLabel: "消す",
+        cancelLabel: "やめる",
+        danger: true,
+      })) run("clear")();
     };
     root.querySelector("#gift-override").onclick = () => {
       const raw = root.querySelector("#gift-month").value;
@@ -476,8 +494,14 @@ async function renderTicketDesk(root, db) {
     };
     root.querySelector("#gift-override-clear").onclick = run("override", { count: null });
     root.querySelectorAll("[data-lot]").forEach((button) => {
-      button.onclick = () => {
-        if (window.confirm("この分のチケットを消します。")) run("remove", { lotId: button.dataset.lot })();
+      button.onclick = async () => {
+        if (await confirmAction({
+          title: "この分のチケットを消しますか？",
+          message: "この操作はあとから取り消せません。",
+          confirmLabel: "消す",
+          cancelLabel: "やめる",
+          danger: true,
+        })) run("remove", { lotId: button.dataset.lot })();
       };
     });
   };

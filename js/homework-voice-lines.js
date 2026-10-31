@@ -31,8 +31,13 @@ export function linesForQuestions(questions) {
     (question?.left || []).forEach((item) => push(item?.text));
     (question?.right || []).forEach((item) => push(item?.text));
     (question?.tiles || []).forEach(push);
-    if (Array.isArray(question?.answer)) push(question.answer.join(" "));
-    else push(question?.answer);
+    // Individual answer tokens (sentence chips) plus the joined phrase.
+    if (Array.isArray(question?.answer)) {
+      question.answer.forEach(push);
+      push(question.answer.join(" "));
+    } else {
+      push(question?.answer);
+    }
     push(question?.display);
   });
   return lines;

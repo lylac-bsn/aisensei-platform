@@ -735,6 +735,19 @@ exports.getSentHomeworkDetail = onCall({ region: REGION }, async (request) => {
     ? Math.round(students.reduce((sum, row) => sum + (row.percent || 0), 0) / students.length)
     : 0;
 
+  let teacherName = clean(data.creatorName, 40) || "先生";
+  const teacherId = clean(data.teacherId, 128);
+  if (teacherId) {
+    try {
+      const teacherSnap = await db().collection("users").doc(teacherId).get();
+      if (teacherSnap.exists) {
+        teacherName = clean(teacherSnap.data()?.displayName || teacherSnap.data()?.email, 40) || teacherName;
+      }
+    } catch {
+      /* keep creatorName fallback */
+    }
+  }
+
   return {
     assignment: {
       id: assignmentId,
@@ -744,6 +757,8 @@ exports.getSentHomeworkDetail = onCall({ region: REGION }, async (request) => {
       questionCount: totalQuestions,
       classIds,
       classNames,
+      teacherId,
+      teacherName,
       createdAt: millisOf(data.createdAt),
       updatedAt: millisOf(data.updatedAt),
     },
@@ -756,6 +771,145 @@ exports.getSentHomeworkDetail = onCall({ region: REGION }, async (request) => {
     },
     students,
     questions: questionStats,
+  };
+});
+
+/** Owner-only roster of every teacher's packs (drafts + sent) with class + progress summary. */
+exports.listOwnerTeacherHomework = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  if (user.role !== "owner") {
+    throw new HttpsError("permission-denied", "オーナーだけが開けます。");
+  }
+
+  let snap;
+  try {
+    snap = await db().collection("homeworkAssignments").limit(400).get();
+  } catch (error) {
+    console.warn("listOwnerTeacherHomework", error);
+    throw new HttpsError("internal", "先生の宿題を読み込めませんでした。");
+  }
+
+  const rows = snap.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .filter((data) => data.format === "pack-v1" && !data.official)
+    .filter((data) => data.status === "draft" || data.status === "assigned");
+
+  const teacherIds = [...new Set(rows.map((row) => row.teacherId).filter(Boolean))];
+  const classIdSet = new Set();
+  rows.forEach((row) => {
+    (Array.isArray(row.classIds) ? row.classIds : []).forEach((id) => {
+      if (id) classIdSet.add(id);
+    });
+  });
+
+  const teacherNameById = {};
+  for (let i = 0; i < teacherIds.length; i += 40) {
+    const chunk = teacherIds.slice(i, i + 40);
+    const snaps = await db().getAll(...chunk.map((id) => db().collection("users").doc(id)));
+    snaps.forEach((docSnap, index) => {
+      const id = chunk[index];
+      const data = docSnap.exists ? docSnap.data() : {};
+      teacherNameById[id] = clean(data.displayName || data.email, 40) || "先生";
+    });
+  }
+
+  const classTitleMap = {};
+  await Promise.all([...classIdSet].map(async (classId) => {
+    try {
+      const klass = await db().collection("classes").doc(classId).get();
+      if (!klass.exists) return;
+      classTitleMap[classId] = clean(klass.data().title || klass.data().name, 40) || classId;
+    } catch {
+      classTitleMap[classId] = classId;
+    }
+  }));
+
+  const assignedIds = rows.filter((row) => row.status === "assigned").map((row) => row.id);
+  const progressByAssignment = new Map();
+  for (let i = 0; i < assignedIds.length; i += 10) {
+    const chunk = assignedIds.slice(i, i + 10);
+    try {
+      const progressSnap = await db().collection("homeworkProgress")
+        .where("assignmentId", "in", chunk)
+        .get();
+      progressSnap.docs.forEach((docSnap) => {
+        const row = docSnap.data() || {};
+        const assignmentId = clean(row.assignmentId, 128);
+        if (!assignmentId) return;
+        let bucket = progressByAssignment.get(assignmentId);
+        if (!bucket) {
+          bucket = { completed: 0, started: 0, percentSum: 0, students: 0 };
+          progressByAssignment.set(assignmentId, bucket);
+        }
+        const completed = Boolean(row.completed);
+        const correctCount = Number(row.correctCount) || 0;
+        const started = Boolean(
+          row.startedAt
+          || completed
+          || correctCount > 0
+          || Object.keys(row.attempts || {}).length
+          || (Array.isArray(row.doneIds) && row.doneIds.length)
+        );
+        bucket.students += 1;
+        if (completed) bucket.completed += 1;
+        if (started) bucket.started += 1;
+        const total = Number(row.total) || 0;
+        const percent = Number(row.percent) || (total ? Math.round((correctCount / total) * 100) : 0);
+        bucket.percentSum += percent;
+      });
+    } catch (error) {
+      console.warn("listOwnerTeacherHomework progress", error);
+    }
+  }
+
+  const items = rows.map((row) => {
+    const classIds = Array.isArray(row.classIds) ? row.classIds.filter(Boolean) : [];
+    const teacherId = row.teacherId || "";
+    const teacherName = teacherNameById[teacherId]
+      || clean(row.creatorName, 40)
+      || "先生";
+    if (teacherId && !teacherNameById[teacherId]) teacherNameById[teacherId] = teacherName;
+    const card = libraryCard(row.id, row);
+    const progress = progressByAssignment.get(row.id);
+    const assigneeCount = (Array.isArray(row.assigneeIds) ? row.assigneeIds : []).length;
+    let completedCount = 0;
+    let startedCount = 0;
+    let avgPercent = null;
+    if (row.status === "assigned") {
+      if (progress) {
+        completedCount = progress.completed;
+        startedCount = progress.started;
+        const denom = Math.max(assigneeCount, progress.students, 1);
+        avgPercent = Math.round(progress.percentSum / denom);
+      } else {
+        avgPercent = 0;
+      }
+    }
+    return {
+      ...card,
+      teacherId,
+      teacherName,
+      status: row.status || "draft",
+      classIds,
+      classNames: classIds.map((id) => classTitleMap[id] || id),
+      assigneeCount,
+      completedCount,
+      startedCount,
+      avgPercent,
+      createdAt: millisOf(row.createdAt),
+      updatedAt: millisOf(row.updatedAt),
+      sourceTemplateId: row.sourceTemplateId || "",
+    };
+  }).sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+
+  return {
+    items,
+    teachers: Object.entries(teacherNameById)
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "ja")),
+    classes: Object.entries(classTitleMap)
+      .map(([id, title]) => ({ id, title }))
+      .sort((a, b) => String(a.title).localeCompare(String(b.title), "ja")),
   };
 });
 

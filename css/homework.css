@@ -1528,12 +1528,61 @@ header.hw-page-head {
     color: #B3382C;
 }
 
+.hw-voice-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+
 .hw-voice-panel-label {
     margin: 0;
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.04em;
     opacity: 0.8;
+}
+
+.hw-voice-stop {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.15rem;
+    height: 2.15rem;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #E0B89E;
+    border-radius: 10px;
+    background: #fff;
+    color: #C45E34;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.hw-voice-stop svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    fill: currentColor;
+    stroke: none;
+}
+
+.hw-voice-stop:hover:not(:disabled) {
+    background: #FFF0E8;
+    border-color: #D46845;
+    color: #B3382C;
+}
+
+.hw-voice-stop:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.hw-voice-stop:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.hw-voice-stop[hidden] {
+    display: none !important;
 }
 
 .hw-voice-dots {
@@ -2425,7 +2474,8 @@ header.hw-page-head {
 .hw-drawer {
     position: fixed;
     inset: 0;
-    z-index: 80;
+    /* Above hub top bar (200) and bell panel (220) so the drawer head isn't clipped. */
+    z-index: 300;
     display: grid;
     justify-items: end;
 }
@@ -2993,6 +3043,10 @@ header.hw-soft-card-head h4 {
     color: #C45E34;
 }
 
+.hw-audio-line.is-queued .hw-audio-line-cap {
+    color: #B07A3A;
+}
+
 .hw-audio-line.is-unconfirmed .hw-audio-line-mark {
     color: #C45E34;
 }
@@ -3276,6 +3330,64 @@ header.hw-soft-card-head h4 {
 
 .hw-drawer-skip:disabled,
 .hw-drawer-skip[hidden] { display: none; }
+
+.hw-drawer-save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.9rem;
+    min-width: 6.5rem;
+    padding: 0.65rem 1.1rem;
+    border: 1px solid var(--hw-drawer-border);
+    border-radius: 999px;
+    background: #fff;
+    color: #6E584E;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hw-drawer-save-ico {
+    display: grid;
+    place-items: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: 0 0 auto;
+}
+
+.hw-drawer-save-ico svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.hw-drawer-save:hover:not(:disabled) {
+    background: var(--hw-drawer-peach);
+    border-color: #E5C8B4;
+    color: var(--hw-drawer-coral-deep);
+}
+
+.hw-drawer-save.is-dirty:not(:disabled) {
+    border-color: #E07A55;
+    color: #C45E34;
+    box-shadow: 0 0 0 3px rgba(224, 122, 85, 0.14);
+}
+
+.hw-drawer-save:active:not(:disabled) { transform: scale(0.98); }
+
+.hw-drawer-save:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.hw-drawer-save[hidden] { display: none; }
 
 .hw-drawer-confirm {
     display: inline-flex;
@@ -4481,6 +4593,7 @@ main.gc-app.platform-hub.is-hw-focus .gc-learn-play:has(.hw-done) {
     }
 
     .hw-drawer-ghost,
+    .hw-drawer-save,
     .hw-drawer-confirm {
         flex: 1 1 auto;
     }
@@ -5470,7 +5583,8 @@ header.hw-lib-hero.hw-lib-hero-compact,
 .hw-lib-preview {
     position: fixed;
     inset: 0;
-    z-index: 80;
+    /* Above hub top bar (200) and bell panel (220). */
+    z-index: 300;
 }
 
 .hw-lib-preview-backdrop {
@@ -5651,6 +5765,35 @@ header.hw-lib-hero.hw-lib-hero-compact,
     margin: 0.15rem 0 0.35rem;
 }
 
+.hw-teacher-toolbar {
+    align-items: flex-start;
+}
+
+.hw-teacher-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: #F3EFEA;
+    color: #6F625B;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.hw-teacher-status.is-sent {
+    background: #E8F5E9;
+    color: #2E7D32;
+}
+
+.hw-teacher-card:not([data-sent-open]) {
+    cursor: default;
+}
+
+.hw-teacher-card:not([data-sent-open]):hover {
+    transform: none;
+}
+
 .hw-sent-hint {
     margin: 0;
     color: #817672;
@@ -5703,10 +5846,20 @@ header.hw-lib-hero.hw-lib-hero-compact,
 }
 
 .hw-sent-card-classes {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
     margin: 0;
     color: #817672;
     font-size: 0.86rem;
     font-weight: 700;
+}
+
+.hw-sent-card-classes .hw-ico {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
 }
 
 .hw-sent-card-stats {

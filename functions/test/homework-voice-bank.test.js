@@ -28,8 +28,12 @@ test("homework voice lines cover prompts, choices, and tiles", async () => {
   assert.ok(lines.includes("Tank"));
   assert.ok(lines.includes("にほんごと えいごを つなげよう"));
   assert.ok(lines.includes("さかな"));
+  assert.ok(lines.includes("I"));
+  assert.ok(lines.includes("like"));
+  assert.ok(lines.includes("fish"));
   assert.ok(lines.includes("I like fish"));
   assert.equal(cacheKey("  Fish "), cacheKey("fish"));
+  assert.equal(cacheKey("I"), cacheKey("i"));
   assert.equal(readingMatches("Fish", "Fish."), true);
   assert.equal(readingMatches("Fish", "<say>Fish</say>"), true);
   assert.equal(readingMatches("Fish", "The answer is fish and also a story"), false);
