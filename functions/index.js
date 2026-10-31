@@ -232,6 +232,7 @@ exports.deleteCostEntry = onCall(
 {
   const booking = require("./booking");
   exports.publishClass = booking.publishClass;
+  exports.deleteClass = booking.deleteClass;
   exports.bookClass = booking.bookClass;
   exports.cancelBooking = booking.cancelBooking;
   exports.setTicketPolicy = booking.setTicketPolicy;

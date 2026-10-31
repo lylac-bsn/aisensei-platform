@@ -1514,10 +1514,10 @@ function writeLearnHubUi(uid = "") {
 
 let learnHubUi = defaultLearnHubUi();
 
-function shortBubbleLabel(text, max = 8) {
+function shortBubbleLabel(text, max = 10) {
   const value = String(text || "").trim();
   if (value.length <= max) return value;
-  return `${value.slice(0, max - 1)}…`;
+  return `${value.slice(0, Math.max(1, max - 1))}…`;
 }
 
 function sortHomeworkRows(rows) {
@@ -1558,7 +1558,7 @@ function reportBubbleHtml(item, index) {
       data-wheel-id="${escapeHtml(item.id)}"
       aria-label="${escapeHtml(formatLessonDate(item.time))}">
       <span class="gc-wheel-bubble-ico is-cute" aria-hidden="true">${wheelBubbleIcon(index, { report: true })}</span>
-      <span class="gc-wheel-bubble-label">${escapeHtml(shortBubbleLabel(label, 7))}</span>
+      <span class="gc-wheel-bubble-label">${escapeHtml(shortBubbleLabel(label, 9))}</span>
     </button>`;
 }
 
@@ -1947,21 +1947,22 @@ async function renderStudentLearning(root, db, uid) {
     // Match CSS: stack layout at <=980px.
     const mobile = window.matchMedia("(max-width: 980px)").matches;
     const narrow = !mobile && (bounds.width < 360 || window.matchMedia("(max-width: 1200px)").matches);
-    const height = Math.max(bounds.height, mobile ? 200 : (narrow ? 360 : 420));
-    const width = Math.max(bounds.width, mobile ? 200 : 240);
+    const height = Math.max(bounds.height, mobile ? 220 : (narrow ? 360 : 420));
+    const width = Math.max(bounds.width, mobile ? 220 : 240);
     const selectedSize = mobile
-      ? Math.min(96, Math.max(78, Math.min(width, height) * 0.26))
+      ? Math.min(88, Math.max(72, Math.min(width, height) * 0.22))
       : narrow
         ? Math.min(118, Math.max(100, height * 0.16))
         : Math.min(132, Math.max(118, height * 0.17));
-    const gap = mobile ? 16 : (narrow ? 22 : 28);
+    const gap = mobile ? 18 : (narrow ? 22 : 28);
+    // Mobile: shallower arc so neighbors stay fully inside the wheel box.
     const radius = mobile
-      ? Math.min(width * 0.62, Math.max(120, height * 0.78))
+      ? Math.min(width * 0.48, Math.max(108, height * 0.62))
       : Math.min(height * (narrow ? 0.46 : 0.5), Math.max(narrow ? 220 : 280, height * (narrow ? 0.44 : 0.48)));
     // All bubbles stay selectedSize — space them so neighbors don't overlap.
     const minChord = selectedSize + gap;
     const step = Math.max(
-      mobile ? 0.38 : 0.36,
+      mobile ? 0.44 : 0.36,
       2 * Math.asin(Math.min(0.9, minChord / (2 * Math.max(radius, 1)))),
     );
     // Keep the selected bubble near the right edge of the wheel column,
@@ -1970,8 +1971,8 @@ async function renderStudentLearning(root, db, uid) {
       ? width * 0.5
       : Math.min(width - selectedSize * 0.55 - 12, width * (narrow ? 0.92 : 0.88));
     const cx = mobile ? width * 0.5 : selectedX - radius;
-    const cy = mobile ? height * 1.12 : height * 0.5;
-    const maxVisible = Math.max(2, Math.floor((mobile ? 0.9 : 1.2) / step));
+    const cy = mobile ? height * 1.02 : height * 0.5;
+    const maxVisible = Math.max(2, Math.floor((mobile ? 0.85 : 1.2) / step));
     return {
       mobile,
       narrow,
@@ -1985,7 +1986,7 @@ async function renderStudentLearning(root, db, uid) {
       gap,
       maxVisible,
       selectedX: mobile ? width * 0.5 : selectedX,
-      selectedY: mobile ? height * 0.42 : cy,
+      selectedY: mobile ? height * 0.46 : cy,
     };
   };
 
@@ -2054,11 +2055,23 @@ async function renderStudentLearning(root, db, uid) {
         bridge.style.top = `${metrics.selectedY}px`;
         bridge.style.width = `${Math.max(48, metrics.width - metrics.selectedX - metrics.selectedSize * 0.48 + 72)}px`;
       }
-    } else if (navsHost) {
-      navsHost.style.left = "";
-      navsHost.style.top = "";
-      navsHost.style.right = "";
-      navsHost.style.transform = "";
+    } else {
+      if (modeHost) {
+        modeHost.style.left = "";
+        modeHost.style.top = "";
+        modeHost.style.transform = "";
+      }
+      if (navsHost) {
+        navsHost.style.left = "";
+        navsHost.style.top = "";
+        navsHost.style.right = "";
+        navsHost.style.transform = "";
+      }
+      if (bridge) {
+        bridge.style.left = "";
+        bridge.style.top = "";
+        bridge.style.width = "";
+      }
     }
     updateNavButtons();
   };
