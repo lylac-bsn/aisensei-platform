@@ -195,12 +195,15 @@ export async function renderPlatformPanel(root, action, role) {
       return;
     }
     let childPicker = "";
+    let canBook = role !== "admin" && role !== "owner";
     if (role === "parent") {
-      const me = await getDoc(doc(db, "users", getAuth().currentUser.uid));
-      const kids = me.data()?.linkedChildren || [];
+      const kids = await linkedChildrenForBooking(db, getAuth().currentUser.uid);
+      if (!kids.length) {
+        root.innerHTML = `<h2>講座を予約</h2><p class="gc-muted">子どもをリンクすると、代わりに講座を予約できます。</p>`;
+        return;
+      }
       childPicker = `<label>子ども <select id="book-child">${kids.map((kid) => `<option value="${escapeHtml(kid.id)}">${escapeHtml(kid.name)}</option>`).join("")}</select></label>`;
     }
-    const canBook = role !== "admin" && role !== "owner";
     root.innerHTML = `<h2>講座を予約</h2>${childPicker}<div id="class-list" class="hub-stack"></div>`;
     const list = root.querySelector("#class-list");
     list._role = role;
@@ -1398,6 +1401,20 @@ function closeDaySheet(sheet) {
   window.setTimeout(done, 320);
 }
 
+async function linkedChildrenForBooking(db, uid) {
+  const me = await getDoc(doc(db, "users", uid));
+  const data = me.data() || {};
+  const byId = new Map();
+  for (const kid of data.linkedChildren || []) {
+    if (kid?.id) byId.set(kid.id, { id: kid.id, name: kid.name || "こども" });
+  }
+  for (const id of data.linkedStudentIds || []) {
+    if (!id || byId.has(id)) continue;
+    byId.set(id, { id, name: "こども" });
+  }
+  return [...byId.values()];
+}
+
 async function paintClasses(list, canBook) {
   const db = getFirestore();
   const snap = await getDocs(query(collection(db, "classes"), where("status", "==", "open")));
@@ -1405,17 +1422,11 @@ async function paintClasses(list, canBook) {
   if (canBook && !snap.empty) {
     const uid = getAuth().currentUser.uid;
     const child = document.getElementById("book-child")?.value;
-    if (child) {
-      await Promise.all(snap.docs.map(async (item) => {
-        const booking = await getDoc(doc(db, "bookings", `${item.id}__${child}`));
-        if (booking.data()?.status === "booked") booked.add(item.id);
-      }));
-    } else {
-      const mine = await getDocs(query(collection(db, "bookings"), where("studentId", "==", uid)));
-      mine.forEach((item) => {
-        if (item.data().status === "booked" && item.data().classId) booked.add(item.data().classId);
-      });
-    }
+    const studentId = child || uid;
+    const mine = await getDocs(query(collection(db, "bookings"), where("studentId", "==", studentId)));
+    mine.forEach((item) => {
+      if (item.data().status === "booked" && item.data().classId) booked.add(item.data().classId);
+    });
   }
   const classes = snap.docs.map((item) => {
     const data = item.data();

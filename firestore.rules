@@ -114,7 +114,17 @@ service cloud.firestore {
     }
 
     match /bookings/{bookingId} {
-      allow read: if request.auth != null && (
+      // Missing docs: allow get so clients can probe known booking ids without
+      // failing rule evaluation on resource.data. Existing docs stay scoped.
+      allow get: if request.auth != null && (
+        resource == null
+        || resource.data.studentId == request.auth.uid
+        || resource.data.bookedBy == request.auth.uid
+        || resource.data.teacherId == request.auth.uid
+        || linkedParentOf(resource.data.studentId)
+        || isAdmin()
+      );
+      allow list: if request.auth != null && (
         resource.data.studentId == request.auth.uid
         || resource.data.bookedBy == request.auth.uid
         || resource.data.teacherId == request.auth.uid
