@@ -7,11 +7,12 @@ import {
   updateQuestion,
   gradeAnswer,
   toPublic,
-} from "./homework-engine.js?v=20261030-hw-lib129";
-import { mountHomeworkPlayer } from "./homework-play.js?v=20261030-hw-lib129";
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261030-hw-lib129";
-import { hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261030-hw-lib129";
-import { cacheKey, RETRY_LINES } from "./homework-voice-lines.js?v=20261030-hw-lib129";
+} from "./homework-engine.js?v=20261031-hw-voicefix";
+import { mountHomeworkPlayer } from "./homework-play.js?v=20261031-hw-voicefix";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-hw-voicefix";
+import { disconnectHomeworkVoiceSessions, forgetHomeworkVoice, hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261031-hw-voicefix";
+import { cacheKey, RETRY_LINES } from "./homework-voice-lines.js?v=20261031-hw-voicefix";
+import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 
 const SAMPLE = [
   ["さかな", "Fish"],
@@ -59,6 +60,9 @@ export async function mountTeacherHomework(root, options) {
   const audioReviewed = new Map();
   const heardLines = new Set();
   const lineBusy = new Set();
+  /** Lines waiting for a forced remake after (or instead of) the active bulk generate. */
+  const regenQueue = new Map();
+  let regenDrainPromise = null;
   const retryNeedsRecheck = new Set();
   const lineKey = (text) => cacheKey(text);
   const markLinesHeard = (lines = []) => {
@@ -243,7 +247,10 @@ export async function mountTeacherHomework(root, options) {
         <div id="hw-side-status" class="hw-side-status" hidden role="status" aria-live="polite"></div>
         <div class="hw-tools" id="hw-tools" hidden>
           <div id="hw-voice" class="hw-voice-panel" hidden role="status" aria-live="polite">
-            <p class="hw-voice-panel-label">音声の進捗</p>
+            <div class="hw-voice-panel-head">
+              <p class="hw-voice-panel-label">音声の進捗</p>
+              <button type="button" class="hw-voice-stop" id="hw-voice-stop" hidden aria-label="音声生成を停止" title="停止して文の確認にもどる">${ICON.stop}</button>
+            </div>
             <p class="hw-voice-panel-text"><span id="hw-voice-text"></span><span class="hw-voice-dots" aria-hidden="true"><span></span><span></span><span></span></span></p>
             <p class="hw-voice-panel-now" id="hw-voice-now" hidden></p>
             <p class="hw-voice-panel-note">待っている間に生成済みの音声を確認してください。</p>
@@ -358,6 +365,7 @@ export async function mountTeacherHomework(root, options) {
               <button type="button" class="hw-drawer-skip" data-drawer="next" id="hw-drawer-skip" aria-label="次の確認へ" title="次の確認へ">${ICON.right}</button>
             </div>
             <div class="hw-drawer-foot-main">
+              <button type="button" class="hw-drawer-save" data-drawer="save" id="hw-drawer-save" title="編集内容を保存"><span class="hw-drawer-save-ico" aria-hidden="true">${ICON.save}</span><span class="hw-drawer-save-label">保存</span></button>
               <button type="button" class="hw-drawer-confirm" data-drawer="confirm" id="hw-drawer-confirm"><span class="hw-drawer-confirm-ico" aria-hidden="true"></span><span class="hw-drawer-confirm-label">音声を確認</span></button>
             </div>
           </div>
@@ -387,6 +395,9 @@ export async function mountTeacherHomework(root, options) {
   const voiceNote = studio.querySelector("#hw-voice");
   const voiceNoteText = studio.querySelector("#hw-voice-text");
   const voiceNoteNow = studio.querySelector("#hw-voice-now");
+  const voiceStopBtn = studio.querySelector("#hw-voice-stop");
+  let voiceAbort = null;
+  let voiceStopRequested = false;
   const drawer = studio.querySelector("#hw-drawer");
   const drawerBody = studio.querySelector("#hw-drawer-body");
   const drawerPanel = studio.querySelector(".hw-drawer-panel");
@@ -404,6 +415,7 @@ export async function mountTeacherHomework(root, options) {
   };
   const setVoiceWait = (message, kind = "", currentLines = []) => {
     const waiting = Boolean(message);
+    const busy = kind === "busy" || (waiting && !kind);
     const active = (Array.isArray(currentLines) ? currentLines : [currentLines])
       .map((line) => String(line || "").trim())
       .filter(Boolean);
@@ -417,10 +429,15 @@ export async function mountTeacherHomework(root, options) {
     preview.setAttribute("aria-busy", preview.disabled ? "true" : "false");
     if (!voiceNote || !voiceNoteText) return;
     voiceNote.hidden = !waiting;
-    voiceNote.classList.toggle("is-busy", kind === "busy" || (waiting && !kind));
+    voiceNote.classList.toggle("is-busy", busy);
     voiceNote.classList.toggle("is-ok", kind === "ok");
     voiceNote.classList.toggle("is-bad", kind === "bad");
     voiceNoteText.textContent = message || "";
+    if (voiceStopBtn) {
+      const showStop = waiting && busy && state.audioBuilding && !voiceStopRequested;
+      voiceStopBtn.hidden = !showStop;
+      voiceStopBtn.disabled = voiceStopRequested;
+    }
     if (voiceNoteNow) {
       if (waiting && active.length) {
         voiceNoteNow.hidden = false;
@@ -433,6 +450,23 @@ export async function mountTeacherHomework(root, options) {
       }
     }
   };
+
+  const requestVoiceStop = () => {
+    if (!state.audioBuilding || voiceStopRequested) return;
+    voiceStopRequested = true;
+    if (voiceStopBtn) {
+      voiceStopBtn.disabled = true;
+      voiceStopBtn.hidden = false;
+    }
+    setVoiceWait("音声生成を停止しています…", "busy");
+    try { voiceAbort?.abort(); } catch { /* ignore */ }
+    disconnectHomeworkVoiceSessions();
+    stopPrompt();
+  };
+  voiceStopBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    requestVoiceStop();
+  });
   const speakLinesFor = (question, draft) => {
     const lines = [];
     const push = (value) => {
@@ -679,7 +713,13 @@ export async function mountTeacherHomework(root, options) {
       try {
         await persistDraftQuietly({ silent: true });
       } catch (error) {
-        if (!window.confirm("下書きの保存に失敗しました。ライブラリに戻りますか？")) return;
+        if (!await confirmAction({
+          title: "下書きを保存できませんでした",
+          message: "ライブラリに戻りますか？編集中の内容は端末に残っていない場合があります。",
+          confirmLabel: "もどる",
+          cancelLabel: "とどまる",
+          danger: true,
+        })) return;
       }
     }
     state.dirty = false;
@@ -710,11 +750,134 @@ export async function mountTeacherHomework(root, options) {
     return voice === "missing" || voice === "error";
   }) || RETRY_LINES.some((line) => !hasHomeworkVoice(line));
 
+  const refreshVoiceReviewUi = () => {
+    paintQuestions();
+    if (state.editor && !voicePlaying) paintDrawer();
+  };
+
+  /**
+   * Queue a forced remake. While bulk audio is building, clips stay playable until
+   * queued — then they wait and regenerate after (or as soon as) the batch finishes.
+   */
+  const enqueueVoiceRegen = async (lines, { question = null } = {}) => {
+    const targets = [...new Map(
+      (lines || [])
+        .map((line) => String(line || "").trim())
+        .filter(Boolean)
+        .map((line) => [lineKey(line), line]),
+    ).values()];
+    if (!targets.length) {
+      setStatus("bad", "作り直す音声がありません。");
+      return false;
+    }
+    const accepted = [];
+    targets.forEach((line) => {
+      const key = lineKey(line);
+      if (lineBusy.has(key) || regenQueue.has(key)) return;
+      const creating = !hasHomeworkVoice(line);
+      regenQueue.set(key, { text: line, creating });
+      heardLines.delete(key);
+      accepted.push({ text: line, creating });
+    });
+    if (!accepted.length) return false;
+
+    stopPrompt();
+    voicePlaying = false;
+    if (question) {
+      audioReviewed.delete(question.id);
+      if (question.approved) {
+        const index = state.questions.findIndex((item) => item.id === question.id);
+        if (index >= 0) {
+          state.questions[index] = { ...question, approved: false, review: true };
+        }
+      }
+    }
+    accepted.forEach(({ text }) => {
+      if (RETRY_LINES.includes(text)) retryNeedsRecheck.add(lineKey(text));
+    });
+    // Drop cached clips now so the next prepare remakes them; keep queue label until drain.
+    await forgetHomeworkVoice(accepted.map(({ text }) => text));
+    refreshVoiceReviewUi();
+    const queuedBehindBuild = state.audioBuilding;
+    const creating = accepted.some((item) => item.creating);
+    setStatus("", accepted.length === 1
+      ? (queuedBehindBuild
+        ? `「${accepted[0].text}」を作り直しキューに入れました。生成のあとに作り直します…`
+        : (creating ? `「${accepted[0].text}」を Generate しています…` : `「${accepted[0].text}」の音声を作り直しています…`))
+      : (queuedBehindBuild
+        ? `${accepted.length}件を作り直しキューに入れました。生成のあとに作り直します…`
+        : (creating ? "音声を Generate しています…" : "音声を作り直しています…")));
+    if (!state.audioBuilding) await drainRegenQueue();
+    return true;
+  };
+
+  const drainRegenQueue = () => {
+    if (state.audioBuilding) return Promise.resolve();
+    if (regenDrainPromise) return regenDrainPromise;
+    regenDrainPromise = (async () => {
+      try {
+        while (regenQueue.size && !state.audioBuilding) {
+          const batch = [...regenQueue.entries()];
+          regenQueue.clear();
+          const targets = batch.map(([, item]) => item.text);
+          const targetKeys = batch.map(([key]) => key);
+          const creating = batch.some(([, item]) => item.creating);
+          targetKeys.forEach((key) => lineBusy.add(key));
+          refreshVoiceReviewUi();
+          setStatus("", targets.length === 1
+            ? (creating ? `「${targets[0]}」を Generate しています…` : `「${targets[0]}」の音声を作り直しています…`)
+            : (creating ? "音声を Generate しています…" : "音声を作り直しています…"));
+          try {
+            const voice = await prepareHomeworkVoice(targets, {
+              db: options.db,
+              force: true,
+              onProgress: (_done, _total, info = {}) => {
+                if (info.making > 0) {
+                  const now = (info.currentLines || []).filter(Boolean);
+                  const label = now.length
+                    ? `「${now.join("」「")}」`
+                    : (info.currentLine ? `「${info.currentLine}」` : "音声");
+                  setStatus("", creating
+                    ? `${label} を Generate しています ${info.makingDone || 0} / ${info.making}…`
+                    : `${label} を作り直しています ${info.makingDone || 0} / ${info.making}…`);
+                }
+              },
+            });
+            targetKeys.forEach((key) => heardLines.delete(key));
+            if (voice.failed.length) {
+              setStatus("bad", targets.length === 1
+                ? "この音声をつくれませんでした。もう一度試してください。"
+                : "一部の音声をつくれませんでした。もう一度試してください。");
+            } else {
+              setStatus("ok", targets.length === 1
+                ? (creating
+                  ? "音声を Generate しました。きいて確認してください。"
+                  : "この音声を作り直しました。未確認なので、もう一度きいてください。")
+                : (creating
+                  ? "音声を Generate しました。きいて確認してください。"
+                  : "音声を作り直しました。未確認の音声をもう一度きいてください。"));
+            }
+          } catch (error) {
+            setStatus("bad", error.message || "音声の再生成に失敗しました。");
+          } finally {
+            targetKeys.forEach((key) => lineBusy.delete(key));
+            refreshVoiceReviewUi();
+          }
+        }
+      } finally {
+        regenDrainPromise = null;
+        if (regenQueue.size && !state.audioBuilding) await drainRegenQueue();
+      }
+    })();
+    return regenDrainPromise;
+  };
+
   const makeAllVoice = async ({ force = false } = {}) => {
     if (!state.questions.length) {
       setStatus("bad", "先に「宿題をつくる」で問題をつくってください。");
       return;
     }
+    if (state.audioBuilding) return;
     const button = studio.querySelector("#hw-make-voice");
     const lines = [...linesForQuestions(state.questions), ...RETRY_LINES];
     if (!lines.length) {
@@ -743,13 +906,18 @@ export async function mountTeacherHomework(root, options) {
     if (actionButtons) actionButtons.hidden = true;
     tools.hidden = false;
     state.audioBuilding = true;
+    voiceStopRequested = false;
+    voiceAbort = new AbortController();
+    const signal = voiceAbort.signal;
     // Progress lives only in the voice panel — avoid duplicating it in side status.
     setStatus("", "");
     setVoiceWait("保存済みの音声を読み込んでいます…", "busy");
+    let stopped = false;
     try {
       // Unlock cached clips first so teachers can listen while the rest generate.
       if (!force) {
         await hydrateHomeworkVoice(lines, options.db);
+        if (signal.aborted) throw Object.assign(new Error("音声生成を停止しました。"), { name: "AbortError" });
         acceptReusableRetryLines();
       } else {
         // Full remake includes retry lines — they need a fresh listen-check.
@@ -765,7 +933,9 @@ export async function mountTeacherHomework(root, options) {
       const voice = await prepareHomeworkVoice(lines, {
         db: options.db,
         force,
+        signal,
         onProgress: (_done, _total, info = {}) => {
+          if (signal.aborted) return;
           if (!force) acceptReusableRetryLines();
           setVoiceWait(
             waitLine(_done, _total, info),
@@ -775,6 +945,7 @@ export async function mountTeacherHomework(root, options) {
           refreshVoiceUi();
         },
       });
+      if (signal.aborted) throw Object.assign(new Error("音声生成を停止しました。"), { name: "AbortError" });
       const made = voice.total - voice.failed.length;
       const newlyMade = Math.max(0, (voice.missingLines?.length || 0) - voice.failed.length);
       if (voice.failed.length || voice.syncFailed?.length || voice.syncMissing?.length) {
@@ -803,16 +974,39 @@ export async function mountTeacherHomework(root, options) {
       }
       refreshVoiceUi();
     } catch (error) {
-      const line = `音声をつくれませんでした。${error.message || ""}`;
-      setVoiceWait("", "");
-      setStatus("bad", line);
-      paintQuestions();
+      stopped = error?.name === "AbortError" || signal.aborted || voiceStopRequested;
+      if (stopped) {
+        // Back to phrase-check: edit words/questions, then press 確認完了 again.
+        state.audioReady = false;
+        state.filter = "all";
+        if (state.wordKey && state.wordKey !== RETRY_WORD_KEY) {
+          state.wordFilters[state.wordKey] = "all";
+        }
+        regenQueue.clear();
+        lineBusy.clear();
+        setVoiceWait("", "");
+        setStatus("ok", "音声生成を停止しました。文と問題を編集して、もう一度「確認完了」を押してください。");
+        paintQuestions();
+      } else {
+        const line = `音声をつくれませんでした。${error.message || ""}`;
+        setVoiceWait("", "");
+        setStatus("bad", line);
+        paintQuestions();
+      }
     } finally {
       state.audioBuilding = false;
+      voiceStopRequested = false;
+      voiceAbort = null;
+      if (voiceStopBtn) {
+        voiceStopBtn.hidden = true;
+        voiceStopBtn.disabled = false;
+      }
       if (actionButtons) actionButtons.hidden = false;
       button.disabled = false;
       studio.querySelector("#hw-generate").disabled = false;
       refreshVoiceUi();
+      // Run any remakes teachers queued while listening during the bulk generate.
+      if (!stopped) await drainRegenQueue();
     }
   };
 
@@ -855,6 +1049,7 @@ export async function mountTeacherHomework(root, options) {
     heardLines.clear();
     retryNeedsRecheck.clear();
     lineBusy.clear();
+    regenQueue.clear();
     voiceBusy.clear();
     if (state.editor) closeEditor(true);
     if (result.error) state.warnings.unshift(result.error);
@@ -1159,68 +1354,19 @@ export async function mountTeacherHomework(root, options) {
         setStatus("bad", "作り直す音声がありません。");
         return;
       }
-      const targetKeys = targets.map(lineKey);
-      if (targetKeys.some((key) => lineBusy.has(key))) return;
-      stopPrompt();
-      voicePlaying = false;
-      targetKeys.forEach((key) => {
-        lineBusy.add(key);
-        heardLines.delete(key);
-      });
-      audioReviewed.delete(question.id);
-      if (question.approved) {
-        state.questions[index] = { ...question, approved: false, review: true };
+      // Still-generating first-time clips stay in the bulk job; ready ones can re-queue.
+      if (state.audioBuilding && targets.every((line) => !hasHomeworkVoice(line) && !regenQueue.has(lineKey(line)))) {
+        setStatus("", "この音声はいま生成中です。できてから作り直せます。");
+        return;
       }
-      paintDrawer();
-      paintQuestions();
-      const creating = targets.some((line) => !hasHomeworkVoice(line));
-      setStatus("", targets.length === 1
-        ? (creating ? `「${targets[0]}」を Generate しています…` : `「${targets[0]}」の音声を作り直しています…`)
-        : (creating ? "音声を Generate しています…" : "音声を作り直しています…"));
-      try {
-        const voice = await prepareHomeworkVoice(targets, {
-          db: options.db,
-          force: true,
-          onProgress: (_done, _total, info = {}) => {
-            if (info.making > 0) {
-              const now = (info.currentLines || []).filter(Boolean);
-              const label = now.length
-                ? `「${now.join("」「")}」`
-                : (info.currentLine ? `「${info.currentLine}」` : "音声");
-              setStatus("", creating
-                ? `${label} を Generate しています ${info.makingDone || 0} / ${info.making}…`
-                : `${label} を作り直しています ${info.makingDone || 0} / ${info.making}…`);
-            }
-          },
-        });
-        if (voice.failed.length) {
-          setStatus("bad", targets.length === 1
-            ? "この音声をつくれませんでした。もう一度試してください。"
-            : "一部の音声をつくれませんでした。もう一度試してください。");
-        } else {
-          targetKeys.forEach((key) => heardLines.delete(key));
-          audioReviewed.delete(question.id);
-          setStatus("ok", targets.length === 1
-            ? (creating
-              ? "音声を Generate しました。きいて確認してください。"
-              : "この音声を作り直しました。未確認なので、もう一度きいてください。")
-            : (creating
-              ? "音声を Generate しました。きいて確認してください。"
-              : "音声を作り直しました。未確認の音声をもう一度きいてください。"));
-        }
-      } catch (error) {
-        setStatus("bad", error.message || "音声の再生成に失敗しました。");
-      } finally {
-        targetKeys.forEach((key) => lineBusy.delete(key));
-      }
-      paintDrawer();
-      paintQuestions();
+      await enqueueVoiceRegen(targets, { question });
       return;
     }
     if (action === "move-up" || action === "move-down") {
       const target = action === "move-up" ? index - 1 : index + 1;
       if (target < 0 || target >= state.questions.length) return;
-      if ((state.editor.dirty || editorDirty()) && !window.confirm("未保存の編集があります。並べ替えてもよいですか？")) return;
+      // Autosave current edits before reordering — no discard prompt.
+      if (state.editor.dirty || editorDirty()) commitDrawerEdits({ quiet: true });
       [state.questions[index], state.questions[target]] = [state.questions[target], state.questions[index]];
       state.editor = { ...state.editor, index: target, dirty: false };
       state.dirty = true;
@@ -1230,7 +1376,13 @@ export async function mountTeacherHomework(root, options) {
       return;
     }
     if (action === "remove") {
-      if (!window.confirm("この問題をけしますか？")) return;
+      if (!await confirmAction({
+        title: "この問題をけしますか？",
+        message: "けした問題はもとにもどせません。",
+        confirmLabel: "けす",
+        cancelLabel: "やめる",
+        danger: true,
+      })) return;
       const oldId = question.id;
       state.questions.splice(index, 1);
       audioReviewed.delete(oldId);
@@ -1283,8 +1435,9 @@ export async function mountTeacherHomework(root, options) {
         setStatus("ok", "この文を宿題からはずしました。");
         return;
       }
+      closeEditor(true);
+      paintQuestions();
       setStatus("ok", "保存しました。");
-      paintDrawer();
       return;
     }
     if (action === "confirm") {
@@ -1331,7 +1484,8 @@ export async function mountTeacherHomework(root, options) {
       return;
     }
     if (action === "next" || action === "prev") {
-      if ((state.editor.dirty || editorDirty()) && !window.confirm("編集中の内容を捨てて移動しますか？")) return;
+      // Autosave before leaving this question — closing/moving never discards edits.
+      if (state.editor.dirty || editorDirty()) commitDrawerEdits({ quiet: true });
       const target = action === "next"
         ? firstPendingIndex(index + 1)
         : prevPendingIndex(index);
@@ -1534,30 +1688,13 @@ export async function mountTeacherHomework(root, options) {
     const key = lineKey(line);
 
     if (regenRetry) {
-      if (lineBusy.has(key)) return;
-      stopPrompt();
-      voicePlayToken += 1;
-      voicePlaying = false;
-      lineBusy.add(key);
-      heardLines.delete(key);
-      retryNeedsRecheck.add(key);
-      paintQuestions();
-      setStatus("", `「${line}」の音声を作り直しています…`);
-      try {
-        const voice = await prepareHomeworkVoice([line], { db: options.db, force: true });
-        if (voice.failed.length) {
-          setStatus("bad", "この音声をつくれませんでした。もう一度試してください。");
-        } else {
-          heardLines.delete(key);
-          retryNeedsRecheck.add(key);
-          setStatus("ok", "この音声を作り直しました。未確認なので、もう一度きいてください。");
-        }
-      } catch (error) {
-        setStatus("bad", error.message || "音声の再生成に失敗しました。");
-      } finally {
-        lineBusy.delete(key);
+      if (lineBusy.has(key) || regenQueue.has(key)) return;
+      if (state.audioBuilding && !hasHomeworkVoice(line)) {
+        setStatus("", "この音声はいま生成中です。できてから作り直せます。");
+        return;
       }
-      paintQuestions();
+      voicePlayToken += 1;
+      await enqueueVoiceRegen([line]);
       return;
     }
 
@@ -1774,8 +1911,10 @@ export async function mountTeacherHomework(root, options) {
   function openEditor(index) {
     const question = state.questions[index];
     if (!question) return;
-    if (state.editor && state.editor.index !== index && (state.editor.dirty || editorDirty())
-      && !window.confirm("編集中の内容を捨てますか？")) return;
+    // Switching cards autosaves — no discard confirmation.
+    if (state.editor && state.editor.index !== index && (state.editor.dirty || editorDirty())) {
+      commitDrawerEdits({ quiet: true });
+    }
     voicePlaying = false;
     stopPrompt();
     state.editor = {
@@ -1794,8 +1933,10 @@ export async function mountTeacherHomework(root, options) {
   }
 
   function closeEditor(force = false) {
-    if (!force && state.editor && (state.editor.dirty || editorDirty())
-      && !window.confirm("編集中の内容を捨てますか？")) return;
+    // Closing always keeps edits (autosave). No discard confirmation.
+    if (!force && state.editor && (state.editor.dirty || editorDirty())) {
+      commitDrawerEdits({ quiet: true });
+    }
     stopPrompt();
     voicePlaying = false;
     state.editor = null;
@@ -1833,6 +1974,7 @@ export async function mountTeacherHomework(root, options) {
     const draft = readDraft();
     const voice = voiceStateFor(question, draft);
     const confirmBtn = studio.querySelector("#hw-drawer-confirm");
+    const saveBtn = studio.querySelector("#hw-drawer-save");
     const skipBtn = studio.querySelector("#hw-drawer-skip");
     const prevBtn = studio.querySelector("#hw-drawer-prev");
     const blockEl = studio.querySelector("#hw-drawer-block");
@@ -1848,6 +1990,13 @@ export async function mountTeacherHomework(root, options) {
     const prevPending = prevPendingIndex(state.editor.index);
     const hasNext = nextPending >= 0 && nextPending !== state.editor.index;
     const hasPrev = prevPending >= 0 && prevPending !== state.editor.index;
+    if (saveBtn) {
+      const canSave = state.status !== "assigned"
+        && (question.type !== "sentence" || Boolean(draft.promptJa || draft.sentence) || draft.include === false);
+      saveBtn.hidden = false;
+      saveBtn.disabled = !canSave;
+      saveBtn.classList.toggle("is-dirty", Boolean(state.editor.dirty || editorDirty()));
+    }
     confirmBtn.hidden = alreadyDone;
     confirmBtn.disabled = !canConfirm;
     const confirmLabel = confirmBtn.querySelector(".hw-drawer-confirm-label");
@@ -1897,7 +2046,7 @@ export async function mountTeacherHomework(root, options) {
             <h4>音声を確認</h4>
             <span class="hw-soft-badge is-wait" data-status-audio="">未作成</span>
           </div>
-          <p class="hw-help">問題文や選択肢はここで編集できます（自動保存）。内容がよければ閉じて「確認完了」を押してください。</p>
+          <p class="hw-help">問題文や選択肢はここで編集できます。保存するときは下の「保存」を押してください。内容がよければ閉じて「確認完了」を押してください。</p>
         </section>`;
     }
     return `
@@ -1910,34 +2059,37 @@ export async function mountTeacherHomework(root, options) {
             : voiceBadge(voice).replace("class=\"hw-voice-badge", "data-status-audio=\"\" class=\"hw-voice-badge")}
         </div>
         <p class="hw-help">${state.audioBuilding && readyCount < lines.length
-          ? `生成済みの音声（${readyCount}/${lines.length}）はいま確認できます。残りができたら続けてきいてください。`
-          : `この問題で使う音声です。1つずつきいて確認してください。壊れているものだけ作り直せます。（${heardCount} / ${lines.length}）`}</p>
+          ? `生成済みの音声（${readyCount}/${lines.length}）はいま確認・作り直しできます。作り直しはキューに入り、生成のあとに実行されます。`
+          : `この問題で使う音声です。1つずつきいて確認してください。気に入らないものは作り直しボタンでキューに入れられます。（${heardCount} / ${lines.length}）`}</p>
         <div class="hw-audio-lines" role="list">
           ${lines.map((line) => {
             const key = lineKey(line);
             const heard = heardLines.has(key);
             const ready = hasHomeworkVoice(line);
-            const making = state.audioBuilding && !ready;
-            const busy = lineBusy.has(key) || voice === "busy" || making;
+            const queued = regenQueue.has(key);
+            const making = state.audioBuilding && !ready && !queued;
+            const busy = lineBusy.has(key) || voice === "busy" || making || queued;
             const encoded = encodeURIComponent(line);
-            const unconfirmed = ready && !heard && !busy && !making;
-            const needsGenerate = !ready && !busy && !making;
+            const unconfirmed = ready && !heard && !busy && !making && !queued;
+            const needsGenerate = !ready && !busy && !making && !queued;
+            const regenDisabled = lineBusy.has(key) || queued || making;
             const cap = lineBusy.has(key)
               ? (ready ? "作り直し中…" : "Generate…")
-              : making ? "生成中…"
-                : needsGenerate ? "Generate"
-                  : heard ? "確認済み"
-                    : "未確認";
-            return `<div class="hw-audio-line${heard ? " is-heard" : ""}${unconfirmed ? " is-unconfirmed" : ""}${needsGenerate ? " is-generate" : ""}${!ready ? " is-missing" : ""}${busy ? " is-busy" : ""}" role="listitem" data-line="${encoded}">
-              <button type="button" class="hw-audio-line-play" data-act="play-line" data-line="${encoded}" aria-label="${escapeHtml(line)} をきく" ${!ready || lineBusy.has(key) ? "disabled" : ""}>
+              : queued ? "作り直し待ち…"
+                : making ? "生成中…"
+                  : needsGenerate ? "Generate"
+                    : heard ? "確認済み"
+                      : "未確認";
+            return `<div class="hw-audio-line${heard ? " is-heard" : ""}${unconfirmed ? " is-unconfirmed" : ""}${needsGenerate ? " is-generate" : ""}${queued ? " is-queued" : ""}${!ready && !queued ? " is-missing" : ""}${busy ? " is-busy" : ""}" role="listitem" data-line="${encoded}">
+              <button type="button" class="hw-audio-line-play" data-act="play-line" data-line="${encoded}" aria-label="${escapeHtml(line)} をきく" ${!ready || lineBusy.has(key) || queued ? "disabled" : ""}>
                 ${ICON.play}
               </button>
               <div class="hw-audio-line-copy">
                 <p class="hw-audio-line-text">${escapeHtml(line)}</p>
                 <p class="hw-audio-line-cap">${cap}</p>
               </div>
-              <button type="button" class="hw-audio-line-regen${needsGenerate ? " is-generate" : ""}" data-act="regen-line" data-line="${encoded}" aria-label="${needsGenerate ? `${escapeHtml(line)} の音声を Generate` : `${escapeHtml(line)} の音声を作り直す`}" title="${needsGenerate ? "Generate" : "この音声だけ作り直す"}" ${lineBusy.has(key) || state.audioBuilding ? "disabled" : ""}>${needsGenerate ? "Generate" : ICON.regen}</button>
-              <span class="hw-audio-line-mark" aria-hidden="true">${heard && ready && !lineBusy.has(key) ? "✓" : unconfirmed ? "!" : ""}</span>
+              <button type="button" class="hw-audio-line-regen${needsGenerate ? " is-generate" : ""}" data-act="regen-line" data-line="${encoded}" aria-label="${needsGenerate ? `${escapeHtml(line)} の音声を Generate` : `${escapeHtml(line)} の音声を作り直す`}" title="${needsGenerate ? "Generate" : (queued ? "作り直しキューに追加済み" : "この音声だけ作り直す")}" ${regenDisabled ? "disabled" : ""}>${needsGenerate ? "Generate" : ICON.regen}</button>
+              <span class="hw-audio-line-mark" aria-hidden="true">${heard && ready && !lineBusy.has(key) && !queued ? "✓" : unconfirmed ? "!" : ""}</span>
             </div>`;
           }).join("")}
         </div>
@@ -1972,7 +2124,7 @@ export async function mountTeacherHomework(root, options) {
                 <input type="text" data-field="choice" maxlength="40" value="${escapeHtml(choice)}" placeholder="選択肢 ${choiceIndex + 1}" aria-label="選択肢 ${choiceIndex + 1}">
               </label>`).join("")}
           </div>
-          <p class="hw-help">正解の左○を選んでください。変更は自動保存されます。</p>
+          <p class="hw-help">正解の左○を選んでください。編集したら下の「保存」を押してください。</p>
         </section>`;
     }
     if (question.type === "spelling") {
@@ -2022,7 +2174,7 @@ export async function mountTeacherHomework(root, options) {
                 <input type="text" data-field="pair-en" maxlength="40" value="${escapeHtml(pair.en)}" placeholder="English" aria-label="正解ペア ${pairIndex + 1} の英語">
               </div>`).join("")}
           </div>
-          <p class="hw-help">入力すると自動保存されます。生徒画面では左右の並びがシャッフルされます。</p>
+          <p class="hw-help">編集したら下の「保存」を押してください。生徒画面では左右の並びがシャッフルされます。</p>
         </section>`;
     }
     return `${tools}<p class="hw-help">この問題タイプはプレビューのみです。</p>`;
@@ -2461,18 +2613,20 @@ export async function mountTeacherHomework(root, options) {
             const key = lineKey(line);
             const ok = heardLines.has(key);
             const ready = hasHomeworkVoice(line);
-            const busy = lineBusy.has(key);
+            const queued = regenQueue.has(key);
+            const busy = lineBusy.has(key) || queued;
             const encoded = encodeURIComponent(line);
             const unconfirmed = ready && !ok && !busy;
-            return `<div class="hw-audio-line${ok ? " is-heard" : ""}${unconfirmed ? " is-unconfirmed" : ""}${!ready ? " is-missing" : ""}${busy ? " is-busy" : ""}" role="listitem" data-line="${encoded}">
+            const regenDisabled = !ready || lineBusy.has(key) || queued;
+            return `<div class="hw-audio-line${ok ? " is-heard" : ""}${unconfirmed ? " is-unconfirmed" : ""}${queued ? " is-queued" : ""}${!ready && !queued ? " is-missing" : ""}${busy ? " is-busy" : ""}" role="listitem" data-line="${encoded}">
               <button type="button" class="hw-audio-line-play" data-act="play-retry" data-retry-index="${index}" data-line="${encoded}" aria-label="${escapeHtml(line)} をきく" ${!ready || busy ? "disabled" : ""}>
                 ${ICON.play}
               </button>
               <div class="hw-audio-line-copy">
                 <p class="hw-audio-line-text">${escapeHtml(line)}</p>
-                <p class="hw-audio-line-cap">${busy ? "作り直し中…" : !ready ? "未生成" : ok ? "確認済み" : "未確認"}</p>
+                <p class="hw-audio-line-cap">${lineBusy.has(key) ? "作り直し中…" : queued ? "作り直し待ち…" : !ready ? "未生成" : ok ? "確認済み" : "未確認"}</p>
               </div>
-              <button type="button" class="hw-audio-line-regen" data-act="regen-retry" data-retry-index="${index}" data-line="${encoded}" aria-label="${escapeHtml(line)} の音声を作り直す" title="この音声だけ作り直す" ${!ready || busy || state.audioBuilding ? "disabled" : ""}>${ICON.regen}</button>
+              <button type="button" class="hw-audio-line-regen" data-act="regen-retry" data-retry-index="${index}" data-line="${encoded}" aria-label="${escapeHtml(line)} の音声を作り直す" title="${queued ? "作り直しキューに追加済み" : "この音声だけ作り直す"}" ${regenDisabled ? "disabled" : ""}>${ICON.regen}</button>
               <span class="hw-audio-line-mark" aria-hidden="true">${ok && ready && !busy ? "✓" : unconfirmed ? "!" : ""}</span>
             </div>`;
           }).join("")}
@@ -2546,9 +2700,10 @@ export async function mountTeacherHomework(root, options) {
           return;
         }
         // Teacher confirmation often uses local IndexedDB. Re-publish clips so students can load them.
-        setStatus("ok", "音声を生徒と共有しています…");
+        setStatus("ok", "宿題を生徒に送信しています・・・");
         const voiceLines = [...linesForQuestions(state.questions), ...RETRY_LINES];
-        const sync = await syncHomeworkVoiceRemote(voiceLines, options.db);
+        // Force re-publish so short/corrupt remote clips cannot block student playback.
+        const sync = await syncHomeworkVoiceRemote(voiceLines, options.db, { force: true });
         if (sync.missing.length || sync.failed.length) {
           setStatus(
             "bad",
@@ -2673,6 +2828,7 @@ export async function mountTeacherHomework(root, options) {
     heardLines.clear();
     retryNeedsRecheck.clear();
     lineBusy.clear();
+    regenQueue.clear();
     voiceBusy.clear();
     state.dirty = false;
     state.flowStep = "build";
@@ -2906,6 +3062,7 @@ const ICON = {
   remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M8 7l1 12h6l1-12"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6h3.5v12H7zm6.5 0H17v12h-3.5z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.2"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   more: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20z"/><path d="m13.8 5.7 4.5 4.5"/></svg>',

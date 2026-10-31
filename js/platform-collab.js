@@ -11,6 +11,7 @@ import {
   shapeIcon,
   sparkleIcon,
 } from "./collab-icons.js";
+import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -368,9 +369,16 @@ export async function renderCollab(root, { host, uid, role }) {
     event.preventDefault();
     event.returnValue = "";
   };
-  const confirmDiscard = (message) => {
+  const confirmDiscard = async (message) => {
     if (!dirty()) return true;
-    if (!window.confirm(message)) return false;
+    const ok = await confirmAction({
+      title: "保存していない変更があります",
+      message,
+      confirmLabel: "移動する",
+      cancelLabel: "とどまる",
+      danger: true,
+    });
+    if (!ok) return false;
     if (editor) editor.savedKey = editor.formKey();
     return true;
   };
@@ -801,7 +809,12 @@ export async function renderCollab(root, { host, uid, role }) {
     root.querySelector("#cb-preview-q")?.addEventListener("click", () => paintQuestionPreview(item));
     root.querySelector("#cb-start-room")?.addEventListener("click", () => startRoom(item));
     root.querySelector("#cb-unpublish")?.addEventListener("click", async () => {
-      if (!window.confirm("非公開にしますか？")) return;
+      if (!await confirmAction({
+        title: "非公開にしますか？",
+        message: "ほかの先生はこのテンプレートを見つけられなくなります。",
+        confirmLabel: "非公開にする",
+        cancelLabel: "やめる",
+      })) return;
       try {
         await callFunction("unpublishCollabTemplate", { id: item.id });
         await loadTemplates();
@@ -836,7 +849,13 @@ export async function renderCollab(root, { host, uid, role }) {
   const deleteTemplate = async (item) => {
     if (!item?.id) return;
     const title = item.title || editor?.meta?.title || "このテンプレート";
-    if (!window.confirm(`「${title}」を削除しますか？\nこの操作は取り消せません。`)) return;
+    if (!await confirmAction({
+      title: "テンプレートを削除しますか？",
+      message: `「${title}」を削除します。\nこの操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    })) return;
     try {
       await callFunction("deleteCollabTemplate", { id: item.id });
       if (editor?.id === item.id) {
@@ -1184,8 +1203,8 @@ export async function renderCollab(root, { host, uid, role }) {
       });
     }
 
-    root.querySelector("#cb-home").onclick = () => {
-      if (!confirmDiscard("保存していない変更があります。ホームに戻りますか？")) return;
+    root.querySelector("#cb-home").onclick = async () => {
+      if (!await confirmDiscard("保存していない変更があります。ホームに戻りますか？")) return;
       stop();
       root._stopQuiz = stop;
       view = "home";
@@ -1218,7 +1237,7 @@ export async function renderCollab(root, { host, uid, role }) {
       scheduleAutosave();
       paintEditor();
     };
-    root.querySelector("#cb-delete").onclick = () => {
+    root.querySelector("#cb-delete").onclick = async () => {
       readEditor();
       if (editor.questions.length === 1) {
         note = "問題は1つ以上必要です。";
@@ -1226,7 +1245,13 @@ export async function renderCollab(root, { host, uid, role }) {
         paintEditor();
         return;
       }
-      if (!window.confirm("この問題を削除しますか？")) return;
+      if (!await confirmAction({
+        title: "この問題を削除しますか？",
+        message: "削除した問題はもとにもどせません。",
+        confirmLabel: "削除する",
+        cancelLabel: "やめる",
+        danger: true,
+      })) return;
       editor.questions.splice(editor.current, 1);
       editor.current = Math.min(editor.current, editor.questions.length - 1);
       scheduleAutosave();
@@ -1246,7 +1271,12 @@ export async function renderCollab(root, { host, uid, role }) {
     };
     root.querySelector("#cb-room").onclick = async () => {
       readEditor();
-      if (dirty() && !window.confirm("保存していない変更があります。この内容でルームを作りますか？")) return;
+      if (dirty() && !await confirmAction({
+        title: "保存していない変更があります",
+        message: "この内容でルームを作りますか？",
+        confirmLabel: "ルームを作る",
+        cancelLabel: "もどる",
+      })) return;
       await startRoom({
         id: editor.id,
         title: editor.meta.title,

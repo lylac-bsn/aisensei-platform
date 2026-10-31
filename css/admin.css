@@ -95,26 +95,21 @@
   box-shadow: 0 2px 8px rgba(216, 67, 21, 0.25);
 }
 
-/* Time tab: put roster first visually via order when wide enough */
-#tab-time {
+/* Accounts tab: roster first, create form second */
+#tab-accounts {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-#tab-time .users-panel {
+#tab-accounts .users-panel {
   order: 1;
 }
 
-#tab-time .bulk-panel {
+#tab-accounts .account-panel {
   order: 2;
 }
 
-#tab-time .account-panel {
-  order: 3;
-}
-
-.bulk-panel,
 .account-panel,
 .users-panel,
 .progress-panel {
@@ -123,7 +118,6 @@
   box-shadow: 0 1px 8px rgba(62, 39, 35, 0.05);
 }
 
-.bulk-panel h2,
 .account-panel h2,
 .users-panel h2,
 .progress-panel h2 {
@@ -1130,9 +1124,8 @@
     text-align: center;
   }
 
-  #tab-time .users-panel,
-  #tab-time .bulk-panel,
-  #tab-time .account-panel {
+  #tab-accounts .users-panel,
+  #tab-accounts .account-panel {
     order: initial;
   }
 

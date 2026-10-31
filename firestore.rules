@@ -21,26 +21,10 @@ service cloud.firestore {
         && (!('email' in request.resource.data) || request.resource.data.email == resource.data.email)
         // Block createdAt changes
         && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt)
-        // remainingTime is optional on older accounts. When present: students may
-        // only count down, except the monthly auto-reset path below.
-        && (
-          !('remainingTime' in request.resource.data)
-          || (
-            request.resource.data.remainingTime is number
-            && request.resource.data.remainingTime >= 0
-            && (
-              request.resource.data.remainingTime <= resource.data.get('remainingTime', 0)
-              || (
-                request.resource.data.remainingTime
-                  == get(/databases/$(database)/documents/settings/monthlyAutoSet).data.resetSeconds
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remainingTime', 'lastAutoSet', 'updatedAt'])
-                && request.resource.data.lastAutoSet is timestamp
-                && request.resource.data.lastAutoSet
-                  > resource.data.get('lastAutoSet', timestamp.date(1970, 1, 1))
-              )
-            )
-          )
-        )
+        // Legacy timer fields (remainingTime / lastAutoSet) are frozen — users
+        // must not create or change them. Existing values may remain on old docs.
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['remainingTime', 'lastAutoSet'])
         // Quest progress sync from student app
         && (!('beginnerProgress' in request.resource.data)
             || request.resource.data.beginnerProgress is map)
@@ -115,7 +99,6 @@ service cloud.firestore {
     // Settings collection
     // =========================================
     match /settings/{settingId} {
-      // Any authenticated user can read settings (needed for auto-reset check)
       allow read: if request.auth != null;
 
       // Ticket amounts are changed only by the platform owner. Other settings stay with staff.

@@ -131,7 +131,6 @@ const html = admin.renderProgressDashboard([
     id: "u1",
     displayName: "Taro",
     email: "t@example.com",
-    remainingTime: 600,
     beginnerProgress: { part1, part2: {}, part3 },
   },
 ]);
