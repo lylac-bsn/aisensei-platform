@@ -961,12 +961,28 @@ function mountMonthPicker(title, list) {
   title.after(picker);
 }
 
+function teacherLabel(item) {
+  return String(item?.teacherName || "").trim() || "先生未設定";
+}
+
+function fillClassChip(button, headline, teacher) {
+  const main = document.createElement("span");
+  main.className = "gc-event-main";
+  main.textContent = headline;
+  const who = document.createElement("span");
+  who.className = "gc-event-teacher";
+  who.textContent = teacher;
+  button.replaceChildren(main, who);
+  button.title = `${headline} · ${teacher}`;
+}
+
 function eventChip(list, item, key) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "gc-event";
   const when = isAllDayClass(item) ? "終日" : clockLabel(item.startsAt);
-  button.textContent = `${when} ${item.title}`;
+  const teacher = teacherLabel(item);
+  fillClassChip(button, `${when} ${item.title}`, teacher);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     list._selected = key;
@@ -1186,13 +1202,15 @@ function buildCalendarWeek(list, week, state) {
       button.className = "gc-bar";
       if (seg.event.startKey < weekStart) button.classList.add("is-continued");
       if (seg.event.endKey > weekEnd) button.classList.add("is-continues");
-      button.title = seg.event.item.title;
+      const teacher = teacherLabel(seg.event.item);
+      const headline = seg.event.item.title;
+      button.title = `${headline} · ${teacher}`;
       if (!seg.event.titled) {
-        button.textContent = seg.event.item.title;
+        fillClassChip(button, headline, teacher);
         seg.event.titled = true;
       } else {
         button.classList.add("is-follow");
-        button.setAttribute("aria-label", seg.event.item.title);
+        button.setAttribute("aria-label", `${headline} · ${teacher}`);
       }
       button.style.gridColumn = `${seg.startCol + 1} / ${seg.endCol + 2}`;
       button.style.gridRow = String(seg.event.lane + 1);
@@ -1265,9 +1283,16 @@ function renderDayPanel(list, sheet) {
     row.className = "gc-day-row";
     const time = document.createElement("span");
     time.textContent = dayTimeLabel(item, key);
+    const copy = document.createElement("span");
+    copy.className = "gc-day-copy";
     const title = document.createElement("span");
+    title.className = "gc-day-title";
     title.textContent = item.title;
-    row.append(time, title);
+    const teacher = document.createElement("span");
+    teacher.className = "gc-day-teacher";
+    teacher.textContent = teacherLabel(item);
+    copy.append(title, teacher);
+    row.append(time, copy);
     row.addEventListener("click", () => openClassDetail(list, item, list._booked?.has(item.id), list._canBook));
     body.appendChild(row);
   });

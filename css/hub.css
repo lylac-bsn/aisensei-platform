@@ -1031,6 +1031,13 @@ button.gc-note-card:hover { background: #FFF5EA; }
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.75rem;
     align-items: start;
+    /* Reset legacy page-header styles from style.css (red banner). */
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    box-shadow: none;
+    flex-wrap: nowrap;
+    justify-content: initial;
 }
 
 .gc-inbox-detail-ico {
@@ -3857,7 +3864,7 @@ dialog.gc-modal {
 #class-list {
     --cal-gap: 0.4rem;
     --bar-top: 1.42rem;
-    --bar-h: 1.28rem;
+    --bar-h: 2.05rem;
     --bar-row-gap: 0.18rem;
     --bar-pitch: calc(var(--bar-h) + var(--bar-row-gap));
     min-width: 0;
@@ -4263,11 +4270,14 @@ dialog.gc-modal {
 
 .gc-event {
     box-sizing: border-box;
-    display: block;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.02rem;
     width: 100%;
-    height: var(--bar-h, 1.28rem);
+    height: var(--bar-h, 2.05rem);
     margin-top: var(--bar-row-gap, 0.18rem);
-    padding: 0 0.35rem;
+    padding: 0.08rem 0.35rem;
     overflow: hidden;
     border: none;
     border-radius: 8px;
@@ -4276,11 +4286,24 @@ dialog.gc-modal {
     font: inherit;
     font-size: 0.72rem;
     font-weight: 800;
-    line-height: var(--bar-h, 1.28rem);
+    line-height: 1.15;
     text-align: left;
+    cursor: pointer;
+}
+
+.gc-event-main,
+.gc-event-teacher {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
+}
+
+.gc-event-teacher {
+    color: #786962;
+    font-size: 0.62rem;
+    font-weight: 700;
 }
 
 .gc-day .gc-event:first-of-type { margin-top: 0; }
@@ -4304,11 +4327,15 @@ dialog.gc-modal {
 
 .gc-bar {
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.02rem;
     align-self: start;
     min-width: 0;
-    height: var(--bar-h, 1.28rem);
+    height: var(--bar-h, 2.05rem);
     margin-inline: 2px;
-    padding: 0 0.4rem;
+    padding: 0.08rem 0.4rem;
     overflow: hidden;
     border: none;
     border-radius: 8px;
@@ -4317,10 +4344,8 @@ dialog.gc-modal {
     font: inherit;
     font-size: 0.72rem;
     font-weight: 800;
-    line-height: var(--bar-h, 1.28rem);
+    line-height: 1.15;
     text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     cursor: pointer;
     pointer-events: auto;
 }
@@ -4440,17 +4465,34 @@ header.gc-day-head h2 {
     cursor: pointer;
 }
 
-.gc-day-row span:first-child {
+.gc-day-row > span:first-child {
     flex: none;
     min-width: 4.2rem;
     color: #E64618;
 }
 
-.gc-day-row span:last-child {
+.gc-day-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.gc-day-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.gc-day-teacher {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #786962;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .gc-day-row:hover { background: #F6E2D2; }
@@ -5995,7 +6037,7 @@ button.qo-answer:disabled { cursor: default; }
     #class-list {
         --cal-gap: 0.2rem;
         --bar-top: 1.12rem;
-        --bar-h: 1.05rem;
+        --bar-h: 1.72rem;
         --bar-row-gap: 0.16rem;
     }
     .gc-day {
@@ -6008,8 +6050,11 @@ button.qo-answer:disabled { cursor: default; }
     .gc-bar {
         height: var(--bar-h);
         font-size: 0.62rem;
-        line-height: var(--bar-h);
-        padding: 0 0.2rem;
+        line-height: 1.1;
+        padding: 0.04rem 0.2rem;
+    }
+    .gc-event-teacher {
+        font-size: 0.54rem;
     }
     .gc-cal-nav strong { font-size: 1rem; }
     .gc-user strong,

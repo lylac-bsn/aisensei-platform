@@ -402,7 +402,7 @@ header.app-header .header-tab-switcher .tab-btn:disabled {
    Keep specificity at one class so hub/COllAB headers (header.gc-top, etc.) still win.
    :where() exclusions add zero specificity — list every in-app header that must stay light. */
 header:not(.app-header):where(
-    :not(.gc-top):not(.cb-finish-hero):not(.platform-hub__top):not(.gc-day-head):not(.hw-page-head):not(.hw-lib-hero):not(.gc-inbox-hero)
+    :not(.gc-top):not(.cb-finish-hero):not(.platform-hub__top):not(.gc-day-head):not(.hw-page-head):not(.hw-lib-hero):not(.gc-inbox-hero):not(.gc-inbox-detail-head)
 ) {
     background: linear-gradient(135deg, #D84315 0%, #E64A19 100%);
     color: var(--text-light);
@@ -3088,7 +3088,7 @@ body.page-dashboard .user-dashboard {
         justify-content: center;
         flex-wrap: wrap;
     }
-    header:not(.app-header) {
+    header:not(.app-header):not(.gc-inbox-detail-head):not(.gc-top):not(.gc-day-head):not(.hw-page-head):not(.hw-lib-hero):not(.gc-inbox-hero):not(.cb-finish-hero):not(.platform-hub__top) {
         flex-direction: column;
         gap: 1rem;
         padding: 1.25rem 1.5rem;

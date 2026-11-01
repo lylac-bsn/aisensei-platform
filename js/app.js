@@ -2,10 +2,10 @@
 // 1. Firebaseの初期設定
 // =================================================
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { renderPlatformPanel } from "./platform-booking.js?v=20261031-parent-book";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261031-hw-learn-ui";
+import { renderPlatformPanel } from "./platform-booking.js?v=20261031-cal-teacher";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261102-speak-as";
 import { renderHome } from "./platform-home.js";
 import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
@@ -49,7 +49,6 @@ document.addEventListener("click", (event) => {
 
     const loginView = document.getElementById('login-view');
     const loginForm = document.getElementById('login-form');
-    const displayNameInput = document.getElementById('display-name');
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const loginError = document.getElementById('login-error');
@@ -263,7 +262,7 @@ document.addEventListener("click", (event) => {
                 /* ignore */
             }
         };
-        const { mountHomeworkHub } = await import('./homework-library.js?v=20261031-hw-teachers');
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261102-speak-as');
         const labCall = async (name, data) => {
             if (name === 'saveHomeworkPack') {
                 const id = data.id || `lab${packs.size + 1}`;
@@ -430,8 +429,7 @@ document.addEventListener("click", (event) => {
             }
 
             const userData = snap.data() || {};
-            const typedName = displayNameInput.value.trim();
-            showHub(userData.role, typedName || userData.displayName || '', user.uid);
+            showHub(userData.role, userData.displayName || '', user.uid);
         } else {
             showLogin();
         }
@@ -521,31 +519,11 @@ document.addEventListener("click", (event) => {
     loginForm.addEventListener('submit', (e) => {
         e.preventDefault();
         loginError.textContent = '';
-        const displayName = displayNameInput.value.trim().substring(0, 50);
         const email = emailInput.value.trim();
         const password = passwordInput.value;
 
-        if (!displayName) {
-            loginError.textContent = 'なまえを入力してください。';
-            displayNameInput.focus();
-            return;
-        }
-
         setLoginLoading(true);
         signInWithEmailAndPassword(auth, email, password)
-            .then(async (userCredential) => {
-                // Name sync must not block login — rules may reject some profile
-                // updates. Hub load uses onAuthStateChanged.
-                try {
-                    const userRef = doc(db, "users", userCredential.user.uid);
-                    const snap = await getDoc(userRef);
-                    if (snap.exists()) {
-                        await updateDoc(userRef, { displayName });
-                    }
-                } catch (error) {
-                    console.warn("displayName sync skipped", error?.code || error?.message || error);
-                }
-            })
             .catch((error) => {
                 const code = error?.code || "";
                 if (code === "auth/too-many-requests") {

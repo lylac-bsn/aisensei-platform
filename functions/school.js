@@ -1241,6 +1241,7 @@ async function submitPackAnswer(user, assignment, data) {
       .filter((question) => attempts[question.id]?.firstCorrect === false)
       .map((question) => attempts[question.id]?.vocabKey)
       .filter(Boolean))];
+    const percent = total ? Math.round((correctCount / total) * 100) : 0;
     const patch = {
       format: "pack-v1",
       assignmentId,
@@ -1248,7 +1249,7 @@ async function submitPackAnswer(user, assignment, data) {
       attempts,
       correctCount,
       total,
-      percent: total ? Math.round((correctCount / total) * 100) : 0,
+      percent,
       struggleVocab,
       timeSpentMs: (prevDoc.timeSpentMs || 0) + (kind === "pair" ? 0 : elapsedMs(data?.elapsedMs)),
       updatedAt: FieldValue.serverTimestamp(),
@@ -1256,11 +1257,33 @@ async function submitPackAnswer(user, assignment, data) {
     };
     if (!prevDoc.startedAt) patch.startedAt = FieldValue.serverTimestamp();
     tx.set(progressRef, patch, { merge: true });
+    response.percent = percent;
+    response.completed = Boolean(prevDoc.completed);
   });
-  if (gained) await db().collection("users").doc(user.uid).set({ xp: FieldValue.increment(gained) }, { merge: true });
-  const latest = await db().collection("homeworkProgress").doc(`${assignmentId}_${user.uid}`).get();
-  return { ...response, xp: gained, percent: latest.data()?.percent || 0, completed: Boolean(latest.data()?.completed) };
+  // XP write is not needed for the grade UI — do not block the student on it.
+  if (gained) {
+    db().collection("users").doc(user.uid).set({ xp: FieldValue.increment(gained) }, { merge: true }).catch((error) => {
+      console.warn("submitHomework xp", error?.message || error);
+    });
+  }
+  return { ...response, xp: gained, percent: response.percent || 0, completed: Boolean(response.completed) };
 }
+
+/** Answer keys for assigned students — enables instant local grading in the player. */
+exports.getHomeworkAnswers = onCall({ region: REGION }, async (request) => {
+  const user = await callerUser(request);
+  const assignmentId = clean(request.data?.assignmentId, 128);
+  if (!assignmentId) throw new HttpsError("invalid-argument", "宿題が指定されていません。");
+  const assignment = await db().collection("homeworkAssignments").doc(assignmentId).get();
+  if (!assignment.exists) throw new HttpsError("not-found", "宿題が見つかりません。");
+  const data = assignment.data() || {};
+  const allowed = (data.assigneeIds || []).includes(user.uid)
+    || data.teacherId === user.uid
+    || isTeacher(user);
+  if (!allowed) throw new HttpsError("permission-denied", "この宿題は開けません。");
+  const key = await db().collection("homeworkKeys").doc(assignmentId).get();
+  return { answers: key.data()?.answers || {} };
+});
 
 exports.finishHomework = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);

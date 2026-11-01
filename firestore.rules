@@ -170,8 +170,13 @@ service cloud.firestore {
         && request.resource.data.rate == 24000
         && (!('key' in request.resource.data) || request.resource.data.key is string)
         && (!('text' in request.resource.data) || request.resource.data.text is string)
+        && (!('engine' in request.resource.data) || request.resource.data.engine is string)
+        && (!('voice' in request.resource.data) || request.resource.data.voice is string)
+        && (!('speakAs' in request.resource.data) || request.resource.data.speakAs is string)
         && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
-      allow delete: if false;
+      // Teachers remake clips from the studio; delete lets remake drop the shared doc
+      // so hydrate cannot restore the old audio mid-flight.
+      allow delete: if request.auth != null;
     }
 
     match /homeworkAssignments/{assignmentId} {
