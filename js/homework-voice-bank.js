@@ -1,28 +1,22 @@
 /**
  * Premade Learny clips for homework.
  *
- * Generated with the Gemini Live API when a teacher creates homework,
- * then played from memory / IndexedDB / Firestore. Playback never opens
- * a live conversation.
- *
- * Latest Flash Live model is gemini-3.8-live. Voice is Kore, the same
- * women's voice Learny already uses. If that model is not enabled on the
- * project, generation falls back to gemini-live-2.5-flash-native-audio.
+ * Generated with Gemini TTS (Vertex generateContent — gemini-2.5-flash-tts,
+ * Kore voice) when a teacher creates homework, then played from memory /
+ * IndexedDB / Firestore. No Live / WebSocket path.
  */
-import { GeminiLiveAPI, MultimodalLiveResponseType } from "./gemini-api.js?v=20261026-voice";
-import { resolveProxyUrl } from "./proxy-config.js";
-import { cacheKey, linesForQuestions, readingMatches } from "./homework-voice-lines.js";
+import { cacheKey, isShortVocabLine, isTrivialVoiceLine, linesForQuestions, readingMatches } from "./homework-voice-lines.js?v=20261101-tts";
 
-export { cacheKey, linesForQuestions, readingMatches };
+export { cacheKey, isShortVocabLine, isTrivialVoiceLine, linesForQuestions, readingMatches };
 
-const PROJECT_ID = "ai-sensei-8849b";
-const VOICE = "Kore";
-const LATEST_MODEL = "gemini-3.8-live";
-const FALLBACK_MODEL = "gemini-live-2.5-flash-native-audio";
 const SAMPLE_RATE = 24000;
-const SETUP_TIMEOUT_MS = 12000;
-const PHRASE_TIMEOUT_MS = 28000;
-const MAX_ATTEMPTS = 3;
+const TTS_FN_URL = "https://asia-northeast1-ai-sensei-8849b.cloudfunctions.net/synthesizeHomeworkVoice";
+/** Lines per Cloud Function call (server accepts up to 48). */
+const TTS_BATCH_SIZE = 24;
+/** How many CF batch requests to run at once. */
+const TTS_PARALLEL_BATCHES = 2;
+/** Hard ceiling so a hung Cloud Function cannot leave the remake UI spinning forever. */
+const TTS_FETCH_TIMEOUT_MS = 45000;
 const SILENCE_LEVEL = 0.008;
 /** Generation floor — prefer a clear clip, but short words ("I", "a") are often under 0.3s. */
 const MIN_SAMPLES = Math.floor(SAMPLE_RATE * 0.22);
@@ -32,10 +26,11 @@ const DB_NAME = "learny-homework-voice";
 
 const memory = new Map();
 const pendingLoads = new Map();
-const liveClients = new Set();
+/** Keys forgotten for remake — block hydrate/remote restore until a new clip is saved. */
+const forgottenKeys = new Set();
+const activeControllers = new Set();
 let activeStop = null;
 let audioContext = null;
-let preferredModel = LATEST_MODEL;
 
 function abortError(message = "音声生成を停止しました。") {
   const error = new Error(message);
@@ -47,12 +42,12 @@ function throwIfAborted(signal) {
   if (signal?.aborted) throw abortError();
 }
 
-/** Cut any in-flight Live sessions so prepareHomeworkVoice can unwind quickly. */
+/** Abort in-flight TTS fetches so prepareHomeworkVoice can unwind quickly. */
 export function disconnectHomeworkVoiceSessions() {
-  for (const client of [...liveClients]) {
-    try { client.disconnect(); } catch { /* already closed */ }
+  for (const controller of [...activeControllers]) {
+    try { controller.abort(); } catch { /* already aborted */ }
   }
-  liveClients.clear();
+  activeControllers.clear();
 }
 
 
@@ -143,14 +138,6 @@ function speakableText(text) {
     .replace(/\s+/g, " ");
 }
 
-function phraseTimeoutMs(text) {
-  const label = speakableText(text);
-  const units = /[\u3040-\u30ff\u4e00-\u9fff]/.test(label)
-    ? Math.max(1, [...label.replace(/\s+/g, "")].length)
-    : Math.max(1, label.split(/\s+/).filter(Boolean).length);
-  return Math.min(45000, PHRASE_TIMEOUT_MS + units * 400);
-}
-
 function openDb() {
   if (!globalThis.indexedDB) return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -217,13 +204,28 @@ function idbDelete(key) {
 }
 
 /** Drop cached clips so the next prepare call regenerates them. */
-export async function forgetHomeworkVoice(texts) {
+export async function forgetHomeworkVoice(texts, { db = null } = {}) {
   const items = uniqueLines(texts);
+  // Local forget must be instant — never block remake UI on Firestore delete.
   await Promise.all(items.map(async (item) => {
+    forgottenKeys.add(item.key);
     memory.delete(item.key);
     pendingLoads.delete(item.key);
     await idbDelete(item.key);
   }));
+  if (!db || !items.length) return;
+  // Best-effort remote delete in the background (tombstone already blocks hydrate).
+  Promise.all(items.map(async (item) => {
+    try {
+      const { doc, deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
+      await deleteDoc(doc(db, "homeworkVoice", await clipId(item.key)));
+    } catch (error) {
+      const code = error?.code || "";
+      if (!String(code).includes("permission-denied")) {
+        console.warn("homework voice: remote forget failed", item.text, code || error?.message || error);
+      }
+    }
+  })).catch(() => {});
 }
 
 async function clipId(key) {
@@ -233,6 +235,7 @@ async function clipId(key) {
 
 async function loadRemote(db, key) {
   if (!db) return null;
+  if (forgottenKeys.has(key)) return null;
   try {
     const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
     const snap = await getDoc(doc(db, "homeworkVoice", await clipId(key)));
@@ -258,11 +261,11 @@ async function loadRemote(db, key) {
 export async function syncHomeworkVoiceRemote(texts, db, { force = false } = {}) {
   if (!db) return { synced: 0, missing: [], failed: [], published: 0 };
   const items = uniqueLines(texts);
-  let synced = 0;
-  let published = 0;
   const missing = [];
   const failed = [];
-  for (const item of items) {
+  let synced = 0;
+  let published = 0;
+  const syncOne = async (item) => {
     try {
       let samples = memory.get(item.key) || null;
       if (!samples) {
@@ -272,28 +275,33 @@ export async function syncHomeworkVoiceRemote(texts, db, { force = false } = {})
       const remote = await loadRemote(db, item.key);
       if (!samples) {
         if (remote) {
-          samples = remember(item.key, remote, { playable: true });
-          synced += 1;
-          continue;
+          remember(item.key, remote, { playable: true });
+          return { synced: 1, published: 0 };
         }
         missing.push(item.text);
-        continue;
+        return { synced: 0, published: 0 };
       }
       // Remote present and playable — skip unless force re-publish from local.
-      if (remote && !force) {
-        synced += 1;
-        continue;
-      }
+      if (remote && !force) return { synced: 1, published: 0 };
       if (await saveRemote(db, item.key, samples, item.text)) {
-        synced += 1;
-        published += 1;
-      } else {
-        failed.push(item.text);
+        return { synced: 1, published: 1 };
       }
+      failed.push(item.text);
+      return { synced: 0, published: 0 };
     } catch (error) {
       console.warn("homework voice: sync failed", item.text, error);
       failed.push(item.text);
+      return { synced: 0, published: 0 };
     }
+  };
+  // Parallel Firestore checks — sequential sync was a major stall after TTS.
+  const SYNC_PARALLEL = 8;
+  for (let offset = 0; offset < items.length; offset += SYNC_PARALLEL) {
+    const chunk = await Promise.all(items.slice(offset, offset + SYNC_PARALLEL).map(syncOne));
+    chunk.forEach((row) => {
+      synced += row.synced;
+      published += row.published;
+    });
   }
   console.info("[homework voice] sync remote", {
     total: items.length,
@@ -312,7 +320,7 @@ export async function syncHomeworkVoiceRemote(texts, db, { force = false } = {})
  * Shared clip bank: one doc per spoken line (hash id) in `homeworkVoice`.
  * Any signed-in teacher/student can reuse the same clip — no re-generation credit.
  */
-async function saveRemote(db, key, samples, text = "") {
+async function saveRemote(db, key, samples, text = "", { engine = "", voice = "" } = {}) {
   if (!db) {
     console.warn("homework voice: no Firestore db — clip stays local only", text || key);
     return false;
@@ -325,13 +333,16 @@ async function saveRemote(db, key, samples, text = "") {
       return false;
     }
     const { doc, setDoc, serverTimestamp } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
-    await setDoc(doc(db, "homeworkVoice", await clipId(key)), {
+    const payload = {
       pcm,
       rate: SAMPLE_RATE,
       key,
       text: String(text || "").slice(0, 160),
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    };
+    if (engine) payload.engine = String(engine).slice(0, 64);
+    if (voice) payload.voice = String(voice).slice(0, 40);
+    await setDoc(doc(db, "homeworkVoice", await clipId(key)), payload, { merge: true });
     return true;
   } catch (error) {
     // Local IndexedDB / memory still work for this browser.
@@ -342,6 +353,61 @@ async function saveRemote(db, key, samples, text = "") {
 
 function longEnough(samples, min = MIN_SAMPLES) {
   return Boolean(samples && samples.length >= min);
+}
+
+/**
+ * Reject clips that look like squeals / sustained non-speech tones rather than
+ * spoken homework lines. Tuned to keep short words ("I", "Fish") while catching
+ * high-pitched Gemini Live artifacts.
+ */
+export function speechLooksOk(samples) {
+  if (!samples?.length) return false;
+  const n = samples.length;
+  let sumSq = 0;
+  let peak = 0;
+  let zeroCrossings = 0;
+  for (let i = 0; i < n; i += 1) {
+    const sample = samples[i];
+    const mag = Math.abs(sample);
+    sumSq += sample * sample;
+    if (mag > peak) peak = mag;
+    if (i > 0 && (samples[i - 1] >= 0) !== (sample >= 0)) zeroCrossings += 1;
+  }
+  const rms = Math.sqrt(sumSq / n);
+  if (rms < 0.008) return false;
+  if (peak < 0.04) return false;
+  // Near-silence with a few spikes (clicks / static pops).
+  if (peak > 0.25 && rms < 0.018) return false;
+
+  const zcr = zeroCrossings / n;
+  // Very high zero-crossing rate ≈ whistle / digital squeal at 24 kHz.
+  if (zcr > 0.3 && rms > 0.04) return false;
+
+  const duration = n / SAMPLE_RATE;
+  const frame = Math.max(1, Math.floor(SAMPLE_RATE * 0.02));
+  if (duration >= 0.55 && n >= frame * 4) {
+    const energies = [];
+    for (let i = 0; i + frame <= n; i += frame) {
+      let energy = 0;
+      for (let j = 0; j < frame; j += 1) {
+        const sample = samples[i + j];
+        energy += sample * sample;
+      }
+      energies.push(energy / frame);
+    }
+    const mean = energies.reduce((sum, value) => sum + value, 0) / energies.length;
+    let variance = 0;
+    for (const energy of energies) variance += (energy - mean) ** 2;
+    variance /= energies.length;
+    const cv = Math.sqrt(variance) / (mean + 1e-12);
+    // Long, steady harmonic tone while speech usually varies frame energy.
+    if (cv < 0.1 && zcr > 0.1 && rms > 0.05) return false;
+  }
+  return true;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -370,11 +436,13 @@ function remember(key, samples, { playable = false } = {}) {
     ? normalizePlayable(samples)
     : (normalizePlayable(samples) || (longEnough(samples) ? samples : null));
   if (!ready) return null;
+  forgottenKeys.delete(key);
   memory.set(key, ready);
   return ready;
 }
 
 async function loadClip(key, db) {
+  if (forgottenKeys.has(key)) return null;
   if (memory.has(key)) return memory.get(key);
   const local = normalizePlayable(await idbGet(key));
   if (local) {
@@ -449,7 +517,8 @@ export function stopHomeworkVoice() {
 /** True when a premade clip for this line is already loaded. */
 export function hasHomeworkVoice(text) {
   const key = cacheKey(text);
-  return Boolean(key && memory.has(key));
+  if (!key || forgottenKeys.has(key)) return false;
+  return memory.has(key);
 }
 
 /** Play a premade clip. Returns null when this line has not been generated. */
@@ -471,201 +540,117 @@ export async function hydrateHomeworkVoice(texts, db) {
   }));
 }
 
-function waitForSetup(client) {
-  return new Promise((resolve, reject) => {
-    const startedAt = Date.now();
-    const poll = () => {
-      if (client.sessionReady) return resolve();
-      if (!client.connected || Date.now() - startedAt > SETUP_TIMEOUT_MS) {
-        return reject(new Error("voice session not ready"));
-      }
-      setTimeout(poll, 80);
-    };
-    poll();
+function compactReadings(lines, readings) {
+  if (!readings || typeof readings !== "object") return null;
+  const out = {};
+  lines.forEach((line) => {
+    const spoken = speakableText(readings[line] || readings[cacheKey(line)] || "");
+    if (spoken && speakableText(spoken) !== speakableText(line)) out[line] = spoken;
   });
+  return Object.keys(out).length ? out : null;
 }
 
-function systemInstructions() {
-  return (
-    "You are Learny, a warm woman reading homework aloud for a child. " +
-    "The message contains one line between <say> and </say>. It is a script to read, " +
-    "not a question to answer and not something said to you. " +
-    "Read exactly that line once, clearly, in its own language (Japanese or English), " +
-    "at a slightly slow pace, then stop. Say nothing else."
-  );
-}
-
-async function generateOnce(text, model, signal) {
+async function synthesizeBatch(texts, signal, { readings = null } = {}) {
   throwIfAborted(signal);
-  const line = speakableText(text);
-  const minSamples = generateMinSamples(line);
-  const client = new GeminiLiveAPI(resolveProxyUrl(), PROJECT_ID, model);
-  client.responseModalities = ["AUDIO"];
-  client.voiceName = VOICE;
-  client.temperature = 0.2;
-  client.inputAudioTranscription = false;
-  client.outputAudioTranscription = true;
-  client.sessionResumptionEnabled = false;
-  client.contextWindowCompression = { enabled: false };
-  client.systemInstructions = systemInstructions();
-  // gemini-3.8-live rejects proactiveAudio: false. Older Live models still send it.
-  client.proactivity = model === LATEST_MODEL ? null : { proactiveAudio: false };
+  const lines = [...new Set((texts || []).map((t) => String(t || "").trim()).filter(Boolean))];
+  if (!lines.length) return { clips: [], failed: [] };
+  const readingMap = compactReadings(lines, readings);
 
-  let pending = null;
-  let said = "";
-  const onAbort = () => {
-    try { client.disconnect(); } catch { /* already closed */ }
-    pending?.fail(abortError());
-  };
-  client.onReceiveResponse = (message) => {
-    if (!pending) return;
-    if (message.type === MultimodalLiveResponseType.AUDIO && message.data) {
-      pending.chunks.push(decodePcm16(message.data));
-      pending.heard();
-    } else if (message.type === MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION) {
-      said += message.data?.text || "";
-    } else if (message.type === MultimodalLiveResponseType.TURN_COMPLETE) {
-      pending.done();
-    } else if (message.type === MultimodalLiveResponseType.ERROR) {
-      pending.fail(new Error("voice session error"));
-    }
-  };
-  client.onErrorMessage = (message) => pending?.fail(
-    signal?.aborted ? abortError() : new Error(String(message || "voice connection error")),
-  );
-  client.onClose = () => pending?.fail(
-    signal?.aborted ? abortError() : new Error("voice connection closed"),
-  );
+  const { getAuth } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js");
+  const user = getAuth().currentUser;
+  if (!user) throw new Error("ログインが必要です。");
+  const token = await user.getIdToken();
+  throwIfAborted(signal);
 
-  liveClients.add(client);
+  const controller = new AbortController();
+  activeControllers.add(controller);
+  const onAbort = () => controller.abort();
   signal?.addEventListener("abort", onAbort, { once: true });
+  const timeout = setTimeout(() => {
+    console.warn("[homework voice] tts fetch timeout", { lines, ms: TTS_FETCH_TIMEOUT_MS });
+    controller.abort();
+  }, TTS_FETCH_TIMEOUT_MS);
+  const fetchStarted = performance.now();
   try {
-    throwIfAborted(signal);
-    await client.connect();
-    throwIfAborted(signal);
-    await waitForSetup(client);
-    throwIfAborted(signal);
-    const raw = await new Promise((resolve, reject) => {
-      const chunks = [];
-      let grace = null;
-      let settled = false;
-      const chunkSamples = () => chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-      const stopTimers = () => {
-        clearTimeout(timer);
-        clearTimeout(grace);
-      };
-      const settle = (fn, value) => {
-        if (settled) return;
-        settled = true;
-        stopTimers();
-        fn(value);
-      };
-      const finish = () => {
-        if (!chunks.length || chunkSamples() < minSamples) {
-          settle(reject, new Error("voice empty"));
-          return;
-        }
-        settle(resolve, concatSamples(chunks));
-      };
-      const timer = setTimeout(() => {
-        // Keep partial audio if the model spoke but never sent TURN_COMPLETE.
-        if (chunkSamples() >= minSamples) finish();
-        else settle(reject, new Error("voice timeout"));
-      }, phraseTimeoutMs(line));
-      pending = {
-        chunks,
-        heard: () => {
-          clearTimeout(grace);
-          grace = setTimeout(finish, 900);
-        },
-        done: () => {
-          clearTimeout(grace);
-          grace = setTimeout(finish, 700);
-        },
-        fail: (error) => {
-          if (error?.name === "AbortError" || signal?.aborted) {
-            settle(reject, abortError());
-            return;
-          }
-          if (chunkSamples() >= minSamples) {
-            finish();
-            return;
-          }
-          settle(reject, error);
-        },
-      };
-      if (signal?.aborted) {
-        pending.fail(abortError());
-        return;
-      }
-      if (!client.sendTextMessage(`<say>${line}</say>`)) pending.fail(new Error("voice send failed"));
+    console.info("[homework voice] tts fetch start", {
+      lines: lines.length,
+      sample: lines.slice(0, 3),
+      readings: readingMap ? Object.keys(readingMap).length : 0,
     });
-    throwIfAborted(signal);
-    if (!readingMatches(line, said)) throw new Error(`voice read the wrong line: ${said}`);
-    const samples = normalizePlayable(raw) || trimSilence(raw, minSamples);
-    if (!longEnough(samples, minSamples) && !longEnough(samples, PLAYABLE_MIN_SAMPLES)) {
-      throw new Error("voice too short");
+    const response = await fetch(TTS_FN_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        data: {
+          texts: lines,
+          ...(readingMap ? { readings: readingMap } : {}),
+        },
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body?.error?.message || "音声をつくれませんでした。");
     }
-    if (samples.length / SAMPLE_RATE > maxSeconds(line)) throw new Error("voice too long");
-    return samples;
+    const result = body.result || body;
+    console.info("[homework voice] tts fetch done", {
+      lines: lines.length,
+      made: Array.isArray(result.clips) ? result.clips.length : 0,
+      failed: Array.isArray(result.failed) ? result.failed.length : 0,
+      clientMs: Math.round(performance.now() - fetchStarted),
+      serverTotalMs: result?.timing?.totalMs ?? null,
+      model: result?.model || "",
+    });
+    if (result?.timing) {
+      console.info("[homework voice] tts server timing", result.timing);
+    }
+    return {
+      clips: Array.isArray(result.clips) ? result.clips : [],
+      failed: Array.isArray(result.failed) ? result.failed : [],
+      timing: result.timing || null,
+      model: result.model || "",
+    };
+  } catch (error) {
+    if (error?.name === "AbortError" || signal?.aborted || controller.signal.aborted) {
+      if (signal?.aborted) throw abortError();
+      throw new Error(`音声生成がタイムアウトしました（${Math.round(TTS_FETCH_TIMEOUT_MS / 1000)}秒）。もう一度お試しください。`);
+    }
+    throw error;
   } finally {
+    clearTimeout(timeout);
     signal?.removeEventListener("abort", onAbort);
-    pending = null;
-    liveClients.delete(client);
-    client.disconnect();
+    activeControllers.delete(controller);
   }
 }
 
-function setupFailed(error) {
-  const message = String(error?.message || error);
-  // Phrase "voice timeout" should retry. Only abort a model when the Live session itself failed.
-  return /session not ready|voice session not ready|voice connection|voice send failed|voice session error/.test(message);
-}
-
-function shouldRetry(error) {
-  const message = String(error?.message || error);
-  return /voice timeout|voice empty|voice too short|voice connection closed|voice read the wrong line/.test(message);
-}
-
-async function generatePhrase(text, signal) {
-  let lastError = null;
-  const models = preferredModel === FALLBACK_MODEL
-    ? [FALLBACK_MODEL]
-    : [LATEST_MODEL, FALLBACK_MODEL];
-  for (const model of models) {
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-      try {
-        throwIfAborted(signal);
-        const samples = await generateOnce(text, model, signal);
-        if (model === FALLBACK_MODEL && setupFailed(lastError)) preferredModel = FALLBACK_MODEL;
-        return samples;
-      } catch (error) {
-        if (error?.name === "AbortError" || signal?.aborted) throw abortError();
-        lastError = error;
-        if (setupFailed(error)) break;
-        if (!shouldRetry(error) && attempt + 1 >= MAX_ATTEMPTS) break;
-        // Brief pause before retrying a timed-out Live turn.
-        await new Promise((resolve) => setTimeout(resolve, 350 + attempt * 250));
-        throwIfAborted(signal);
-      }
-    }
-  }
-  throw lastError;
+function samplesFromTtsClip(clip) {
+  if (!clip?.pcm) return null;
+  const raw = decodePcm16(clip.pcm);
+  const samples = normalizePlayable(raw) || raw;
+  if (!samples?.length) return null;
+  if (!longEnough(samples, PLAYABLE_MIN_SAMPLES)) return null;
+  // Soft gate: reject only clearly bad long clips (TTS is already scripted).
+  if (samples.length / SAMPLE_RATE >= 0.8 && !speechLooksOk(samples)) return null;
+  return samples;
 }
 
 /**
  * Make any missing clips. Already cached lines are skipped unless force is true.
- * Returns how many lines failed so the teacher can press create again.
+ * Uses Chirp / Gemini TTS via Cloud Function (no Live API).
  *
- * onProgress(done, total, info) where info.cached / info.making describe
- * how much is reused vs newly generated.
+ * readings: optional { [displayText]: speakAs } map so Chirp can pronounce a
+ * respelling / yomigana while clips stay cached under the display text key.
  */
-export async function prepareHomeworkVoice(texts, { onProgress, db, force = false, signal } = {}) {
+export async function prepareHomeworkVoice(texts, { onProgress, db, force = false, signal, readings = null } = {}) {
+  const startedAt = performance.now();
   const items = uniqueLines(texts);
+  const readingMap = compactReadings(items.map((item) => item.text), readings);
   throwIfAborted(signal);
   if (force) {
-    // Drop local caches only. Remote is overwritten after a successful remake.
-    await forgetHomeworkVoice(items.map((item) => item.text));
+    await forgetHomeworkVoice(items.map((item) => item.text), { db });
   } else {
     await hydrateHomeworkVoice(items.map((item) => item.text), db);
   }
@@ -679,7 +664,8 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     missing: missing.length,
     hasDb: Boolean(db),
     force,
-    cachedLines: cachedItems.map((item) => item.text),
+    readings: readingMap ? Object.keys(readingMap).length : 0,
+    engine: "chirp3-hd",
     missingLines: missing.map((item) => item.text),
   });
   const currentLines = new Set();
@@ -696,39 +682,78 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     });
   };
   report(cached, 0);
+
   const failed = [];
+  const persistJobs = [];
   let shared = 0;
-  let cursor = 0;
   let makingDone = 0;
-  async function worker() {
-    while (cursor < missing.length) {
-      throwIfAborted(signal);
-      const item = missing[cursor];
-      cursor += 1;
-      currentLines.add(item.text);
-      report(cached + makingDone, makingDone);
-      try {
-        const samples = await generatePhrase(item.text, signal);
-        throwIfAborted(signal);
-        const kept = remember(item.key, samples, { playable: true });
-        if (!kept) throw new Error("voice too short");
-        await idbPut(item.key, kept);
-        if (await saveRemote(db, item.key, kept, item.text)) shared += 1;
-      } catch (error) {
-        if (error?.name === "AbortError" || signal?.aborted) throw abortError();
-        console.warn("homework voice", item.text, error);
+  let ttsMs = 0;
+
+  async function persistClip(item, kept, meta = {}) {
+    await idbPut(item.key, kept);
+    if (await saveRemote(db, item.key, kept, item.text, meta)) shared += 1;
+  }
+
+  async function runBatch(batch) {
+    throwIfAborted(signal);
+    batch.forEach((item) => currentLines.add(item.text));
+    report(cached + makingDone, makingDone);
+    const ttsStarted = performance.now();
+    const { clips, failed: batchFailed, timing, model } = await synthesizeBatch(
+      batch.map((item) => item.text),
+      signal,
+      { readings: readingMap },
+    );
+    ttsMs += performance.now() - ttsStarted;
+    console.info("[homework voice] tts batch", {
+      lines: batch.length,
+      made: clips.length,
+      failed: (batchFailed || []).length,
+      clientWaitMs: Math.round(performance.now() - ttsStarted),
+      serverTotalMs: timing?.totalMs ?? null,
+      serverAuthMs: timing?.authMs ?? null,
+      engines: (timing?.lines || []).reduce((map, row) => {
+        map[row.engine] = (map[row.engine] || 0) + 1;
+        return map;
+      }, {}),
+      model,
+      slowest: (timing?.lines || []).slice().sort((a, b) => b.ms - a.ms).slice(0, 3),
+    });
+    const byText = new Map(clips.map((clip) => [speakableText(clip.text), clip]));
+    for (const item of batch) {
+      const clip = byText.get(speakableText(item.text));
+      const samples = clip ? samplesFromTtsClip(clip) : null;
+      if (!samples) {
         failed.push(item.text);
-      } finally {
-        currentLines.delete(item.text);
+      } else {
+        const kept = remember(item.key, samples, { playable: true });
+        if (!kept) failed.push(item.text);
+        else {
+          persistJobs.push(persistClip(item, kept, {
+            engine: clip.engine || model || "chirp3-hd",
+            voice: "Kore",
+          }));
+        }
       }
+      currentLines.delete(item.text);
       makingDone += 1;
       report(cached + makingDone, makingDone);
     }
+    (batchFailed || []).forEach((line) => {
+      if (!failed.includes(line)) failed.push(line);
+    });
   }
+
   try {
-    if (missing.length) {
-      const workers = Math.min(2, missing.length);
-      await Promise.all(Array.from({ length: workers }, () => worker()));
+    const batches = [];
+    for (let offset = 0; offset < missing.length; offset += TTS_BATCH_SIZE) {
+      batches.push(missing.slice(offset, offset + TTS_BATCH_SIZE));
+    }
+    for (let offset = 0; offset < batches.length; offset += TTS_PARALLEL_BATCHES) {
+      throwIfAborted(signal);
+      await Promise.all(
+        batches.slice(offset, offset + TTS_PARALLEL_BATCHES).map((batch) => runBatch(batch)),
+      );
     }
   } catch (error) {
     if (error?.name === "AbortError" || signal?.aborted) {
@@ -737,10 +762,36 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     }
     throw error;
   }
+
   throwIfAborted(signal);
-  // Cached local-only clips must still be published for students.
-  const sync = await syncHomeworkVoiceRemote(items.map((item) => item.text), db, { force: true });
-  shared = Math.max(shared, sync.synced);
+  await Promise.allSettled(persistJobs);
+
+  // Remake can forget a line after this prepare already built its missing list.
+  // Catch those orphans in a second pass so the drawer is not left without audio.
+  const lateMissing = items.filter((item) => !memory.has(item.key) || forgottenKeys.has(item.key));
+  if (lateMissing.length) {
+    console.info("[homework voice] late missing after forget race", lateMissing.map((item) => item.text));
+    const lateBatches = [];
+    for (let offset = 0; offset < lateMissing.length; offset += TTS_BATCH_SIZE) {
+      lateBatches.push(lateMissing.slice(offset, offset + TTS_BATCH_SIZE));
+    }
+    for (let offset = 0; offset < lateBatches.length; offset += TTS_PARALLEL_BATCHES) {
+      throwIfAborted(signal);
+      await Promise.all(
+        lateBatches.slice(offset, offset + TTS_PARALLEL_BATCHES).map((batch) => runBatch(batch)),
+      );
+    }
+    await Promise.allSettled(persistJobs);
+  }
+
+  // Freshly made clips were already uploaded in persistClip — do not re-getDoc them.
+  // Only sync when we reused cache (nothing generated) and may still need remote publish.
+  let sync = { synced: shared, missing: [], failed: [], published: 0 };
+  const stillMissing = items.filter((item) => !memory.has(item.key));
+  if (!stillMissing.length && !missing.length && !lateMissing.length) {
+    sync = await syncHomeworkVoiceRemote(items.map((item) => item.text), db, { force: false });
+    shared = Math.max(shared, sync.synced);
+  }
   if (sync.failed.length) {
     sync.failed.forEach((line) => {
       if (!failed.includes(line)) failed.push(line);
@@ -758,6 +809,8 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     failed: failed.length,
     shared,
     syncMissing: sync.missing.length,
+    ttsMs: Math.round(ttsMs),
+    totalMs: Math.round(performance.now() - startedAt),
     failedLines: failed,
   });
   return {

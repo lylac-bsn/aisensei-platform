@@ -19,7 +19,9 @@ export const MultimodalLiveResponseType = {
 };
 
 /**
- * Parses response messages from the Gemini Live API
+ * Parses response messages from the Gemini Live API.
+ * One WebSocket frame can carry audio, transcription, and turnComplete together —
+ * emit every event (audio → text → transcription → turnComplete) so nothing is dropped.
  */
 export class MultimodalLiveResponseMessage {
   constructor(data) {
@@ -27,57 +29,137 @@ export class MultimodalLiveResponseMessage {
     this.type = "";
     this.endOfTurn = false;
     this.usageMetadata = null;
+    this.mimeType = "";
+    this.raw = null;
 
-    this.endOfTurn = data?.serverContent?.turnComplete;
+    if (data && typeof data === "object" && data.__liveEvent) {
+      this.type = data.type || "";
+      this.data = data.data ?? "";
+      this.endOfTurn = Boolean(data.endOfTurn);
+      this.usageMetadata = data.usageMetadata || null;
+      this.mimeType = data.mimeType || "";
+      return;
+    }
 
-    // Extract usage metadata from various possible locations
-    this.usageMetadata = 
-      data?.usageMetadata || 
+    const events = MultimodalLiveResponseMessage.parseEvents(data);
+    if (events.length) {
+      const first = events[0];
+      this.type = first.type;
+      this.data = first.data;
+      this.endOfTurn = first.endOfTurn;
+      this.usageMetadata = first.usageMetadata;
+      this.mimeType = first.mimeType || "";
+      return;
+    }
+
+    this.raw = data;
+  }
+
+  static _event(type, data = "", extra = {}) {
+    return new MultimodalLiveResponseMessage({
+      __liveEvent: true,
+      type,
+      data,
+      endOfTurn: Boolean(extra.endOfTurn),
+      usageMetadata: extra.usageMetadata || null,
+      mimeType: extra.mimeType || "",
+    });
+  }
+
+  /**
+   * Expand one server frame into ordered client events.
+   * Order: setup/interrupt/tool → model parts (audio then text) →
+   * transcriptions → turnComplete.
+   */
+  static parseEvents(data) {
+    const events = [];
+    if (!data || typeof data !== "object") return events;
+
+    const usageMetadata =
+      data?.usageMetadata ||
       data?.serverContent?.usageMetadata ||
       data?.serverContent?.modelTurn?.usageMetadata ||
       null;
-
-    const parts = data?.serverContent?.modelTurn?.parts;
+    const turnComplete = Boolean(data?.serverContent?.turnComplete);
 
     try {
-      if (data?.setupComplete) {
-        this.type = MultimodalLiveResponseType.SETUP_COMPLETE;
-      } else if (data?.serverContent?.interrupted) {
-        this.type = MultimodalLiveResponseType.INTERRUPTED;
-      } else if (data?.serverContent?.inputTranscription) {
-        this.type = MultimodalLiveResponseType.INPUT_TRANSCRIPTION;
-        this.data = {
-          text: data.serverContent.inputTranscription.text || "",
-          finished: data.serverContent.inputTranscription.finished || false,
-        };
-      } else if (data?.serverContent?.outputTranscription) {
-        this.type = MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION;
-        this.data = {
-          text: data.serverContent.outputTranscription.text || "",
-          finished: data.serverContent.outputTranscription.finished || false,
-        };
-      } else if (data?.toolCall) {
-        this.type = MultimodalLiveResponseType.TOOL_CALL;
-        this.data = data?.toolCall;
-      } else if (parts?.length && parts[0].text) {
-        this.data = parts[0].text;
-        this.type = MultimodalLiveResponseType.TEXT;
-      } else if (parts?.length && parts[0].inlineData) {
-        this.data = parts[0].inlineData.data;
-        this.type = MultimodalLiveResponseType.AUDIO;
-      } else if (data?.serverContent?.turnComplete) {
-        // Parse audio/text first. A short reply often arrives in the same
-        // frame as turnComplete; treating that as TURN_COMPLETE dropped audio.
-        this.type = MultimodalLiveResponseType.TURN_COMPLETE;
+      if (data.setupComplete) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.SETUP_COMPLETE,
+          "",
+          { usageMetadata },
+        ));
       }
-    } catch (e) {
+      if (data?.serverContent?.interrupted) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.INTERRUPTED,
+          "",
+          { usageMetadata },
+        ));
+      }
+      if (data?.toolCall) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.TOOL_CALL,
+          data.toolCall,
+          { usageMetadata },
+        ));
+      }
+
+      const parts = data?.serverContent?.modelTurn?.parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part?.inlineData?.data) {
+            events.push(MultimodalLiveResponseMessage._event(
+              MultimodalLiveResponseType.AUDIO,
+              part.inlineData.data,
+              {
+                usageMetadata,
+                mimeType: part.inlineData.mimeType || part.inlineData.mime_type || "",
+              },
+            ));
+          } else if (part?.text) {
+            events.push(MultimodalLiveResponseMessage._event(
+              MultimodalLiveResponseType.TEXT,
+              part.text,
+              { usageMetadata },
+            ));
+          }
+        }
+      }
+
+      if (data?.serverContent?.inputTranscription) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.INPUT_TRANSCRIPTION,
+          {
+            text: data.serverContent.inputTranscription.text || "",
+            finished: data.serverContent.inputTranscription.finished || false,
+          },
+          { usageMetadata },
+        ));
+      }
+      if (data?.serverContent?.outputTranscription) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.OUTPUT_TRANSCRIPTION,
+          {
+            text: data.serverContent.outputTranscription.text || "",
+            finished: data.serverContent.outputTranscription.finished || false,
+          },
+          { usageMetadata },
+        ));
+      }
+
+      if (turnComplete) {
+        events.push(MultimodalLiveResponseMessage._event(
+          MultimodalLiveResponseType.TURN_COMPLETE,
+          "",
+          { endOfTurn: true, usageMetadata },
+        ));
+      }
+    } catch {
       // parsing error handled silently
     }
 
-    // Keep unparsed frames (goAway, errors, etc.) for debug logging
-    if (!this.type) {
-      this.raw = data;
-    }
+    return events;
   }
 }
 
@@ -333,8 +415,13 @@ export class GeminiLiveAPI {
       this.onGoAway(messageData.goAway.timeLeft || null);
     }
 
+    const events = MultimodalLiveResponseMessage.parseEvents(messageData);
+    if (events.length) {
+      for (const event of events) this.onReceiveResponse(event);
+      return;
+    }
     const message = new MultimodalLiveResponseMessage(messageData);
-    this.onReceiveResponse(message);
+    if (message.type || message.raw) this.onReceiveResponse(message);
   }
 
   setupWebSocketToService() {

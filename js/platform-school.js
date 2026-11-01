@@ -2365,7 +2365,7 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountHomeworkHub } = await import("./homework-library.js?v=20261031-hw-teachers");
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261102-speak-as");
     const me = await getDoc(doc(db, "users", uid));
     const role = me.data()?.role || "";
     const openHub = ({ landing = false } = {}) => {
@@ -3182,12 +3182,36 @@ function renderQuiz(root, { host, uid }) {
 }
 
 async function playPackHomework(root, assignmentId, uid, extras = {}) {
-  const { mountHomeworkPlayer } = await import("./homework-play.js?v=20261031-hw-voicefix");
+  const [{ mountHomeworkPlayer }, { gradeAnswer }] = await Promise.all([
+    import("./homework-play.js?v=20261101-grade-fast"),
+    import("./homework-engine.js?v=20261031-hw-voicefix"),
+  ]);
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
-  const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));
+  const [snap, answerPack] = await Promise.all([
+    getDoc(doc(db, "homeworkAssignments", assignmentId)),
+    callFunction("getHomeworkAnswers", { assignmentId }).catch((error) => {
+      console.warn("[homework] answer prefetch failed", error);
+      return { answers: {} };
+    }),
+  ]);
   if (!snap.exists()) throw new Error("宿題が見つかりません。");
   const questions = snap.data()?.questions || [];
+  const secrets = answerPack?.answers || {};
+  const pendingSync = [];
+
+  function gradeLocally(id, payload) {
+    const secret = secrets[id];
+    if (!secret) return null;
+    if (payload.kind === "pair") {
+      return gradeAnswer(secret, { leftId: payload.leftId, rightId: payload.rightId });
+    }
+    if (payload.kind === "matching-done") {
+      return { correct: true, solution: "" };
+    }
+    return gradeAnswer(secret, payload.answer);
+  }
+
   await mountHomeworkPlayer(root, {
     title: snap.data()?.title || "しゅくだい",
     questions,
@@ -3196,16 +3220,30 @@ async function playPackHomework(root, assignmentId, uid, extras = {}) {
     // Students play teacher-shared clips only (no on-device Gemini remake).
     generateVoice: false,
     loadProgress: async () => (await getDoc(doc(db, "homeworkProgress", `${assignmentId}_${uid}`))).data(),
-    grade: (id, payload) => callFunction("submitHomework", {
-      assignmentId,
-      activityId: id,
-      kind: payload.kind,
-      answer: payload.answer,
-      leftId: payload.leftId,
-      rightId: payload.rightId,
-      elapsedMs: payload.elapsedMs,
-    }),
-    finish: () => callFunction("finishHomework", { assignmentId }),
+    grade: async (id, payload) => {
+      const local = gradeLocally(id, payload);
+      const remote = callFunction("submitHomework", {
+        assignmentId,
+        activityId: id,
+        kind: payload.kind,
+        answer: payload.answer,
+        leftId: payload.leftId,
+        rightId: payload.rightId,
+        elapsedMs: payload.elapsedMs,
+      });
+      // Instant correct/incorrect from local keys; progress syncs in the background.
+      if (local) {
+        pendingSync.push(remote.catch((error) => {
+          console.warn("[homework] progress sync", error);
+        }));
+        return local;
+      }
+      return remote;
+    },
+    finish: async () => {
+      await Promise.allSettled(pendingSync);
+      return callFunction("finishHomework", { assignmentId });
+    },
     onClose: () => {
       if (typeof extras.onClose === "function") extras.onClose();
       else root.replaceChildren();

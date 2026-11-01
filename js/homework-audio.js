@@ -5,7 +5,7 @@ import {
   prepareHomeworkVoice,
   stopHomeworkVoice,
   unlockHomeworkAudio,
-} from "./homework-voice-bank.js?v=20261031-hw-voicefix";
+} from "./homework-voice-bank.js?v=20261102-speak-as";
 
 let active = null;
 let playToken = 0;
@@ -27,7 +27,7 @@ async function playLearnyClip(text) {
 /**
  * Play a homework line with Learny's Gemini voice only.
  * Never falls back to browser speechSynthesis.
- * If the clip is missing, hydrate from cache / generate via Gemini Live.
+ * If the clip is missing, hydrate from cache / generate via Gemini TTS.
  */
 export async function playPrompt(text, _lang, options = {}) {
   stopPrompt();

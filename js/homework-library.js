@@ -1,12 +1,13 @@
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { generateHomework } from "./homework-engine.js?v=20261031-hw-voicefix";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
-import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261031-hw-voicefix";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261031-hw-voicefix";
+import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261102-speak-as";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 
-const CACHE = "20261031-hw-teachers";
+const CACHE = "20261102-speak-as";
 const RESUME_KEY = "gc-hw-resume";
 const HUB_ACTION_KEY = "gc-hub-action";
+const HISTORY_KIND = "gcHwHub";
 
 function readHwResume() {
   try {
@@ -234,6 +235,10 @@ export async function mountHomeworkHub(root, options) {
   // Flush/tear down an open studio so leave-save can finish and listeners detach.
   try { root._confirmLeave?.(); } catch { /* ignore */ }
   root._stopHomeworkStudio?.();
+  if (root._hwHubPopstate) {
+    window.removeEventListener("popstate", root._hwHubPopstate);
+    root._hwHubPopstate = null;
+  }
 
   const resume = options.skipResume ? null : readHwResume();
   const resumeView = resume?.view;
@@ -282,6 +287,43 @@ export async function mountHomeworkHub(root, options) {
   hub.className = "hw-hub hw-studio hw-switch-shell";
   root.replaceChildren(hub);
 
+  let historySilent = false;
+  let lastHistoryKey = "";
+
+  const hubHistoryPayload = (view, extra = {}) => ({
+    [HISTORY_KIND]: 1,
+    view,
+    tab: extra.tab || state.tab || "all",
+    selectedId: extra.selectedId || state.selected?.id || null,
+    sentId: extra.sentId || state.sentDetail?.assignment?.id || null,
+    sentOrigin: extra.sentOrigin || state.sentDetailOrigin || "sent",
+  });
+
+  const hubHistoryKey = (payload) => [
+    payload.view,
+    payload.tab || "",
+    payload.selectedId || "",
+    payload.sentId || "",
+  ].join("|");
+
+  const syncHubHistory = (view, { mode = "push", ...extra } = {}) => {
+    if (historySilent && mode === "push") return;
+    const payload = hubHistoryPayload(view, extra);
+    const key = hubHistoryKey(payload);
+    if (mode === "none") {
+      lastHistoryKey = key;
+      return;
+    }
+    if (mode === "replace" || !history.state?.[HISTORY_KIND]) {
+      history.replaceState(payload, "");
+      lastHistoryKey = key;
+      return;
+    }
+    if (key === lastHistoryKey) return;
+    history.pushState(payload, "");
+    lastHistoryKey = key;
+  };
+
   const rememberView = (view, extra = {}) => {
     writeHwResume({
       view,
@@ -291,23 +333,30 @@ export async function mountHomeworkHub(root, options) {
     });
   };
 
-  const paint = async () => {
+  const paint = async ({ historyMode = "push" } = {}) => {
     if (state.view === "landing") {
       rememberView("landing");
       hub.innerHTML = landingHtml();
       bindLanding();
+      syncHubHistory("landing", { mode: historyMode });
       return;
     }
     if (state.view === "assign" && state.selected) {
       rememberView("assign", { selectedId: state.selected.id });
       hub.innerHTML = assignHtml(state.selected);
       await bindAssign(state.selected);
+      syncHubHistory("assign", { mode: historyMode, selectedId: state.selected.id });
       return;
     }
     if (state.view === "sent-detail" && state.sentDetail?.assignment?.id) {
       rememberView("library");
       hub.innerHTML = sentDetailHtml(state.sentDetail);
       bindSentDetail();
+      syncHubHistory("sent-detail", {
+        mode: historyMode,
+        sentId: state.sentDetail.assignment.id,
+        sentOrigin: state.sentDetailOrigin,
+      });
       return;
     }
     rememberView("library");
@@ -318,6 +367,7 @@ export async function mountHomeworkHub(root, options) {
       refreshSent({ quiet: true }),
       isOwner ? refreshTeacherHomework({ quiet: true }) : Promise.resolve(),
     ]);
+    syncHubHistory("library", { mode: historyMode });
   };
 
   function landingHtml() {
@@ -1067,7 +1117,7 @@ export async function mountHomeworkHub(root, options) {
     return `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
   }
 
-  async function openSentDetail(id, origin = "sent") {
+  async function openSentDetail(id, origin = "sent", { historyMode = "push" } = {}) {
     if (!id) return;
     state.sentDetailOrigin = origin === "teachers" ? "teachers" : "sent";
     state.view = "sent-detail";
@@ -1080,6 +1130,11 @@ export async function mountHomeworkHub(root, options) {
       state.sentDetail = detail;
       hub.innerHTML = sentDetailHtml(detail);
       bindSentDetail();
+      syncHubHistory("sent-detail", {
+        mode: historyMode,
+        sentId: detail.assignment?.id || id,
+        sentOrigin: state.sentDetailOrigin,
+      });
     } catch (error) {
       state.view = "library";
       state.tab = state.sentDetailOrigin;
@@ -1087,6 +1142,7 @@ export async function mountHomeworkHub(root, options) {
       bindLibrary();
       if (state.sentDetailOrigin === "teachers") await refreshTeacherHomework();
       else await refreshSent();
+      syncHubHistory("library", { mode: historyMode === "none" ? "none" : "replace" });
       showBanner(friendlyLoadError(error), { retry: true });
       setLibStatus("送信済み宿題の詳細を開けませんでした。");
     }
@@ -1660,7 +1716,7 @@ export async function mountHomeworkHub(root, options) {
     }
   }
 
-  async function openStudio(pack) {
+  async function openStudio(pack, { historyMode = "push" } = {}) {
     let mountTeacherHomework;
     try {
       ({ mountTeacherHomework } = await import(`./homework-studio.js?v=${CACHE}`));
@@ -1669,12 +1725,15 @@ export async function mountHomeworkHub(root, options) {
       throw new Error("編集画面を開けませんでした。ページを再読み込みしてからもう一度お試しください。");
     }
     rememberView("studio", { pack: pack || null });
+    syncHubHistory("studio", { mode: historyMode });
     await mountTeacherHomework(root, {
       ...options,
       ...(pack ? { initialPack: pack } : {}),
       onStudioSnapshot: (snapshot) => rememberView("studio", { pack: snapshot }),
       openLibrary: (opts = {}) => {
         rememberView("library");
+        // Replace the studio history entry so Back from library returns to the prior hub screen.
+        syncHubHistory("library", { mode: "replace", tab: opts.tab || "all" });
         return mountHomeworkHub(root, {
           ...options,
           initialView: "library",
@@ -2121,19 +2180,91 @@ export async function mountHomeworkHub(root, options) {
   }
 
   root._confirmLeave = () => true;
-  await paint();
+
+  const applyHubHistory = async (snap) => {
+    if (!snap?.[HISTORY_KIND]) return false;
+    historySilent = true;
+    try {
+      if (snap.view === "studio") {
+        const pack = readHwResume()?.pack || null;
+        await openStudio(pack, { historyMode: "none" });
+        return true;
+      }
+      if (!hub.isConnected) {
+        await mountHomeworkHub(root, {
+          ...options,
+          initialView: snap.view === "sent-detail" || snap.view === "assign" ? "library" : (snap.view || "library"),
+          initialTab: snap.tab || "all",
+          skipResume: true,
+          historyRestore: snap,
+        });
+        return true;
+      }
+      if (snap.tab) state.tab = snap.tab;
+      if (snap.view === "landing") {
+        state.view = "landing";
+        state.selected = null;
+        await paint({ historyMode: "none" });
+        return true;
+      }
+      if (snap.view === "assign" && snap.selectedId) {
+        if (!state.items.length) await refreshLibrary();
+        const item = state.items.find((row) => row.id === snap.selectedId);
+        if (item) {
+          state.selected = item;
+          state.view = "assign";
+          await paint({ historyMode: "none" });
+          return true;
+        }
+      }
+      if (snap.view === "sent-detail" && snap.sentId) {
+        await openSentDetail(snap.sentId, snap.sentOrigin || "sent", { historyMode: "none" });
+        return true;
+      }
+      state.view = "library";
+      state.selected = null;
+      await paint({ historyMode: "none" });
+      return true;
+    } finally {
+      historySilent = false;
+    }
+  };
+
+  if (root._hwHubPopstate) {
+    window.removeEventListener("popstate", root._hwHubPopstate);
+  }
+  root._hwHubPopstate = (event) => {
+    const snap = event.state;
+    if (!snap?.[HISTORY_KIND]) return;
+    applyHubHistory(snap).catch((error) => {
+      console.warn("[homework-library] history restore failed", error);
+    });
+  };
+  window.addEventListener("popstate", root._hwHubPopstate);
+  const prevStop = root._stopHomeworkStudio;
+  root._stopHomeworkStudio = () => {
+    window.removeEventListener("popstate", root._hwHubPopstate);
+    root._hwHubPopstate = null;
+    try { prevStop?.(); } catch { /* ignore */ }
+  };
+
+  if (options.historyRestore?.[HISTORY_KIND]) {
+    await applyHubHistory(options.historyRestore);
+  } else {
+    await paint({ historyMode: "replace" });
+  }
 
   if (options.libNotice) {
     setLibStatus(options.libNotice, "ok");
   }
 
-  if (!options.skipResume && resumeView === "studio" && resume?.pack) {
+  if (!options.skipResume && !options.historyRestore && resumeView === "studio" && resume?.pack) {
     try {
       await openStudio(resume.pack);
     } catch (error) {
       console.warn("[homework-library] resume studio failed", error);
     }
-  } else if (!options.skipResume && resumeView === "assign" && resume?.selectedId) {
+  } else if (!options.skipResume && !options.historyRestore && resumeView === "assign" && resume?.selectedId) {
     const item = state.items.find((row) => row.id === resume.selectedId);
     if (item) {
       state.selected = item;

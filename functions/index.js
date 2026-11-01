@@ -261,6 +261,7 @@ exports.deleteCostEntry = onCall(
   exports.updateHomeworkPackMeta = school.updateHomeworkPackMeta;
   exports.getHomeworkEditor = school.getHomeworkEditor;
   exports.submitHomework = school.submitHomework;
+  exports.getHomeworkAnswers = school.getHomeworkAnswers;
   exports.finishHomework = school.finishHomework;
   exports.createQuiz = school.createQuiz;
   exports.saveQuizTemplate = school.saveQuizTemplate;
@@ -271,6 +272,11 @@ exports.deleteCostEntry = onCall(
   exports.syncQuizRoom = school.syncQuizRoom;
   exports.submitQuizAnswer = school.submitQuizAnswer;
   exports.markInboxRead = school.markInboxRead;
+}
+
+{
+  const homeworkTts = require("./homework-tts");
+  exports.synthesizeHomeworkVoice = homeworkTts.synthesizeHomeworkVoice;
 }
 
 {

@@ -1,6 +1,6 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-hw-voicefix";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261031-hw-voicefix";
-import { RETRY_LINES } from "./homework-voice-lines.js?v=20261031-hw-voicefix";
+import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-voice-quality";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261102-speak-as";
+import { RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
 const PRAISE = ["せいかい！", "すごい！", "そのちょうし！", "ばっちり！", "やったね！", "いいね！"];
@@ -670,8 +670,8 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     const pairLeft = leftId;
     const pairRight = rightId;
     try {
+      // Grade without waiting for word audio — feedback must feel instant.
       const result = await gradePair(pairLeft, pairRight);
-      await spoken;
       if (result.correct) {
         matched.add(pairLeft);
         matched.add(pairRight);
@@ -714,7 +714,6 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
         if (board.isConnected) paint();
       }
     } catch (error) {
-      await spoken;
       live.textContent = error.message;
       leftId = "";
       rightId = "";
@@ -724,6 +723,8 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     } finally {
       busy = false;
       if (board.isConnected && !finished) paint();
+      // Keep word audio going; ignore late failures.
+      void spoken;
     }
   }
 
