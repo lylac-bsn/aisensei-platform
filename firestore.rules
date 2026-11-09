@@ -101,16 +101,54 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if request.auth != null;
 
-      // Ticket amounts are changed only by the platform owner. Other settings stay with staff.
-      allow write: if settingId == 'ticketPolicy'
+      // Ticket amounts and class booking windows are changed only by the platform owner.
+      allow write: if settingId == 'ticketPolicy' || settingId == 'classPolicy'
         ? isOwner()
         : isAdmin();
     }
 
     // Classes, bookings and tickets are written only by Cloud Functions (Admin SDK).
     match /classes/{classId} {
-      allow read: if request.auth != null;
+      // Open classes stay readable so students and parents can book.
+      // Drafts and cancelled classes stay with the assigned teacher or the owner.
+      allow read: if request.auth != null && (
+        resource.data.status == "open"
+        || resource.data.teacherId == request.auth.uid
+        || isOwner()
+      );
       allow write: if false;
+    }
+
+    // Teacher-private presets, availability, and lesson notes.
+    // Other teachers, including admins, cannot list these through the users wildcard.
+    match /teacherPrivate/{teacherId} {
+      match /presets/{presetId} {
+        allow read: if request.auth != null && request.auth.uid == teacherId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == teacherId
+          && request.resource.data.title is string
+          && request.resource.data.title.size() <= 80;
+        allow delete: if request.auth != null && request.auth.uid == teacherId;
+      }
+      match /notes/{classId} {
+        allow read: if request.auth != null && request.auth.uid == teacherId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == teacherId
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 2000
+          && request.resource.data.checklist is map;
+        allow delete: if request.auth != null && request.auth.uid == teacherId;
+      }
+      match /availability/{docId} {
+        allow read: if request.auth != null && request.auth.uid == teacherId && docId == "settings";
+        allow create, update: if request.auth != null
+          && request.auth.uid == teacherId
+          && docId == "settings"
+          && request.resource.data.hours is map
+          && request.resource.data.blocks is list
+          && request.resource.data.blocks.size() <= 80;
+        allow delete: if request.auth != null && request.auth.uid == teacherId && docId == "settings";
+      }
     }
 
     match /bookings/{bookingId} {

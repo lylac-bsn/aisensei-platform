@@ -3,6 +3,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { callerIsOwner } = require("./cost-summary");
 const { pushTo } = require("./push");
+const { availabilityConflict, bookingWindowError, cancelBlocked, occurrenceEndMs } = require("./class-schedule");
 
 const REGION = "asia-northeast1";
 const GAMES = new Set(["minecraft", "roblox"]);
@@ -120,6 +121,18 @@ async function ticketPolicy() {
   return { ticketsPerMonth, rolloverMonths };
 }
 
+async function classPolicy() {
+  const snap = await db().collection("settings").doc("classPolicy").get();
+  if (!snap.exists) return null;
+  const data = snap.data() || {};
+  const hours = (value) => (value == null || value === "" ? null : clampInt(value, 0, 0, 24 * 60));
+  return {
+    bookingOpensHours: hours(data.bookingOpensHours),
+    bookingCutoffHours: hours(data.bookingCutoffHours),
+    cancelCutoffHours: hours(data.cancelCutoffHours),
+  };
+}
+
 function clampInt(value, fallback, min, max) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -195,8 +208,18 @@ exports.publishClass = onCall({ region: REGION }, async (request) => {
     teacherId = requestedTeacher;
     teacherName = String(teacher.data().displayName || teacher.data().email || "先生").slice(0, 50);
   }
+  const status = request.data?.status === "draft" ? "draft" : "open";
+  const instructions = String(request.data?.instructions || "").trim().slice(0, 600);
+  const availability = await db().collection("teacherPrivate").doc(teacherId).collection("availability").doc("settings").get();
   const ids = [];
-  const duration = endsAtMs - startsAtMs;
+  const duration = occurrenceEndMs(startsAtMs, endsAtMs, repeat) - startsAtMs;
+  if (availability.exists()) {
+    for (let index = 0; index < count; index += 1) {
+      const startsAt = shiftClassStart(startsAtMs, repeat, index);
+      const conflict = availabilityConflict(availability.data(), startsAt.getTime(), startsAt.getTime() + duration);
+      if (conflict) throw new HttpsError("failed-precondition", conflict);
+    }
+  }
   for (let index = 0; index < count; index += 1) {
     const startsAt = shiftClassStart(startsAtMs, repeat, index);
     const ref = db().collection("classes").doc();
@@ -211,7 +234,8 @@ exports.publishClass = onCall({ region: REGION }, async (request) => {
       slotKey: slotKeyFromDate(startsAt),
       capacity,
       bookedCount: 0,
-      status: "open",
+      status,
+      instructions,
       seriesWeeks: count,
       seriesRepeat: repeat,
       seriesCount: count,
@@ -250,6 +274,10 @@ exports.bookClass = onCall({ region: REGION }, async (request) => {
         throw new HttpsError("not-found", "そのクラスは予約できません。");
       }
       const klass = classSnap.data();
+      const policy = await classPolicy();
+      const startsAtMs = klass.startsAt?.toMillis?.() || 0;
+      const windowError = bookingWindowError(startsAtMs, Date.now(), policy);
+      if (windowError) throw new HttpsError("failed-precondition", windowError);
       if (Number(klass.bookedCount || 0) >= Number(klass.capacity || MAX_CAPACITY)) {
         throw new HttpsError("resource-exhausted", "席が埋まっています。");
       }
@@ -302,6 +330,7 @@ exports.bookClass = onCall({ region: REGION }, async (request) => {
         studentId,
         studentName,
         classId,
+        teacherId: klass.teacherId || "",
         title: String(klass.title || "クラス").slice(0, 80),
         parentIds: Array.isArray(studentSnap.data()?.linkedParentIds) ? studentSnap.data().linkedParentIds : [],
       };
@@ -323,6 +352,14 @@ exports.bookClass = onCall({ region: REGION }, async (request) => {
         await notifyUser(parentId, {
           type: "booking",
           title: "クラスを予約しました",
+          body: `${notice.studentName} · ${notice.title}`,
+          classId: notice.classId,
+        });
+      }
+      if (notice.teacherId && notice.teacherId !== notice.studentId) {
+        await notifyUser(notice.teacherId, {
+          type: "booking",
+          title: "新しい予約",
           body: `${notice.studentName} · ${notice.title}`,
           classId: notice.classId,
         });
@@ -409,6 +446,19 @@ exports.deleteClass = onCall({ region: REGION }, async (request) => {
     cancelledBy: user.uid,
   });
 
+  if (klass.teacherId && klass.teacherId !== user.uid) {
+    try {
+      await notifyUser(klass.teacherId, {
+        type: "alert",
+        title: "クラスが変更されました",
+        body: String(klass.title || "クラス").slice(0, 80),
+        classId,
+      });
+    } catch (error) {
+      console.error("teacher cancel notice failed", error?.message || error);
+    }
+  }
+
   for (const notice of notices) {
     try {
       await notifyUser(notice.studentId, {
@@ -432,7 +482,9 @@ exports.cancelBooking = onCall({ region: REGION }, async (request) => {
     throw new HttpsError("invalid-argument", "予約IDが正しくありません。");
   }
   const policy = await ticketPolicy();
+  const rules = await classPolicy();
   const refundExpires = Timestamp.fromDate(expiryForGrant(new Date(), policy.rolloverMonths));
+  let cancelNotice = null;
   await db().runTransaction(async (tx) => {
     const bookingRef = db().collection("bookings").doc(bookingId);
     const bookingSnap = await tx.get(bookingRef);
@@ -446,6 +498,11 @@ exports.cancelBooking = onCall({ region: REGION }, async (request) => {
       booking.teacherId === user.uid ||
       user.role === "owner";
     if (!allowed) throw new HttpsError("permission-denied", "この予約は取り消せません。");
+    const actorIsFamily = user.uid === booking.studentId || user.role === "parent";
+    const startsAtMs = booking.startsAt?.toMillis?.() || 0;
+    if (actorIsFamily && user.uid !== booking.teacherId && user.role !== "owner" && cancelBlocked(startsAtMs, Date.now(), rules)) {
+      throw new HttpsError("failed-precondition", "キャンセル期限を過ぎています。");
+    }
     const classRef = db().collection("classes").doc(booking.classId);
     const balanceRef = db().collection("ticketBalances").doc(booking.studentId);
     const holdRef = db().collection("slotHolds").doc(`${booking.studentId}__${booking.slotKey}`);
@@ -468,7 +525,25 @@ exports.cancelBooking = onCall({ region: REGION }, async (request) => {
     tx.delete(holdRef);
     tx.update(bookingRef, { status: "cancelled", cancelledAt: FieldValue.serverTimestamp() });
     tx.update(classRef, { bookedCount: FieldValue.increment(-1) });
+    cancelNotice = {
+      teacherId: booking.teacherId || "",
+      classId: booking.classId || "",
+      title: String(booking.classTitle || "クラス").slice(0, 80),
+      actor: user.uid,
+    };
   });
+  if (cancelNotice?.teacherId && cancelNotice.actor !== cancelNotice.teacherId) {
+    try {
+      await notifyUser(cancelNotice.teacherId, {
+        type: "booking",
+        title: "予約がキャンセルされました",
+        body: cancelNotice.title,
+        classId: cancelNotice.classId,
+      });
+    } catch (error) {
+      console.error("cancel notice failed", error?.message || error);
+    }
+  }
   return { ok: true };
 });
 
@@ -654,4 +729,27 @@ exports.grantMonthlyTicketsNow = onCall({ region: REGION }, async (request) => {
 exports.grantMonthlyTickets = onSchedule(
   { schedule: "0 0 1 * *", timeZone: "Asia/Tokyo", region: REGION },
   async () => grantAll(new Date())
+);
+
+exports.remindUpcomingClasses = onSchedule(
+  { schedule: "every 30 minutes", timeZone: "Asia/Tokyo", region: REGION },
+  async () => {
+    const now = Date.now();
+    const soon = now + 70 * 60 * 1000;
+    const snap = await db().collection("classes").where("status", "==", "open").get();
+    for (const item of snap.docs) {
+      const data = item.data();
+      const start = data.startsAt?.toMillis?.() || 0;
+      if (data.reminderSent || !data.teacherId || start < now || start > soon) continue;
+      const teacher = await db().collection("users").doc(data.teacherId).get();
+      if (teacher.data()?.classReminders !== true) continue;
+      await notifyUser(data.teacherId, {
+        type: "alert",
+        title: "まもなく授業です",
+        body: String(data.title || "クラス").slice(0, 80),
+        classId: item.id,
+      });
+      await item.ref.update({ reminderSent: true });
+    }
+  }
 );

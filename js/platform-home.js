@@ -168,6 +168,11 @@ const ICONS = {
 };
 
 export async function renderHome(dash, role, displayName) {
+  if (role === "admin" || role === "owner") {
+    const { renderTeacherHome } = await import("./teacher-home.js?v=20261106-teacher");
+    await renderTeacherHome(dash, role, displayName);
+    return;
+  }
   const staff = role === "admin" || role === "owner";
   const lead = document.getElementById("hub-lead");
   const hubDate = document.getElementById("hub-date");

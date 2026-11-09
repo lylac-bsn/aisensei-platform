@@ -2,6 +2,7 @@ import { collection, doc, getDoc, getDocs, query, where } from "https://www.gsta
 import { generateHomework } from "./homework-engine.js?v=20261031-hw-voicefix";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261102-speak-as";
+import { homeworkClass, setHomeworkClass } from "./teacher-context.js?v=20261106-teacher";
 import { RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 
 const CACHE = "20261102-speak-as";
@@ -405,6 +406,19 @@ export async function mountHomeworkHub(root, options) {
     };
   }
 
+  function classContextBanner() {
+    const classId = homeworkClass();
+    if (!classId) return "";
+    const sent = state.sentItems.filter((item) => (item.classIds || []).includes(classId));
+    const title = sent[0]?.classNames?.[0] || state.classes.find((row) => row.id === classId)?.title || "選択中のクラス";
+    return `
+      <section class="td-hw-context">
+        <strong>${escapeHtml(title)} に出す宿題</strong>
+        <p>${sent.length ? sent.slice(0, 3).map((item) => escapeHtml(item.title)).join("、") : "このクラスへの送信はまだありません。"}</p>
+        <button type="button" class="td-text" id="hw-clear-class">クラスの指定を外す</button>
+      </section>`;
+  }
+
   function libraryHtml() {
     const counts = tabCounts();
     return `
@@ -414,6 +428,7 @@ export async function mountHomeworkHub(root, options) {
           <span aria-hidden="true">/</span>
           <span>宿題</span>
         </nav>
+        ${classContextBanner()}
         <header class="hw-lib-hero">
           <div class="hw-lib-hero-copy">
             <h2><span class="hw-lib-hero-icon" aria-hidden="true">${ICONS.books}</span>宿題ライブラリ</h2>
@@ -581,6 +596,10 @@ export async function mountHomeworkHub(root, options) {
       };
     });
     hub.querySelector('[data-lib="create"]').onclick = () => openCreate();
+    hub.querySelector("#hw-clear-class")?.addEventListener("click", () => {
+      setHomeworkClass("");
+      paint();
+    });
     hub.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.onclick = async () => {
         state.tab = btn.dataset.tab || "all";
@@ -2105,6 +2124,15 @@ export async function mountHomeworkHub(root, options) {
           <span class="hw-class-card-body"><strong>${escapeHtml(item.title)}</strong><small>…</small></span>
         </label>`).join("")
       : `<p class="hw-note">担当クラスがまだありません。</p>`;
+    const preset = homeworkClass();
+    if (preset) {
+      const input = [...host.querySelectorAll("[data-class]")].find((item) => item.value === preset);
+      if (input) {
+        input.checked = true;
+        input.closest(".hw-class-card")?.classList.add("is-on");
+        paintAssignStudents();
+      }
+    }
     state.classes.forEach((item) => {
       studentsForClass(item.id).then((students) => {
         const card = [...host.querySelectorAll(".hw-class-card")].find((el) => el.querySelector(`[data-class][value="${item.id}"]`));

@@ -3,6 +3,7 @@ import { getFirestore, collection, doc, documentId, getDoc, getDocs, query, wher
 import { renderCollab } from "./platform-collab.js";
 import { checkIcon, shapeIcon } from "./collab-icons.js";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
+import { openWorkspace, peekClass, peekReturn, teachLabActive } from "./teacher-context.js?v=20261106-teacher";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -61,6 +62,44 @@ function rememberNoteKeys(uid, keys) {
 
 let stopNotifications = () => {};
 
+function groupTeacherBookings(rows) {
+  const used = new Set();
+  const grouped = [];
+  rows.forEach((row, index) => {
+    if (used.has(index)) return;
+    if (row.kind === "booking" && row.classId && row.title === "新しい予約") {
+      const mates = [];
+      rows.forEach((other, otherIndex) => {
+        const close = Math.abs((other.time || 0) - (row.time || 0)) < 3 * 60 * 60 * 1000;
+        if (other.kind === "booking" && other.classId === row.classId && other.title === "新しい予約" && close) {
+          mates.push(other);
+          used.add(otherIndex);
+        }
+      });
+      if (mates.length > 1) {
+        grouped.push({
+          ...row,
+          key: `grp-${row.classId}-${row.time}`,
+          title: "予約が入りました",
+          body: `${mates.length}人`,
+          unread: mates.some((item) => item.unread),
+          inboxId: mates.map((item) => item.inboxId).filter(Boolean).join(","),
+        });
+        return;
+      }
+    }
+    used.add(index);
+    grouped.push(row);
+  });
+  return grouped;
+}
+
+function teacherReturnBar() {
+  const id = peekReturn();
+  if (!id) return "";
+  return `<div class="td-return"><span>クラスの画面に戻れます。</span><button type="button" data-return-class="${id}">クラスに戻る</button></div>`;
+}
+
 export function watchNotifications(uid, role) {
   stopNotifications();
   const bell = document.getElementById("hub-bell");
@@ -68,11 +107,12 @@ export function watchNotifications(uid, role) {
   const badge = document.getElementById("hub-bell-count");
   if (!bell || !panel || !badge) return;
   const family = role === "parent" || role === "student" || role === "user" || !role;
-  bell.hidden = !family;
+  const staff = role === "admin" || role === "owner";
+  bell.hidden = !(family || staff);
   panel.hidden = true;
   panel.classList.remove("is-open");
   badge.hidden = true;
-  if (!family || !uid) return;
+  if ((!family && !staff) || !uid) return;
 
   const BELL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>';
   const NOTE_ICONS = {
@@ -129,7 +169,10 @@ export function watchNotifications(uid, role) {
       unread: data.read !== true,
       assignmentId: data.assignmentId || "",
       reportId: data.reportId || "",
-      action: kind === "homework" || kind === "report" ? "my-homework" : kind === "booking" ? "book" : "inbox",
+      classId: data.classId || "",
+      action: staff && data.classId
+        ? "class-workspace"
+        : kind === "homework" || kind === "report" ? "my-homework" : kind === "booking" ? "book" : "inbox",
     };
   };
   listen("inbox", collection(db, "inbox", uid, "items"), inboxRow);
@@ -147,7 +190,7 @@ export function watchNotifications(uid, role) {
       action: role === "parent" ? "inbox" : "my-homework",
     };
   };
-  if (role !== "parent") {
+  if (role !== "parent" && !staff) {
     listen("homework", collection(db, "studentHomework", uid, "items"), homeworkRow);
     listen("reports", query(collection(db, "classReports"), where("attendeeIds", "array-contains", uid)), (item) => {
       const data = item.data();
@@ -186,7 +229,8 @@ export function watchNotifications(uid, role) {
         rest.push(row);
       });
     });
-    return [...inbox, ...rest].sort((a, b) => b.time - a.time).slice(0, 12);
+    const rows = [...inbox, ...rest].sort((a, b) => b.time - a.time);
+    return (staff ? groupTeacherBookings(rows) : rows).slice(0, 12);
   };
 
   const isUnread = (row, seen) => {
@@ -212,10 +256,10 @@ export function watchNotifications(uid, role) {
     if (!rows.length) return;
     rememberNoteKeys(uid, rows.map((row) => row.key));
     rows.forEach((row) => {
-      if (row.inboxId) {
+      String(row.inboxId || "").split(",").filter(Boolean).forEach((itemId) => {
         row.unread = false;
-        callFunction("markInboxRead", { itemId: row.inboxId }).catch(() => {});
-      }
+        callFunction("markInboxRead", { itemId }).catch(() => {});
+      });
     });
   };
 
@@ -239,6 +283,7 @@ export function watchNotifications(uid, role) {
             class="gc-bell-item tone-${meta.tone}${unread ? " is-new" : ""}"
             data-note-action="${escapeHtml(row.action)}"
             data-note-key="${escapeHtml(row.key)}"
+            data-note-class="${escapeHtml(row.classId || "")}"
             data-inbox-id="${escapeHtml(row.inboxId || "")}">
             <span class="gc-bell-item-ico" aria-hidden="true">${icon}</span>
             <span class="gc-bell-item-body">
@@ -254,8 +299,8 @@ export function watchNotifications(uid, role) {
       }).join("")
       : `<div class="gc-bell-empty">
           <span class="gc-bell-empty-ico" aria-hidden="true">${BELL_ICON}</span>
-          <strong>まだ おしらせはないよ！</strong>
-          <p>新しい しゅくだいや レポートが とどいたら ここに でるよ</p>
+          <strong>${staff ? "まだ通知はありません" : "まだ おしらせはないよ！"}</strong>
+          <p>${staff ? "予約やクラスの変更があると、ここに表示されます。" : "新しい しゅくだいや レポートが とどいたら ここに でるよ"}</p>
         </div>`;
 
     panel.innerHTML = `
@@ -310,6 +355,9 @@ export function watchNotifications(uid, role) {
     const key = button.dataset.noteKey || "";
     const inboxId = button.dataset.inboxId || "";
     const action = button.dataset.noteAction || "inbox";
+    if (button.dataset.noteClass) {
+      try { sessionStorage.setItem("gc-class-focus", button.dataset.noteClass); } catch { /* ignore */ }
+    }
     if (key || inboxId) {
       markRowsRead([{ key: key || `tmp-${inboxId}`, inboxId, unread: Boolean(inboxId) }]);
     }
@@ -402,6 +450,11 @@ function sessionSearch(item) {
 }
 
 async function renderAttendance(root, db, uid) {
+  if (teachLabActive()) {
+    root.innerHTML = `<div class="td-app"><section class="td-panel"><h2>出席</h2><p class="td-hint">プレビューでは保存しません。ログインした先生の画面では、予約した生徒の出席を記録できます。</p><button type="button" data-return-class>クラスに戻る</button></section></div>`;
+    root.querySelector("[data-return-class]").onclick = () => openWorkspace(peekClass());
+    return;
+  }
   const classSnap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", uid)));
   const sessions = classSnap.docs.map((item) => {
     const data = item.data();
@@ -416,12 +469,15 @@ async function renderAttendance(root, db, uid) {
   const todayKey = jstParts(new Date());
   const todayId = `${todayKey.year}-${todayKey.month}-${todayKey.day}`;
   const today = sessions.filter((item) => item.startsAt && `${jstParts(item.startsAt).year}-${jstParts(item.startsAt).month}-${jstParts(item.startsAt).day}` === todayId);
-  const initial = today.find((item) => !item.endsAt || item.endsAt.getTime() >= now) || today[0] || sessions[0] || null;
+  const focusClass = peekClass();
+  const focused = sessions.find((item) => item.id === focusClass);
+  const initial = focused || today.find((item) => !item.endsAt || item.endsAt.getTime() >= now) || today[0] || sessions[0] || null;
   let currentId = initial?.id || "";
   let savedKey = "";
   let loadToken = 0;
   let loading = false;
   root.innerHTML = `
+    ${teacherReturnBar()}
     <div class="gc-attend-page">
       <section class="gc-panel gc-attend-pick">
         <p class="gc-kicker">クラス</p>
@@ -502,6 +558,7 @@ async function renderAttendance(root, db, uid) {
     document.removeEventListener("click", onDocumentClick);
     root._confirmLeave = null;
   };
+  root.querySelector("[data-return-class]")?.addEventListener("click", () => openWorkspace(peekReturn() || peekClass()));
   const paintSummary = () => {
     const total = roster.querySelectorAll(".gc-attend").length;
     const present = roster.querySelectorAll(".gc-attend.is-present").length;
@@ -663,6 +720,11 @@ async function renderAttendance(root, db, uid) {
 }
 
 export async function renderReport(root, db, uid, reportOptions = {}) {
+  if (teachLabActive()) {
+    root.innerHTML = `<div class="td-app"><section class="td-panel"><h2>レポート</h2><p class="td-hint">プレビューでは送信しません。ログインした先生の画面では、選んだクラスのレポートを生徒と保護者に送れます。</p><button type="button" data-return-class>クラスに戻る</button></section></div>`;
+    root.querySelector("[data-return-class]").onclick = () => openWorkspace(peekClass());
+    return;
+  }
   const lab = Boolean(reportOptions.lab);
   let sessions = [];
   if (lab) {
@@ -688,7 +750,9 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
   const todayKey = jstParts(new Date());
   const todayId = `${todayKey.year}-${todayKey.month}-${todayKey.day}`;
   const today = sessions.filter((item) => item.startsAt && `${jstParts(item.startsAt).year}-${jstParts(item.startsAt).month}-${jstParts(item.startsAt).day}` === todayId);
-  const initial = today.find((item) => !item.endsAt || item.endsAt.getTime() >= now) || today[0] || sessions[0] || null;
+  const focusClass = reportOptions?.focusClassId || peekClass();
+  const focused = sessions.find((item) => item.id === focusClass);
+  const initial = focused || today.find((item) => !item.endsAt || item.endsAt.getTime() >= now) || today[0] || sessions[0] || null;
   let currentId = initial?.id || "";
   let savedKey = "";
   let lastReportKey = "";
@@ -696,6 +760,7 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
   let loadToken = 0;
   let sending = false;
   root.innerHTML = `
+    ${teacherReturnBar()}
     <div class="hw-switch-shell">
       <div class="gc-report-layout">
         <div class="gc-report">
@@ -816,6 +881,7 @@ export async function renderReport(root, db, uid, reportOptions = {}) {
     document.removeEventListener("click", onDocumentClick);
     root._confirmLeave = null;
   };
+  root.querySelector("[data-return-class]")?.addEventListener("click", () => openWorkspace(peekReturn() || peekClass()));
   const touch = () => {
     paintPreview();
     if (sending) return;

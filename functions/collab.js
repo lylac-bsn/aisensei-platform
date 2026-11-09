@@ -452,6 +452,12 @@ exports.startCollabRoom = onCall({ region: REGION }, async (request) => {
     await template.ref.set({ usageCount: FieldValue.increment(1) }, { merge: true });
   }
   if (!questions.length) throw new HttpsError("invalid-argument", "問題を1つ以上入れてください。");
+  let classId = clean(request.data?.classId, 128);
+  if (classId) {
+    const klass = await db().collection("classes").doc(classId).get();
+    const ownsClass = klass.exists && (klass.data().teacherId === user.uid || user.role === "owner");
+    if (!ownsClass) classId = "";
+  }
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const publicQuestions = questions.map((row) => publicQuestionRow(row));
   const answerKey = questions.map((row) => ({
@@ -474,6 +480,7 @@ exports.startCollabRoom = onCall({ region: REGION }, async (request) => {
     acceptingJoins: true,
     revealedAnswer: null,
     templateId: templateId || "",
+    classId: classId || "",
     pinExpiresAt: Date.now() + 6 * 60 * 60 * 1000,
     createdAt: FieldValue.serverTimestamp(),
   });
@@ -509,6 +516,7 @@ exports.saveCollabSession = onCall({ region: REGION }, async (request) => {
     roomId,
     hostId: user.uid,
     templateId: data.templateId || "",
+    classId: data.classId || "",
     title: data.title || "COllAB",
     questionCount: (data.questions || []).length,
     participantCount: ranking.length,

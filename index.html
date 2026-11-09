@@ -7,8 +7,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20261101-inbox-head">
-    <link rel="stylesheet" href="css/hub.css?v=20261101-inbox-head">
+    <link rel="stylesheet" href="css/style.css?v=20261106-teacher">
+    <link rel="stylesheet" href="css/hub.css?v=20261106-cal">
+    <script>
+        (function () {
+            try {
+                var url = new URL(location.href);
+                var secretKeys = ["password", "passwd", "pass", "pwd"];
+                if (!secretKeys.some(function (key) { return url.searchParams.has(key); })) return;
+                secretKeys.forEach(function (key) { url.searchParams.delete(key); });
+                url.searchParams.delete("email");
+                history.replaceState(null, "", url.pathname + url.search + url.hash);
+            } catch (error) { /* leave the page usable */ }
+        })();
+    </script>
+    <link rel="stylesheet" href="css/teacher.css?v=20261106-teacher6">
     <link rel="stylesheet" href="css/homework.css?v=20261102-speak-as">
     <link rel="stylesheet" href="css/collab.css?v=20261031-hw-voicefix">
     <link rel="icon" href="images/tab-logo.png" type="image/png">
@@ -84,7 +97,8 @@
                     <button type="button" class="gc-nav" data-hub-action="inbox" data-hub-label="受信箱"><span>受信箱</span></button>
                 </div>
                 <div id="hub-teacher" hidden>
-                    <button type="button" class="gc-nav" data-hub-action="publish-class" data-hub-label="クラス"><span>クラス</span></button>
+                    <button type="button" class="gc-nav" data-hub-action="publish-class" data-hub-label="マイカレンダー"><span>マイカレンダー</span></button>
+                    <button type="button" class="gc-nav-jump" data-hub-action="class-workspace" data-hub-label="クラス" tabindex="-1" aria-hidden="true"></button>
                     <button type="button" class="gc-nav" data-hub-action="attendance" data-hub-label="出席"><span>出席</span></button>
                     <button type="button" class="gc-nav" data-hub-action="assign-homework" data-hub-label="宿題とレポート"><span>宿題とレポート</span></button>
                     <button type="button" id="hub-ticket-settings" class="gc-nav gc-owner-only" data-hub-action="ticket-settings" data-hub-label="チケット" hidden><span>チケット</span></button>
@@ -138,7 +152,7 @@
 
     <div id="level-selection-overlay" class="level-selection-overlay" hidden></div>
 
-    <script type="module" src="js/app.js?v=20261102-speak-as"></script>
+    <script type="module" src="js/app.js?v=20261106-cal"></script>
 
     <div id="fixed-corner-logo">
         <img src="images/Growbuddy.png" alt="Growbuddy">
