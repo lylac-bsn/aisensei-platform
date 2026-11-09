@@ -12,6 +12,7 @@ import {
   sparkleIcon,
 } from "./collab-icons.js";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
+import { peekClass } from "./teacher-context.js?v=20261106-teacher";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -427,6 +428,8 @@ export async function renderCollab(root, { host, uid, role }) {
       classes = snap.docs.map((item) => ({ id: item.id, ...item.data() }))
         .sort((a, b) => String(b.startsAt?.toMillis?.() || 0) - String(a.startsAt?.toMillis?.() || 0))
         .slice(0, 40);
+      const focus = peekClass();
+      if (focus && classes.some((item) => item.id === focus)) await loadVocab(focus);
     } catch {
       classes = [];
     }
@@ -1101,7 +1104,7 @@ export async function renderCollab(root, { host, uid, role }) {
             <p>宿題やレポートで使った単語を見て、クイズに使えます。</p>
             <select id="cb-class">
               <option value="">クラスを選ぶ</option>
-              ${classes.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || "クラス")}</option>`).join("")}
+              ${classes.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === peekClass() ? " selected" : ""}>${escapeHtml(item.title || "クラス")}</option>`).join("")}
             </select>
             <div class="cb-vocab" id="cb-vocab">${vocab.map((phrase) => `
               <button type="button" class="cb-chip" data-en="${escapeHtml(phrase.en)}" data-ja="${escapeHtml(phrase.ja)}">${escapeHtml(phrase.en)} / ${escapeHtml(phrase.ja)}</button>
@@ -1324,10 +1327,12 @@ export async function renderCollab(root, { host, uid, role }) {
         .map((row) => (row.ok !== undefined ? row : pack(fromStored(row))))
         .map(withShuffledChoices);
       const ready = questions.filter((row) => row.prompt);
+      const focus = peekClass();
       const result = await callFunction("startCollabRoom", {
         templateId: item.id || "",
         title: item.title || editor?.meta?.title || "COllAB",
         questions: ready.length ? ready : undefined,
+        classId: classes.some((row) => row.id === focus) ? focus : "",
       });
       roomId = result.id;
       amHost = true;

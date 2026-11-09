@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta http-equiv="refresh" content="0;url=/collab/join.html">
   <script>
-    const params = location.search || "";
-    location.replace("/collab/join.html" + params.replace(/pin=/i, "code="));
+    const url = new URL(location.href);
+    ["password", "passwd", "pass", "pwd", "email"].forEach((key) => url.searchParams.delete(key));
+    const params = url.search.replace(/pin=/i, "code=");
+    location.replace("/collab/join.html" + params);
   </script>
   <title>COllAB</title>
 </head>

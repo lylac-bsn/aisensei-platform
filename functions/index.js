@@ -238,6 +238,7 @@ exports.deleteCostEntry = onCall(
   exports.setTicketPolicy = booking.setTicketPolicy;
   exports.grantMonthlyTicketsNow = booking.grantMonthlyTicketsNow;
   exports.grantMonthlyTickets = booking.grantMonthlyTickets;
+  exports.remindUpcomingClasses = booking.remindUpcomingClasses;
   exports.adjustStudentTickets = booking.adjustStudentTickets;
   exports.adjustAllTickets = booking.adjustAllTickets;
 }

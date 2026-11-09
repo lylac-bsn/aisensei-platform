@@ -4223,21 +4223,24 @@ dialog.gc-modal {
 .gc-day {
     position: relative;
     min-width: 0;
-    min-height: max(88px, calc(var(--bar-top, 1.42rem) + var(--lanes, 0) * var(--bar-pitch, 1.46rem) + 0.4rem));
+    height: 118px;
+    min-height: 118px;
+    max-height: 118px;
     padding: 0.35rem 0.28rem 0.35rem;
-    padding-top: calc(var(--bar-top, 1.42rem) + var(--lanes, 0) * var(--bar-pitch, 1.46rem));
-    border: 1px solid #E9E1D8;
-    border-radius: 12px;
+    padding-top: calc(1.35rem + var(--lanes, 0) * 1.35rem);
+    overflow: hidden;
+    border: 1px solid #EADFD7;
+    border-radius: 16px;
     background: #fff;
     cursor: pointer;
 }
 
 .gc-day.is-out { background: transparent; }
 .gc-day.is-out b { color: #b5aaa4; }
-.gc-day.is-today { border-color: #E64618; }
-.gc-day.is-selected { background: #FFF5EA; box-shadow: inset 0 0 0 2px #E64618; }
-.gc-day:focus-visible { outline: 2px solid #E64618; outline-offset: 2px; }
-.gc-cal.is-week .gc-day { min-height: 220px; }
+.gc-day.is-today { box-shadow: inset 0 0 0 2px #F04438; }
+.gc-day.is-today b { color: #F04438; }
+.gc-day.is-selected { background: #FFF0ED; }
+.gc-day:focus-visible { outline: 2px solid #F04438; outline-offset: 2px; }
 
 .gc-more {
     display: block;
@@ -4271,22 +4274,21 @@ dialog.gc-modal {
 .gc-event {
     box-sizing: border-box;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 0.02rem;
+    align-items: center;
+    gap: 0.2rem;
     width: 100%;
-    height: var(--bar-h, 2.05rem);
-    margin-top: var(--bar-row-gap, 0.18rem);
-    padding: 0.08rem 0.35rem;
+    height: 1.25rem;
+    margin-top: 0.16rem;
+    padding: 0 0.35rem;
     overflow: hidden;
     border: none;
     border-radius: 8px;
-    background: #FFF5EA;
-    color: #352521;
+    background: #FFF0ED;
+    color: #3B302D;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 800;
-    line-height: 1.15;
+    line-height: 1.2;
     text-align: left;
     cursor: pointer;
 }
@@ -4328,19 +4330,18 @@ dialog.gc-modal {
 .gc-bar {
     box-sizing: border-box;
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 0.02rem;
+    align-items: center;
+    gap: 0.2rem;
     align-self: start;
     min-width: 0;
-    height: var(--bar-h, 2.05rem);
+    height: 1.25rem;
     margin-inline: 2px;
     padding: 0.08rem 0.4rem;
     overflow: hidden;
     border: none;
     border-radius: 8px;
-    background: #FFF5EA;
-    color: #352521;
+    background: #F4E9DF;
+    color: #3B302D;
     font: inherit;
     font-size: 0.72rem;
     font-weight: 800;
@@ -4350,7 +4351,115 @@ dialog.gc-modal {
     pointer-events: auto;
 }
 
-.gc-bar:hover { background: #F6E2D2; }
+.gc-bar:hover { background: #FFDCD5; }
+
+.gc-teacher-filter select,
+.gc-hint {
+    color: #8A7871;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.gc-teacher-filter select {
+    height: 40px;
+    padding: 0 0.7rem;
+    border: 1px solid #EADFD7;
+    border-radius: 999px;
+    background: #fff;
+    color: #3B302D;
+}
+
+.gc-timeweek-head,
+.gc-timeweek-body {
+    display: grid;
+    grid-template-columns: 52px repeat(7, minmax(0, 1fr));
+}
+
+.gc-timeweek-body {
+    max-height: min(640px, calc(100dvh - 280px));
+    overflow: auto;
+}
+
+.gc-timeweek-day,
+.gc-timeweek-hours span {
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: #3B302D;
+    font: inherit;
+    font-weight: 800;
+}
+
+.gc-timeweek-day.is-today,
+.gc-timeweek-day.is-selected { color: #F04438; }
+
+.gc-timeweek-hours span { height: 48px; color: #8A7871; font-size: 0.75rem; font-weight: 700; }
+
+.gc-timeweek-col {
+    position: relative;
+    height: calc(48px * 13);
+    border-left: 1px solid #EADFD7;
+    background: linear-gradient(to bottom, transparent 0, transparent 47px, #EADFD7 47px);
+    background-size: 100% 48px;
+}
+
+.gc-timeweek-col.is-today { background-color: #FFF9F4; }
+
+.gc-time-event {
+    position: absolute;
+    overflow: hidden;
+    padding: 0.2rem 0.35rem;
+    border: 0;
+    border-radius: 10px;
+    background: #FFF0ED;
+    color: #3B302D;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.gc-time-event strong,
+.gc-time-event small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gc-time-event small { color: #8A7871; font-size: 0.72rem; }
+
+.gc-mobile-agenda { display: none; }
+
+.gc-mobile-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-bottom: 0.8rem;
+}
+
+.gc-strip-day {
+    display: grid;
+    justify-items: center;
+    min-height: 64px;
+    padding: 0.35rem 0;
+    border: 0;
+    border-radius: 16px;
+    background: #fff;
+    color: #3B302D;
+    font: inherit;
+    cursor: pointer;
+}
+
+.gc-strip-day.is-on { background: #F04438; color: #fff; }
+.gc-strip-day i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #F04438;
+}
+.gc-strip-day.is-on i { background: #fff; }
+
+.gc-mobile-list { display: grid; gap: 0.55rem; }
 
 .gc-bar.is-continued {
     margin-left: 0;
@@ -4397,6 +4506,23 @@ dialog.gc-modal {
 }
 
 .gc-day-sheet.is-open .gc-day-panel { transform: translateX(0); }
+
+@media (max-width: 860px) {
+    .gc-cal,
+    .gc-cal-head,
+    .gc-timeweek { display: none; }
+    .gc-mobile-agenda { display: block; }
+    .gc-day-panel {
+        top: auto;
+        right: 0;
+        left: 0;
+        width: 100%;
+        height: min(78vh, 640px);
+        border-radius: 24px 24px 0 0;
+        transform: translateY(100%);
+    }
+    .gc-day-sheet.is-open .gc-day-panel { transform: translateY(0); }
+}
 
 header.gc-day-head {
     display: flex;

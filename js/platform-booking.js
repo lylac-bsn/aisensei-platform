@@ -47,6 +47,11 @@ export async function renderPlatformPanel(root, action, role) {
       await renderTicketDesk(root, db);
       return;
     }
+    if (action === "publish-class" && role === "admin") {
+      const { renderTeacherCalendar } = await import("./teacher-calendar.js?v=20261106-teacher5");
+      await renderTeacherCalendar(root);
+      return;
+    }
     if (action === "publish-class") {
       let teacherField = "";
       if (role === "owner") {
@@ -73,6 +78,7 @@ export async function renderPlatformPanel(root, action, role) {
               </label>
               <div id="class-find-results" class="gc-find-results" hidden></div>
             </div>
+            ${role === "owner" ? `<label class="gc-teacher-filter"><span class="visually-hidden">先生</span><select id="class-teacher-filter"><option value="">すべての先生</option></select></label>` : ""}
             <button type="button" class="gc-primary gc-add-class" id="open-class-form">＋ クラスを追加</button>
           </div>
         </div>
@@ -104,6 +110,7 @@ export async function renderPlatformPanel(root, action, role) {
               <option value="monthly">毎月</option>
             </select></label>
             <label id="class-count-label" hidden>回数 <input id="class-count" type="number" min="2" max="12" value="4"></label>
+            <p class="gc-hint gc-span-2" id="class-repeat-hint" hidden>繰り返しは、この1回と同じ時間で回数ぶん作ります。終了日はシリーズの最終日ではなく、この1回の終わりです。</p>
             <div class="gc-span-2 gc-row">
               <button type="submit" class="gc-primary" id="class-publish">公開する</button>
               <button type="button" class="gc-secondary" id="close-class-form">閉じる</button>
@@ -113,13 +120,19 @@ export async function renderPlatformPanel(root, action, role) {
         </div>`;
       const repeatSelect = root.querySelector("#class-repeat");
       const countLabel = root.querySelector("#class-count-label");
-      const syncRepeat = () => { countLabel.hidden = repeatSelect.value === "none"; };
-      repeatSelect.onchange = syncRepeat;
-      syncRepeat();
+      const repeatHint = root.querySelector("#class-repeat-hint");
       const startDate = root.querySelector("#class-start-date");
       const endDate = root.querySelector("#class-end-date");
       const startTime = root.querySelector("#class-start-time");
       const endTime = root.querySelector("#class-end-time");
+      const syncRepeat = () => {
+        const repeating = repeatSelect.value !== "none";
+        countLabel.hidden = !repeating;
+        if (repeatHint) repeatHint.hidden = !repeating;
+        if (repeating && startDate.value) endDate.value = startDate.value;
+      };
+      repeatSelect.onchange = syncRepeat;
+      syncRepeat();
       startDate.addEventListener("change", () => {
         if (startDate.value) endDate.value = startDate.value;
       });
@@ -726,6 +739,52 @@ function clockLabel(date) {
   return `${hour}:${parts.minute}`;
 }
 
+function sessionEnd(startsAt, endsAt, repeat) {
+  if (!startsAt || !endsAt || !repeat || repeat === "none") return endsAt;
+  if (jstKey(endsAt) <= jstKey(startsAt)) return endsAt;
+  const endClock = clockLabel(endsAt);
+  const startClock = clockLabel(startsAt);
+  if (endClock > startClock) {
+    const ms = classTimestamp(jstKey(startsAt), endClock);
+    return Number.isFinite(ms) ? new Date(ms) : endsAt;
+  }
+  if (startClock === "00:00" && (endClock === "23:59" || endClock === "00:00")) {
+    const ms = classTimestamp(jstKey(startsAt), "23:59");
+    return Number.isFinite(ms) ? new Date(ms) : endsAt;
+  }
+  return new Date(startsAt.getTime() + 60 * 60 * 1000);
+}
+
+function meaningfulTeacher(name) {
+  const value = String(name || "").trim();
+  if (!value || /^(teacher|先生|先生未設定|未設定)$/i.test(value)) return "";
+  return value;
+}
+
+function gameLabel(game) {
+  if (game === "minecraft") return "Minecraft";
+  if (game === "roblox") return "Roblox";
+  return game || "";
+}
+
+function levelLabel(level) {
+  return { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" }[level] || level || "";
+}
+
+function classStatusLabel(item) {
+  if (item.status === "cancelled") return "中止";
+  if (item.status === "draft") return "下書き";
+  const now = Date.now();
+  if (item.endsAt && item.endsAt.getTime() < now) return "終了";
+  if (item.startsAt && item.startsAt.getTime() <= now) return "進行中";
+  return "予定";
+}
+
+function visibleClasses(list) {
+  const teacherId = list._teacherFilter || "";
+  return (list._classes || []).filter((item) => !teacherId || item.teacherId === teacherId);
+}
+
 function dayTimeLabel(item, key) {
   if (isAllDayClass(item)) return "終日";
   const startKey = jstKey(item.startsAt);
@@ -961,19 +1020,19 @@ function mountMonthPicker(title, list) {
   title.after(picker);
 }
 
-function teacherLabel(item) {
-  return String(item?.teacherName || "").trim() || "先生未設定";
-}
-
 function fillClassChip(button, headline, teacher) {
   const main = document.createElement("span");
   main.className = "gc-event-main";
   main.textContent = headline;
-  const who = document.createElement("span");
-  who.className = "gc-event-teacher";
-  who.textContent = teacher;
-  button.replaceChildren(main, who);
-  button.title = `${headline} · ${teacher}`;
+  button.replaceChildren(main);
+  const who = meaningfulTeacher(teacher);
+  if (who) {
+    const label = document.createElement("span");
+    label.className = "gc-event-teacher";
+    label.textContent = who;
+    button.appendChild(label);
+  }
+  button.title = who ? `${headline} · ${who}` : headline;
 }
 
 function eventChip(list, item, key) {
@@ -981,8 +1040,8 @@ function eventChip(list, item, key) {
   button.type = "button";
   button.className = "gc-event";
   const when = isAllDayClass(item) ? "終日" : clockLabel(item.startsAt);
-  const teacher = teacherLabel(item);
-  fillClassChip(button, `${when} ${item.title}`, teacher);
+  fillClassChip(button, `${when} ${item.title}`, "");
+  button.title = item.title;
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     list._selected = key;
@@ -1053,6 +1112,133 @@ function buildCalendarNav(list) {
   return { nav, cells };
 }
 
+function minutesOf(date) {
+  const parts = jstParts(date);
+  const hour = parts.hour === "24" ? 0 : Number(parts.hour);
+  return hour * 60 + Number(parts.minute);
+}
+
+function layoutDayEvents(events) {
+  const entries = events.map((item) => {
+    const start = isAllDayClass(item) ? 8 * 60 : minutesOf(item.startsAt);
+    const end = isAllDayClass(item) ? 9 * 60 : Math.max(start + 30, item.endsAt ? minutesOf(item.endsAt) : start + 60);
+    return { item, start, end, column: 0, columns: 1 };
+  }).sort((a, b) => a.start - b.start || String(a.item.title).localeCompare(String(b.item.title), "ja"));
+  const lanes = [];
+  entries.forEach((entry) => {
+    const lane = lanes.find((row) => row[row.length - 1].end <= entry.start);
+    if (lane) lane.push(entry);
+    else lanes.push([entry]);
+    entry.column = lanes.findIndex((row) => row.includes(entry));
+  });
+  entries.forEach((entry) => { entry.columns = lanes.length || 1; });
+  return entries;
+}
+
+function buildWeekTimeline(list, classes, todayKey) {
+  const cells = weekCells(list._anchor || todayKey);
+  const startHour = 8;
+  const endHour = 21;
+  const hourPx = 48;
+  const labels = ["日", "月", "火", "水", "木", "金", "土"];
+  const wrap = document.createElement("div");
+  wrap.className = "gc-timeweek";
+  const head = document.createElement("div");
+  head.className = "gc-timeweek-head";
+  head.appendChild(document.createElement("span"));
+  cells.forEach((cell) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gc-timeweek-day";
+    if (cell.key === todayKey) button.classList.add("is-today");
+    if (cell.key === (list._selected || "")) button.classList.add("is-selected");
+    button.textContent = `${labels[new Date(`${cell.key}T12:00:00+09:00`).getUTCDay()]} ${cell.shown}`;
+    button.onclick = () => {
+      list._selected = cell.key;
+      openDayPanel(list, cell.key);
+    };
+    head.appendChild(button);
+  });
+  const body = document.createElement("div");
+  body.className = "gc-timeweek-body";
+  const hours = document.createElement("div");
+  hours.className = "gc-timeweek-hours";
+  for (let hour = startHour; hour < endHour; hour += 1) {
+    const span = document.createElement("span");
+    span.textContent = `${hour}:00`;
+    hours.appendChild(span);
+  }
+  body.appendChild(hours);
+  cells.forEach((cell) => {
+    const column = document.createElement("div");
+    column.className = `gc-timeweek-col${cell.key === todayKey ? " is-today" : ""}`;
+    const timed = layoutDayEvents(classes.filter((item) => item.startsAt && jstKey(item.startsAt) === cell.key));
+    timed.forEach((entry) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "gc-time-event";
+      const startMin = Math.max(entry.start, startHour * 60);
+      const endMin = Math.min(Math.max(entry.end, startMin + 30), endHour * 60);
+      const top = ((startMin - startHour * 60) / 60) * hourPx;
+      const height = Math.max(28, ((endMin - startMin) / 60) * hourPx - 4);
+      const width = 100 / entry.columns;
+      button.style.top = `${top}px`;
+      button.style.height = `${height}px`;
+      button.style.left = `calc(${entry.column * width}% + 3px)`;
+      button.style.width = `calc(${width}% - 6px)`;
+      const when = isAllDayClass(entry.item) ? "終日" : clockLabel(entry.item.startsAt);
+      button.innerHTML = `<strong>${escapeHtml(entry.item.title)}</strong><small>${escapeHtml(when)}</small>`;
+      button.title = entry.item.title;
+      button.onclick = (event) => {
+        event.stopPropagation();
+        openClassDetail(list, entry.item, list._booked?.has(entry.item.id), list._canBook);
+      };
+      column.appendChild(button);
+    });
+    body.appendChild(column);
+  });
+  wrap.append(head, body);
+  return wrap;
+}
+
+function buildMobileAgenda(list, classes, todayKey) {
+  const anchor = list._selected || list._anchor || todayKey;
+  const cells = weekCells(anchor);
+  const labels = ["日", "月", "火", "水", "木", "金", "土"];
+  const wrap = document.createElement("div");
+  wrap.className = "gc-mobile-agenda";
+  const strip = document.createElement("div");
+  strip.className = "gc-mobile-strip";
+  cells.forEach((cell) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gc-strip-day";
+    if (cell.key === anchor) button.classList.add("is-on");
+    if (cell.key === todayKey) button.classList.add("is-today");
+    const count = classes.filter((item) => item.startsAt && coversDay(item, cell.key)).length;
+    button.innerHTML = `<small>${labels[new Date(`${cell.key}T12:00:00+09:00`).getUTCDay()]}</small><strong>${cell.shown}</strong>${count ? `<i>${count}</i>` : ""}`;
+    button.onclick = () => {
+      list._selected = cell.key;
+      list._anchor = cell.key;
+      drawClassCalendar(list);
+    };
+    strip.appendChild(button);
+  });
+  const cards = document.createElement("div");
+  cards.className = "gc-mobile-list";
+  const items = classes.filter((item) => coversDay(item, anchor)).sort((a, b) => (a.startsAt?.getTime?.() || 0) - (b.startsAt?.getTime?.() || 0));
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "gc-muted";
+    empty.textContent = "この日のクラスはありません。";
+    cards.appendChild(empty);
+  } else {
+    items.forEach((item) => cards.appendChild(classCard(list, item, anchor)));
+  }
+  wrap.append(strip, cards);
+  return wrap;
+}
+
 function drawClassCalendar(list) {
   const focus = sessionStorage.getItem("gc-focus-day");
   if (focus) {
@@ -1063,7 +1249,7 @@ function drawClassCalendar(list) {
     list._selected = focus;
     list._pendingDay = focus;
   }
-  const classes = list._classes || [];
+  const classes = visibleClasses(list);
   const booked = list._booked || new Set();
   const canBook = list._canBook;
   if (!list._anchor) list._anchor = list._selected || jstKey(new Date());
@@ -1115,12 +1301,14 @@ function drawClassCalendar(list) {
   const dialog = document.createElement("dialog");
   dialog.className = "gc-modal";
   dialog.id = "class-detail";
-  dialog.innerHTML = `<h2 id="class-detail-title"></h2><div id="class-detail-body" class="gc-detail"></div><div class="gc-row"><button type="button" class="gc-primary" id="class-detail-book" hidden>予約する</button><button type="button" class="gc-danger" id="class-detail-delete" hidden>削除する</button><button type="button" class="gc-secondary" id="class-detail-close">閉じる</button></div><p id="class-detail-status" class="gc-warn"></p>`;
+  dialog.innerHTML = `<h2 id="class-detail-title"></h2><div id="class-detail-body" class="gc-detail"></div><div class="gc-row"><button type="button" class="gc-primary" id="class-detail-book" hidden>予約する</button><button type="button" class="gc-secondary" id="class-detail-workspace" hidden>ワークスペース</button><button type="button" class="gc-danger" id="class-detail-delete" hidden>削除する</button><button type="button" class="gc-secondary" id="class-detail-close">閉じる</button></div><p id="class-detail-status" class="gc-warn"></p>`;
   dialog.querySelector("#class-detail-close").onclick = () => dialog.close();
   const navSlot = list.closest(".gc-classes")?.querySelector("#class-cal-nav-slot");
   if (navSlot) navSlot.replaceChildren(nav);
   else list.appendChild(nav);
-  list.append(head, grid, dialog);
+  const agenda = buildMobileAgenda(list, classes, todayKey);
+  if (view === "week") list.append(buildWeekTimeline(list, classes, todayKey), agenda, dialog);
+  else list.append(head, grid, agenda, dialog);
   if (!classes.length) {
     const empty = document.createElement("p");
     empty.className = "gc-muted";
@@ -1159,7 +1347,7 @@ function buildCalendarWeek(list, week, state) {
     const dayLanes = segments.reduce((max, seg) => (
       index >= seg.startCol && index <= seg.endCol ? Math.max(max, seg.event.lane + 1) : max
     ), 0);
-    if (dayLanes) day.style.setProperty("--lanes", String(dayLanes));
+    if (dayLanes) day.style.setProperty("--lanes", String(Math.min(dayLanes, 1)));
     if (!cell.inMonth) day.classList.add("is-out");
     if (cell.key === state.todayKey) day.classList.add("is-today");
     if (cell.key === state.selected) day.classList.add("is-selected");
@@ -1202,16 +1390,10 @@ function buildCalendarWeek(list, week, state) {
       button.className = "gc-bar";
       if (seg.event.startKey < weekStart) button.classList.add("is-continued");
       if (seg.event.endKey > weekEnd) button.classList.add("is-continues");
-      const teacher = teacherLabel(seg.event.item);
       const headline = seg.event.item.title;
-      button.title = `${headline} · ${teacher}`;
-      if (!seg.event.titled) {
-        fillClassChip(button, headline, teacher);
-        seg.event.titled = true;
-      } else {
-        button.classList.add("is-follow");
-        button.setAttribute("aria-label", `${headline} · ${teacher}`);
-      }
+      const when = isAllDayClass(seg.event.item) ? "終日" : clockLabel(seg.event.item.startsAt);
+      fillClassChip(button, `${when} ${headline}`, "");
+      button.title = headline;
       button.style.gridColumn = `${seg.startCol + 1} / ${seg.endCol + 2}`;
       button.style.gridRow = String(seg.event.lane + 1);
       button.addEventListener("click", (event) => {
@@ -1268,7 +1450,7 @@ function renderDayPanel(list, sheet) {
   const body = sheet.querySelector(".gc-day-body");
   body.replaceChildren();
   const queryText = (list.dataset.query || "").trim().toLowerCase();
-  const items = (list._classes || []).filter((item) => coversDay(item, key) && classMatchesQuery(item, queryText))
+  const items = visibleClasses(list).filter((item) => coversDay(item, key) && classMatchesQuery(item, queryText))
     .sort((a, b) => (a.startsAt?.getTime?.() || 0) - (b.startsAt?.getTime?.() || 0));
   if (!items.length) {
     const empty = document.createElement("p");
@@ -1277,25 +1459,34 @@ function renderDayPanel(list, sheet) {
     body.appendChild(empty);
     return;
   }
-  items.forEach((item) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "gc-day-row";
-    const time = document.createElement("span");
-    time.textContent = dayTimeLabel(item, key);
-    const copy = document.createElement("span");
-    copy.className = "gc-day-copy";
-    const title = document.createElement("span");
-    title.className = "gc-day-title";
-    title.textContent = item.title;
-    const teacher = document.createElement("span");
-    teacher.className = "gc-day-teacher";
-    teacher.textContent = teacherLabel(item);
-    copy.append(title, teacher);
-    row.append(time, copy);
-    row.addEventListener("click", () => openClassDetail(list, item, list._booked?.has(item.id), list._canBook));
-    body.appendChild(row);
-  });
+  items.forEach((item) => body.appendChild(classCard(list, item, key)));
+}
+
+function classCard(list, item, key) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "gc-day-row";
+  const time = document.createElement("span");
+  time.textContent = dayTimeLabel(item, key);
+  const copy = document.createElement("span");
+  copy.className = "gc-day-copy";
+  const title = document.createElement("span");
+  title.className = "gc-day-title";
+  title.textContent = item.title;
+  const meta = document.createElement("span");
+  meta.className = "gc-day-teacher";
+  const teacher = list._role === "owner" || list._role === "admin" ? meaningfulTeacher(item.teacherName) : "";
+  meta.textContent = [
+    [gameLabel(item.game), levelLabel(item.difficulty)].filter(Boolean).join(" · "),
+    teacher,
+    `${Number(item.bookedCount || 0)} / ${Number(item.capacity || 6)}`,
+    classStatusLabel(item),
+  ].filter(Boolean).join(" · ");
+  copy.append(title, meta);
+  row.title = item.title;
+  row.append(time, copy);
+  row.addEventListener("click", () => openClassDetail(list, item, list._booked?.has(item.id), list._canBook));
+  return row;
 }
 
 function canDeleteClass(list, item) {
@@ -1318,17 +1509,21 @@ function openClassDetail(list, item, alreadyBooked, canBook) {
   dialog.querySelector("#class-detail-title").textContent = item.title;
   const body = dialog.querySelector("#class-detail-body");
   body.replaceChildren();
+  const teacher = meaningfulTeacher(item.teacherName);
   [
-    ["先生", item.teacherName || "未設定"],
-    ["内容", `${item.game} · ${item.difficulty}`],
+    teacher ? ["先生", teacher] : null,
+    ["内容", `${gameLabel(item.game)} · ${levelLabel(item.difficulty)}`],
     ["日時", when],
+    ["予約", `${Number(item.bookedCount || 0)} / ${Number(item.capacity || 6)}`],
     ["席", `残り ${seats}`],
-  ].forEach(([label, value]) => {
+    ["状態", classStatusLabel(item)],
+  ].filter(Boolean).forEach(([label, value]) => {
     const row = document.createElement("p");
     row.textContent = `${label}：${value}`;
     body.appendChild(row);
   });
   const book = dialog.querySelector("#class-detail-book");
+  const workspace = dialog.querySelector("#class-detail-workspace");
   const remove = dialog.querySelector("#class-detail-delete");
   const status = dialog.querySelector("#class-detail-status");
   status.textContent = alreadyBooked ? "予約済み" : "";
@@ -1347,6 +1542,13 @@ function openClassDetail(list, item, alreadyBooked, canBook) {
       status.textContent = error.message;
       book.disabled = false;
     }
+  };
+  const staff = list._role === "admin" || list._role === "owner";
+  workspace.hidden = !staff;
+  workspace.onclick = () => {
+    dialog.close();
+    try { sessionStorage.setItem("gc-class-focus", item.id); } catch { /* ignore */ }
+    document.querySelector('[data-hub-action="class-workspace"]')?.click();
   };
   const allowDelete = canDeleteClass(list, item);
   remove.hidden = !allowDelete;
@@ -1463,7 +1665,9 @@ async function paintClasses(list, canBook) {
       game: data.game || "",
       difficulty: data.difficulty || "",
       startsAt: data.startsAt?.toDate?.() || null,
-      endsAt: data.endsAt?.toDate?.() || null,
+      endsAt: sessionEnd(data.startsAt?.toDate?.() || null, data.endsAt?.toDate?.() || null, data.seriesRepeat || "none"),
+      seriesRepeat: data.seriesRepeat || "none",
+      status: data.status || "open",
       capacity: data.capacity,
       bookedCount: data.bookedCount,
     };
@@ -1474,6 +1678,25 @@ async function paintClasses(list, canBook) {
     list._month = { year: Number(parts.year), month: Number(parts.month) };
   }
   list._classes = classes;
+  const filter = list.closest(".gc-classes")?.querySelector("#class-teacher-filter");
+  if (filter) {
+    const current = list._teacherFilter || "";
+    const names = new Map();
+    classes.forEach((item) => {
+      if (!item.teacherId || names.has(item.teacherId)) return;
+      names.set(item.teacherId, meaningfulTeacher(item.teacherName) || item.teacherName || "先生");
+    });
+    filter.replaceChildren(new Option("すべての先生", ""));
+    [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], "ja")).forEach(([id, name]) => {
+      filter.appendChild(new Option(name, id));
+    });
+    filter.value = names.has(current) ? current : "";
+    list._teacherFilter = filter.value;
+    filter.onchange = () => {
+      list._teacherFilter = filter.value;
+      drawClassCalendar(list);
+    };
+  }
   list._booked = booked;
   list._canBook = canBook;
   if (!list._uid) list._uid = getAuth().currentUser?.uid || "";

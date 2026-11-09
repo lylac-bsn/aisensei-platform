@@ -79,6 +79,11 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const root = document.getElementById("root");
+    const credentialUrl = new URL(location.href);
+    if (["password", "passwd", "pass", "pwd"].some((key) => credentialUrl.searchParams.has(key))) {
+      ["password", "passwd", "pass", "pwd", "email"].forEach((key) => credentialUrl.searchParams.delete(key));
+      history.replaceState(null, "", credentialUrl.pathname + credentialUrl.search + credentialUrl.hash);
+    }
     const params = new URLSearchParams(location.search);
     const preset = String(params.get("code") || params.get("pin") || "").replace(/\s+/g, "");
 

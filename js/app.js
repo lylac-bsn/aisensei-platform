@@ -4,9 +4,10 @@
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { renderPlatformPanel } from "./platform-booking.js?v=20261031-cal-teacher";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261102-speak-as";
-import { renderHome } from "./platform-home.js";
+import { renderPlatformPanel } from "./platform-booking.js?v=20261106-cal";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261106-teacher";
+import { renderHome } from "./platform-home.js?v=20261106-teacher";
+import { classIdFromHash, consumeOpenReport, rememberClass, teachLabActive } from "./teacher-context.js?v=20261106-teacher";
 import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
 const firebaseConfig = {
@@ -160,6 +161,12 @@ document.addEventListener("click", (event) => {
             pendingAction = '';
         }
         showHubMenu();
+        const linkedClass = classIdFromHash();
+        if (!pendingAction && linkedClass && (value === "admin" || value === "owner")) {
+            rememberClass(linkedClass);
+            try { sessionStorage.setItem("gc-hub-action", "class-workspace"); } catch { /* ignore */ }
+            queueMicrotask(() => document.querySelector('[data-hub-action="class-workspace"]')?.click());
+        }
         if (pendingAction) {
             try {
                 sessionStorage.setItem('gc-hub-action', pendingAction);
@@ -412,12 +419,16 @@ document.addEventListener("click", (event) => {
         await openHub();
     }
 
+    if (teachLabActive()) {
+        showHub('admin', 'プレビュー', 'lab');
+    }
+
     if (homeworkLab) openHomeworkLab().catch((error) => {
         const note = document.getElementById('login-error');
         if (note) note.textContent = error && error.message ? error.message : String(error);
     });
     onAuthStateChanged(auth, async (user) => {
-        if (homeworkLab) return;
+        if (homeworkLab || teachLabActive()) return;
         if (user) {
             const userRef = doc(db, "users", user.uid);
             const snap = await getDoc(userRef);
@@ -489,11 +500,30 @@ document.addEventListener("click", (event) => {
         });
         if (hubMenu) hubMenu.hidden = true;
         hubPanel.hidden = false;
+        if (action === 'class-workspace') {
+            if (hubPlaceholder) hubPlaceholder.hidden = true;
+            const panel = document.getElementById('hub-panel-platform');
+            if (panel) {
+                panel.hidden = false;
+                const { renderClassWorkspace } = await import('./platform-workspace.js?v=20261106-teacher5');
+                renderClassWorkspace(panel, currentHubRole).catch((error) => {
+                    panel.textContent = error.message;
+                });
+            }
+            return;
+        }
         if (action === 'family' || action === 'children' || action === 'inbox' || action === 'attendance' || action === 'assign-homework' || action === 'my-homework' || action === 'quiz') {
             if (hubPlaceholder) hubPlaceholder.hidden = true;
             const panel = document.getElementById('hub-panel-platform');
             if (panel) {
                 panel.hidden = false;
+                const reportClass = action === 'assign-homework' ? consumeOpenReport() : '';
+                if (reportClass) {
+                    renderReport(panel, db, auth.currentUser?.uid || "", { focusClassId: reportClass }).catch((error) => {
+                        panel.textContent = error.message;
+                    });
+                    return;
+                }
                 renderSchoolPanel(panel, action).catch((error) => {
                     panel.textContent = error.message;
                 });
