@@ -2029,7 +2029,7 @@ body.page-dashboard .user-dashboard {
     display: none !important;
 }
 
-/* Mission countdown (voice-tab mission card) */
+/* Mission countdown timer */
 .quest-banner-timer {
     font-size: var(--text-md, 0.95rem);
     font-weight: 800;
