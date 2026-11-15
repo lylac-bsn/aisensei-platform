@@ -1,174 +1,123 @@
-# 🧠 AI Sensei
+# AI Sensei / Learny
 
-## Overview
+A Firebase-powered educational platform helping Japanese children learn English through interactive homework and live classroom activities.
 
-**AI Sensei** is an innovative educational platform designed to help Japanese children learn English through interactive gaming experiences.  
-The platform features two AI tutors powered by different technologies:
+## Features
 
-- **Server 1:** Powered by OpenAI  
-- **Server 2:** Powered by Gemini AI  
+- **Role Hubs**: Dedicated dashboards for students, teachers, parents, and admins
+- **Class Booking with Tickets**: Parents purchase ticket packs; teachers schedule lessons
+- **Homework Packs (Learny Voice)**: Pre-generated TTS voice clips guide students through vocabulary, sentences, and quizzes
+- **Attendance & Reports**: Track student participation and progress over time
+- **Parent-Child Linking**: Parents monitor their children's homework and class activity
+- **Inbox & Push Notifications**: Keep families informed of upcoming lessons and updates
+- **COllAB Live Quizzes**: Real-time multiplayer classroom activities with physics-based interactions
+- **Admin & Cost Dashboard**: Monitor usage, costs, and platform health
 
-By combining real-time screen analysis with live AI conversations, AI Sensei creates an immersive environment where children can naturally learn English while playing games.
+## Live Platform
 
----
+[https://learnie.cc/](https://learnie.cc/)
 
-## 🎮 Key Features
+## Project Structure
 
-- Real-time screen analysis and interactive responses  
-- Live AI conversations (voice and text)  
-- Dual AI architecture: Gemini × OpenAI  
-- Game-integrated English learning experience  
-- Specially designed for Japanese learners  
+```
+├── functions/         # Cloud Functions (TTS, booking, COllAB, push, etc.)
+├── js/                # Client-side JavaScript modules
+├── audio/             # Pre-generated homework voice assets
+├── scripts/           # Maintenance and check scripts
+├── firebase.json      # Hosting, Firestore, Storage configuration
+├── firestore.rules    # Security rules for Firestore
+└── storage.rules      # Security rules for Cloud Storage
+```
 
----
+## Development
 
-## 🌐 Access
+### Prerequisites
 
-**Live Platform:**  
-👉 [https://learnie.cc/](https://learnie.cc/)
+- Node.js 18+
+- Firebase CLI (`npm install -g firebase-tools`)
+- Access to the `ai-sensei-8849b` Firebase project
 
-For platform access inquiries, please contact:  
-📩 **lylac.bsn@gmail.com**
+### Running Tests
 
----
+Cloud Functions tests:
 
-## 🖼 Screenshots
+```bash
+cd functions
+npm install
+npm test
+```
 
-### 💻 Server 1 (OpenAI)
-![AI Sensei Platform - Server 1](images/server1-screenshot.png)
+Check scripts (static analysis):
 
-### 🤖 Server 2 (Gemini)
-![AI Sensei Platform - Server 2](images/server2-screenshot.png)
+```bash
+node scripts/check-admin-student-sync.mjs
+# (and other scripts/check-*.mjs)
+```
 
----
+### Local Preview
 
-## 🔗 Integration Possibilities
+```bash
+firebase serve --only hosting
+```
 
-AI Sensei’s **real-time screen analysis** and **conversational AI** capabilities open up a wide range of integration opportunities across different domains.
+Then open [http://localhost:5000](http://localhost:5000).
 
-### 🎓 Educational Applications
-- **Programming Tutoring:** Step-by-step coding assistance within the user’s IDE/editor  
-- **Math Problem Solving:** Real-time help with equations and problem-solving  
-- **Language Learning:** Interactive conversation for any language  
-- **Science Experiments:** Guiding students through virtual lab simulations  
-- **Art & Design:** Providing instant feedback on digital art creation  
+### Deployment
 
-### 💼 Professional / Technical Applications
-- **Error Debugging:** “Look at my screen and help me fix this” — instant troubleshooting  
-- **Software Training:** Teaching employees how to use new software tools  
-- **Code Review:** Real-time feedback on code quality and improvements  
-- **Data Analysis:** Assistance with spreadsheets or database operations  
-- **System Administration:** Supporting configuration and troubleshooting tasks  
+Deploy hosting, functions, and rules:
 
-### 🎨 Creative / Productivity Applications
-- **Game Development:** Guidance on game design, level creation, or debugging  
-- **Content Creation:** Help with video editing, design, or writing workflows  
-- **Project Management:** Assistance with planning tools and workflows  
-- **Financial Analysis:** Support for trading platforms and financial modeling  
-- **Research Assistance:** Navigation of academic databases and tools  
+```bash
+firebase deploy --project ai-sensei-8849b
+```
 
-### ♿️ Accessibility / Support Applications
-- **Accessibility Training:** Teaching the use of assistive technologies  
-- **Remote Support:** Real-time IT helpdesk and troubleshooting  
-- **Onboarding:** New employee training for internal software systems  
-- **Customer Support:** Assisting users in navigating complex tools  
-- **Healthcare Training:** Supporting medical professionals in software use  
+Deploy only hosting:
 
----
+```bash
+firebase deploy --only hosting --project ai-sensei-8849b
+```
 
-## ⚙️ Technical Foundation
+Deploy only functions:
 
-With its **dual AI architecture (Gemini & OpenAI)**, AI Sensei delivers stable and flexible performance across diverse use cases.  
-Its real-time screen reading and live interaction capabilities make it highly adaptable for any scenario that benefits from **live, guided AI assistance**.
+```bash
+firebase deploy --only functions --project ai-sensei-8849b
+```
 
----
+## TTS Voice Generation
 
-*AI Sensei — Making English learning fun, engaging, and interactive through the power of gaming and AI.* 🎮✨
+Homework voice clips are generated via Cloud Functions using Chirp TTS / Gemini TTS (Vertex AI `generateContent`). The `synthesizeHomeworkVoice` function handles batch TTS requests from teachers when creating homework packs.
 
+To regenerate legacy clips with the latest TTS model:
 
-# 🧠 AI Sensei（日本語版）
+```bash
+node scripts/regen-homework-voice-gemini.mjs --dry-run
+node scripts/regen-homework-voice-gemini.mjs
+```
 
-## 概要
+## Contact
 
-**AI Sensei**は、インタラクティブなゲーム体験を通じて、日本の子どもたちが楽しく英語を学べるように設計された革新的な教育プラットフォームです。  
-このプラットフォームには、異なる技術で動作する2種類のAIチューターが搭載されています：
-
-- **サーバー1:** OpenAI 搭載  
-- **サーバー2:** Gemini AI 搭載  
-
-リアルタイムで画面を解析しながらAIと会話できるため、子どもたちはまるでAIと一緒に遊んでいるような感覚で英語を学ぶことができます。
-
----
-
-## 🎮 主な機能
-
-- リアルタイム画面解析とインタラクティブな応答  
-- 音声・テキストによるライブAI会話  
-- Gemini × OpenAI のデュアルAIアーキテクチャ  
-- ゲームと連動した英語学習体験  
-- 日本の子どもたちの学習スタイルに合わせた特別設計  
+For platform access inquiries: **lylac.bsn@gmail.com**
 
 ---
 
-## 🌐 アクセス
+# AI Sensei / Learny（日本語）
 
-**ライブ版プラットフォーム:**  
-👉 [https://learnie.cc/](https://learnie.cc/)
+日本の子どもたちがインタラクティブな宿題やライブ授業を通じて楽しく英語を学べる、Firebase ベースの教育プラットフォームです。
 
-プラットフォームのアクセスをご希望の方は、以下までご連絡ください：  
-📩 **lylac.bsn@gmail.com**
+## 主な機能
 
----
+- **ロールハブ**: 生徒・先生・保護者・管理者それぞれ専用のダッシュボード
+- **チケット制クラス予約**: 保護者がチケットパックを購入、先生がレッスンをスケジュール
+- **宿題パック（Learny 音声）**: 事前生成された TTS 音声で単語・文章・クイズを学習
+- **出席管理とレポート**: 生徒の参加状況と進捗を追跡
+- **保護者-子供リンク**: 保護者がお子さまの宿題やクラス活動を確認
+- **受信箱とプッシュ通知**: 予定レッスンや更新情報をお知らせ
+- **COllAB ライブクイズ**: 物理演算を活用したリアルタイムマルチプレイヤー教室アクティビティ
+- **管理・コストダッシュボード**: 利用状況、コスト、プラットフォームの状態を監視
 
-## 🖼 スクリーンショット
+## ライブ版
 
-### 💻 サーバー1（OpenAI版）
-![AI Sensei Platform - Server 1](images/server1-screenshot.png)
+[https://learnie.cc/](https://learnie.cc/)
 
-### 🤖 サーバー2（Gemini版）
-![AI Sensei Platform - Server 2](images/server2-screenshot.png)
+## お問い合わせ
 
----
-
-## 🔗 さまざまな分野への応用可能性
-
-AI Senseiの**リアルタイム画面解析**と**会話型AI**の技術は、教育だけでなく多様な分野への応用が可能です。
-
-### 🎓 教育分野
-- **プログラミング指導**：コードエディタを見ながらステップごとの指導  
-- **数学サポート**：方程式や問題のリアルタイム解説  
-- **語学学習**：あらゆる言語に対応した会話練習  
-- **科学実験支援**：バーチャルラボでの実験解説  
-- **アート・デザイン**：作品制作へのフィードバック  
-
-### 💼 プロフェッショナル／技術分野
-- **エラーデバッグ支援**：「このエラーの直し方を教えて」と言うだけで即アドバイス  
-- **ソフトウェア研修**：新しいツールの操作をリアルタイムで指導  
-- **コードレビュー**：品質チェックと改善提案を即時提示  
-- **データ分析**：スプレッドシート操作や分析をサポート  
-- **システム運用**：サーバー設定やトラブル対応を支援  
-
-### 🎨 クリエイティブ／生産性分野
-- **ゲーム開発支援**：レベル設計やデバッグをサポート  
-- **コンテンツ制作**：動画編集やライティングをAIが補助  
-- **プロジェクト管理**：効率的なワークフロー設計を支援  
-- **財務分析**：トレーディングやモデリングの支援  
-- **研究支援**：学術データやリサーチツールのナビゲート  
-
-### ♿️ アクセシビリティ・サポート分野
-- **支援技術のトレーニング**：ユーザーへの使い方指導  
-- **リモートサポート**：ITヘルプデスクや遠隔支援  
-- **オンボーディング**：新入社員への業務システム研修  
-- **カスタマーサポート**：複雑なアプリの操作ナビゲーション  
-- **医療研修**：専門家向け医療システムの操作支援  
-
----
-
-## ⚙️ 技術基盤
-
-GeminiとOpenAIの**デュアルAI構成**により、さまざまなユースケースで安定した性能を発揮。  
-さらにリアルタイム画面解析機能によって、どの分野でも「ライブで導くAIアシスタント」として活用することが可能です。
-
----
-
-*AI Sensei — ゲームとAIの力で、子どもたちの英語学習をもっと楽しく、もっとインタラクティブに。* 🎮✨
+**lylac.bsn@gmail.com**
