@@ -1,11 +1,12 @@
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { generateHomework } from "./homework-engine.js?v=20261031-hw-voicefix";
+import { generateHomework, gradeAnswer, toPublic } from "./homework-engine.js?v=20261113-lesson";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
-import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261102-speak-as";
+import { linesForQuestions, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261115-onebank";
+import { unlockHomeworkAudio } from "./homework-audio.js?v=20261116-qplay";
 import { homeworkClass, setHomeworkClass } from "./teacher-context.js?v=20261106-teacher";
 import { RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 
-const CACHE = "20261102-speak-as";
+const CACHE = "20261116-qplay";
 const RESUME_KEY = "gc-hw-resume";
 const HUB_ACTION_KEY = "gc-hub-action";
 const HISTORY_KIND = "gcHwHub";
@@ -282,6 +283,8 @@ export async function mountHomeworkHub(root, options) {
     teacherStatusFilter: "all",
     teacherLoading: false,
     teacherError: "",
+    mineScope: "published",
+    selectedIds: new Set(),
   };
 
   const hub = document.createElement("div");
@@ -396,7 +399,7 @@ export async function mountHomeworkHub(root, options) {
   function tabCounts() {
     const all = state.items.filter((item) => item.official || item.teacherId === options.uid || item.published);
     const official = state.items.filter((item) => item.official);
-    const mine = state.items.filter((item) => !item.official && item.teacherId === options.uid);
+    const mine = state.items.filter((item) => isMinePublished(item));
     return {
       all: all.length,
       official: official.length,
@@ -479,6 +482,9 @@ export async function mountHomeworkHub(root, options) {
           <button type="button" class="hw-lib-tab${state.tab === "sent" ? " is-current" : ""}" data-tab="sent" role="tab">送信済み <em>${counts.sent}</em></button>
           ${isOwner ? `<button type="button" class="hw-lib-tab${state.tab === "teachers" ? " is-current" : ""}" data-tab="teachers" role="tab">先生の宿題リスト <em>${counts.teachers}</em></button>` : ""}
         </div>
+        <div class="hw-mine-toolbar" id="hw-mine-toolbar" ${state.tab === "mine" ? "" : "hidden"}>
+          <button type="button" class="hw-lib-draft-btn${state.mineScope === "draft" ? " is-current" : ""}" id="hw-mine-drafts" aria-pressed="${state.mineScope === "draft" ? "true" : "false"}">下書き <em>${mineDraftCount()}</em></button>
+        </div>
         <div class="hw-sent-toolbar" id="hw-sent-toolbar" ${state.tab === "sent" ? "" : "hidden"}>
           <label class="hw-lib-filter">
             <span class="visually-hidden">クラス</span>
@@ -519,6 +525,14 @@ export async function mountHomeworkHub(root, options) {
             </select>
           </label>
           <p class="hw-sent-hint">先生が作った宿題・送信先クラス・進捗分析をまとめて確認できます。</p>
+        </div>
+        <div class="hw-select-toolbar" id="hw-select-toolbar" hidden>
+          <label class="hw-select-all">
+            <input type="checkbox" id="hw-select-all" aria-label="表示中の宿題をすべて選択">
+            <span>すべて選択</span>
+          </label>
+          <span class="hw-select-count" id="hw-select-count">未選択</span>
+          <button type="button" class="hw-select-delete" id="hw-select-delete" disabled>削除</button>
         </div>
         <div id="hw-lib-banner" class="hw-lib-banner" hidden></div>
         <div id="hw-lib-grid" class="hw-lib-grid${state.tab === "sent" || state.tab === "teachers" ? " is-sent" : ""}" aria-live="polite"></div>
@@ -603,6 +617,7 @@ export async function mountHomeworkHub(root, options) {
     hub.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.onclick = async () => {
         state.tab = btn.dataset.tab || "all";
+        state.selectedIds.clear();
         updateTabs();
         syncSentToolbar();
         if (state.tab === "sent") await refreshSent();
@@ -610,6 +625,19 @@ export async function mountHomeworkHub(root, options) {
         else paintLibraryGrid();
       };
     });
+    hub.querySelector("#hw-mine-drafts")?.addEventListener("click", () => {
+      state.mineScope = state.mineScope === "draft" ? "published" : "draft";
+      state.selectedIds.clear();
+      paintLibraryGrid();
+    });
+    hub.querySelector("#hw-select-all")?.addEventListener("change", () => {
+      const items = currentDeletableItems();
+      const input = hub.querySelector("#hw-select-all");
+      if (input?.checked) items.forEach((item) => state.selectedIds.add(item.id));
+      else items.forEach((item) => state.selectedIds.delete(item.id));
+      paintLibraryGrid();
+    });
+    hub.querySelector("#hw-select-delete")?.addEventListener("click", () => deleteSelected());
     const sentClass = hub.querySelector("#hw-sent-class");
     if (sentClass) {
       sentClass.value = state.sentClassFilter;
@@ -677,6 +705,31 @@ export async function mountHomeworkHub(root, options) {
       const em = tab.querySelector("em");
       if (em && counts[id] != null) em.textContent = String(counts[id]);
     });
+    syncMineToolbar();
+  }
+
+  function isMineDraft(item) {
+    return !item.official && item.teacherId === options.uid && item.published !== true;
+  }
+
+  function isMinePublished(item) {
+    return !item.official && item.teacherId === options.uid && item.published === true;
+  }
+
+  function mineDraftCount() {
+    return state.items.filter((item) => isMineDraft(item)).length;
+  }
+
+  function syncMineToolbar() {
+    const bar = hub.querySelector("#hw-mine-toolbar");
+    const btn = hub.querySelector("#hw-mine-drafts");
+    if (bar) bar.hidden = state.tab !== "mine";
+    if (!btn) return;
+    const on = state.mineScope === "draft";
+    btn.classList.toggle("is-current", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    const em = btn.querySelector("em");
+    if (em) em.textContent = String(mineDraftCount());
   }
 
   function skeletonHtml() {
@@ -837,6 +890,8 @@ export async function mountHomeworkHub(root, options) {
     let rows = state.items.filter((item) => {
       if (state.tab === "official" && !item.official) return false;
       if (state.tab === "mine" && (item.official || item.teacherId !== options.uid)) return false;
+      if (state.tab === "mine" && state.mineScope === "draft" && item.published === true) return false;
+      if (state.tab === "mine" && state.mineScope !== "draft" && item.published !== true) return false;
       if (state.tab === "all" && !item.official && item.teacherId !== options.uid && !item.published) return false;
       if (state.level !== "all" && item.level !== state.level) return false;
       if (state.type !== "all" && !(item.types || []).includes(state.type)) return false;
@@ -931,11 +986,12 @@ export async function mountHomeworkHub(root, options) {
         </div>`;
     }
     if (state.tab === "mine") {
+      const drafts = state.mineScope === "draft";
       return `
         <div class="hw-lib-empty-state">
           <div class="hw-lib-empty-art" aria-hidden="true">${THEME_ART.default.svg}</div>
-          <h3>まだ宿題がありません</h3>
-          <p>新しい宿題をつくると、ここに保存されます。</p>
+          <h3>${drafts ? "下書きはありません" : "公開した宿題はまだありません"}</h3>
+          <p>${drafts ? "作成中の宿題はここに入ります。" : "下書きは「下書き」に入ります。公開すると、ここに並びます。"}</p>
           <button type="button" class="hw-lib-create-btn" data-lib="create-empty">＋ 新しい宿題を作成</button>
         </div>`;
     }
@@ -976,8 +1032,10 @@ export async function mountHomeworkHub(root, options) {
   function sentCardHtml(item) {
     const classes = (item.classNames || []).join("・") || "クラス未設定";
     const sentOn = formatSentDate(item.createdAt || item.updatedAt);
+    const picked = state.selectedIds.has(item.id);
     return `
-      <article class="hw-sent-card" data-sent-open="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る">
+      <article class="hw-sent-card${picked ? " is-selected" : ""}" data-sent-open="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る">
+        ${selectBox(item)}
         <div class="hw-sent-card-top">
           <span class="hw-lib-badge is-level-${escapeHtml(item.level || "beginner")}">${escapeHtml(LEVEL_LABEL[item.level] || item.level || "Beginner")}</span>
           <small>${escapeHtml(sentOn ? `${sentOn} 配信` : "配信済み")}</small>
@@ -1003,8 +1061,10 @@ export async function mountHomeworkHub(root, options) {
     const statusLabelText = assigned ? "送信済み" : "作成のみ";
     const avg = assigned && item.avgPercent != null ? `${item.avgPercent}%` : "—";
     const openAttr = assigned ? ` data-sent-open="${escapeHtml(item.id)}"` : "";
+    const picked = state.selectedIds.has(item.id);
     return `
-      <article class="hw-sent-card hw-teacher-card"${openAttr}${assigned ? ` role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る"` : ""}>
+      <article class="hw-sent-card hw-teacher-card${picked ? " is-selected" : ""}"${openAttr}${assigned ? ` role="button" tabindex="0" aria-label="${escapeHtml(item.title)}の進捗を見る"` : ""}>
+        ${selectBox(item)}
         <div class="hw-sent-card-top">
           <span class="hw-lib-badge is-level-${escapeHtml(item.level || "beginner")}">${escapeHtml(LEVEL_LABEL[item.level] || item.level || "Beginner")}</span>
           <span class="hw-teacher-status${assigned ? " is-sent" : ""}">${escapeHtml(statusLabelText)}</span>
@@ -1058,6 +1118,8 @@ export async function mountHomeworkHub(root, options) {
     if (!grid) return;
     closeMenus();
     syncSentToolbar();
+    syncMineToolbar();
+    syncSelectToolbar();
     if (state.tab === "teachers") {
       const items = filteredTeacherItems();
       if (!items.length) {
@@ -1066,6 +1128,7 @@ export async function mountHomeworkHub(root, options) {
       }
       grid.innerHTML = items.map((item) => teacherCardHtml(item)).join("");
       bindSentOpenNodes(grid, "teachers");
+      bindSelection(grid);
       grid.querySelectorAll("[data-teacher-del]").forEach((btn) => {
         btn.onclick = (event) => {
           event.preventDefault();
@@ -1083,6 +1146,7 @@ export async function mountHomeworkHub(root, options) {
       }
       grid.innerHTML = items.map((item) => sentCardHtml(item)).join("");
       bindSentOpenNodes(grid, "sent");
+      bindSelection(grid);
       grid.querySelectorAll("[data-sent-del]").forEach((btn) => {
         btn.onclick = (event) => {
           event.preventDefault();
@@ -1114,6 +1178,102 @@ export async function mountHomeworkHub(root, options) {
     }
     grid.innerHTML = items.map((item) => cardHtml(item)).join("");
     bindCardActions(grid);
+    bindSelection(grid);
+  }
+
+  function canDeleteLibraryItem(item) {
+    return Boolean(item && !item.official && item.teacherId === options.uid);
+  }
+
+  function currentDeletableItems() {
+    if (state.tab === "sent") return filteredSentItems();
+    if (state.tab === "teachers") return filteredTeacherItems();
+    return filteredItems().filter((item) => canDeleteLibraryItem(item));
+  }
+
+  function selectBox(item) {
+    const picked = state.selectedIds.has(item.id);
+    return `<label class="hw-card-check"><input type="checkbox" data-select="${escapeHtml(item.id)}"${picked ? " checked" : ""} aria-label="${escapeHtml(item.title || "宿題")}を選択"></label>`;
+  }
+
+  function syncSelectToolbar() {
+    const bar = hub.querySelector("#hw-select-toolbar");
+    if (!bar) return;
+    const items = currentDeletableItems();
+    const visible = new Set(items.map((item) => item.id));
+    for (const id of [...state.selectedIds]) {
+      if (!visible.has(id)) state.selectedIds.delete(id);
+    }
+    const count = items.filter((item) => state.selectedIds.has(item.id)).length;
+    bar.hidden = items.length === 0;
+    const all = hub.querySelector("#hw-select-all");
+    const countEl = hub.querySelector("#hw-select-count");
+    const del = hub.querySelector("#hw-select-delete");
+    if (all) {
+      all.checked = items.length > 0 && count === items.length;
+      all.indeterminate = count > 0 && count < items.length;
+    }
+    if (countEl) countEl.textContent = count ? `${count}件選択` : "未選択";
+    if (del) del.disabled = count === 0;
+  }
+
+  function bindSelection(grid) {
+    grid.querySelectorAll(".hw-card-check").forEach((label) => {
+      label.onclick = (event) => event.stopPropagation();
+    });
+    grid.querySelectorAll("[data-select]").forEach((input) => {
+      input.onchange = () => {
+        const id = input.dataset.select;
+        if (!id) return;
+        if (input.checked) state.selectedIds.add(id);
+        else state.selectedIds.delete(id);
+        input.closest(".hw-lib-card, .hw-sent-card")?.classList.toggle("is-selected", input.checked);
+        syncSelectToolbar();
+      };
+    });
+  }
+
+  async function deleteSelected() {
+    const items = currentDeletableItems().filter((item) => state.selectedIds.has(item.id));
+    if (!items.length) return;
+    const assigned = items.filter((item) => item.status === "assigned").length;
+    const ok = await confirmAction({
+      title: `${items.length}件の宿題を削除しますか？`,
+      message: assigned
+        ? `選んだ${items.length}件を削除します。\n送信済み${assigned}件は、生徒側の宿題と進捗も消えます。\nこの操作は取り消せません。`
+        : `選んだ${items.length}件を削除します。この操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "やめる",
+      danger: true,
+    });
+    if (!ok) return;
+    let failed = 0;
+    for (const item of items) {
+      try {
+        await options.callFunction("deleteHomeworkPack", { id: item.id });
+        state.selectedIds.delete(item.id);
+      } catch (error) {
+        failed += 1;
+        console.warn("[homework-library] bulk delete", error);
+      }
+    }
+    const removed = items.length - failed;
+    if (state.tab === "sent") {
+      await refreshSent();
+      if (isOwner) await refreshTeacherHomework({ quiet: true });
+    } else if (state.tab === "teachers") {
+      await refreshTeacherHomework();
+      await refreshLibrary();
+      if (assigned) await refreshSent({ quiet: true });
+    } else {
+      await refreshLibrary();
+      if (isOwner) await refreshTeacherHomework({ quiet: true });
+      if (assigned) await refreshSent({ quiet: true });
+    }
+    setLibStatus(
+      failed ? `${removed}件削除しました。${failed}件は削除できませんでした。` : `${removed}件削除しました。`,
+      failed ? "" : "ok"
+    );
   }
 
   function statusLabel(status) {
@@ -1364,11 +1524,28 @@ export async function mountHomeworkHub(root, options) {
       handler(event);
     };
     grid.querySelectorAll("[data-open]").forEach((card) => {
-      card.onclick = () => openPreview(card.dataset.open);
+      card.onclick = (event) => {
+        if (event.target.closest(".hw-card-check, button, a")) return;
+        openPreview(card.dataset.open);
+      };
       card.onkeydown = (event) => {
+        if (event.target !== card) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           openPreview(card.dataset.open);
+        }
+      };
+    });
+    grid.querySelectorAll("[data-edit-card]").forEach((card) => {
+      card.onclick = (event) => {
+        if (event.target.closest(".hw-card-check, button, a")) return;
+        openEdit(card.dataset.editCard);
+      };
+      card.onkeydown = (event) => {
+        if (event.target !== card) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openEdit(card.dataset.editCard);
         }
       };
     });
@@ -1376,7 +1553,7 @@ export async function mountHomeworkHub(root, options) {
       btn.onclick = stopAnd(() => useItem(btn.dataset.use));
     });
     grid.querySelectorAll("[data-preview]").forEach((btn) => {
-      btn.onclick = stopAnd(() => openPreview(btn.dataset.preview));
+      btn.onclick = stopAnd(() => openStudentPreview(btn.dataset.preview));
     });
     grid.querySelectorAll("[data-edit]").forEach((btn) => {
       btn.onclick = stopAnd(() => openEdit(btn.dataset.edit));
@@ -1434,15 +1611,35 @@ export async function mountHomeworkHub(root, options) {
       ? `<span class="hw-lib-badge ${item.published ? "is-shared" : "is-private"}">${item.published ? "公開中" : "非公開"}</span>`
       : "";
     const typeCount = (item.types || []).length;
+    const draft = mine && item.published !== true;
+    const selectable = canDeleteLibraryItem(item);
+    const picked = selectable && state.selectedIds.has(item.id);
     const menuItems = mine ? `
       <button type="button" data-edit="${escapeHtml(item.id)}">編集</button>
       <button type="button" data-dup="${escapeHtml(item.id)}">複製</button>
       <button type="button" data-pub="${escapeHtml(item.id)}" data-on="${item.published ? "1" : "0"}">${item.published ? "非公開にする" : "公開する"}</button>
       <button type="button" class="is-danger" data-del="${escapeHtml(item.id)}">削除</button>`
       : `<button type="button" data-dup="${escapeHtml(item.id)}">マイライブラリに複製</button>`;
+    const moreMenu = `
+              <div class="hw-lib-more">
+                <button type="button" class="hw-lib-more-btn" data-more aria-label="その他の操作">⋯</button>
+                <div class="hw-lib-menu" hidden>${menuItems}</div>
+              </div>`;
+    const actions = draft
+      ? `<button type="button" class="hw-lib-use" data-edit="${escapeHtml(item.id)}">編集</button>
+            <div class="hw-lib-card-secondary">${moreMenu}</div>`
+      : `<button type="button" class="hw-lib-use" data-use="${escapeHtml(item.id)}">この宿題を使う →</button>
+            <div class="hw-lib-card-secondary">
+              <button type="button" class="hw-lib-preview-btn" data-preview="${escapeHtml(item.id)}">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                プレビュー
+              </button>
+              ${moreMenu}
+            </div>`;
 
     return `
-      <article class="hw-lib-card theme-${theme}" data-open="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="${escapeHtml(item.title)}をプレビュー">
+      <article class="hw-lib-card theme-${theme}${picked ? " is-selected" : ""}" ${draft ? `data-edit-card="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)}を編集"` : `data-open="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)}をプレビュー"`} role="button" tabindex="0">
+        ${selectable ? selectBox(item) : ""}
         <div class="hw-lib-card-art" aria-hidden="true">
           <span class="hw-lib-card-art-label">${escapeHtml(art.label)}</span>
           ${art.svg}
@@ -1457,17 +1654,7 @@ export async function mountHomeworkHub(root, options) {
             <span title="作成者">${ICONS.person}<em>${escapeHtml(item.creatorName || "先生")}</em></span>
           </div>
           <div class="hw-lib-card-actions">
-            <button type="button" class="hw-lib-use" data-use="${escapeHtml(item.id)}">この宿題を使う →</button>
-            <div class="hw-lib-card-secondary">
-              <button type="button" class="hw-lib-preview-btn" data-preview="${escapeHtml(item.id)}">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-                プレビュー
-              </button>
-              <div class="hw-lib-more">
-                <button type="button" class="hw-lib-more-btn" data-more aria-label="その他の操作">⋯</button>
-                <div class="hw-lib-menu" hidden>${menuItems}</div>
-              </div>
-            </div>
+            ${actions}
           </div>
         </div>
       </article>`;
@@ -1513,6 +1700,65 @@ export async function mountHomeworkHub(root, options) {
     if (pack.libraryReady) item.libraryReady = true;
     if (!item.questionCount) item.questionCount = item._questions.length;
     return item._questions;
+  }
+
+  async function openStudentPreview(id) {
+    unlockHomeworkAudio();
+    const item = state.items.find((row) => row.id === id);
+    if (!item) return;
+    const summary = hub.querySelector("#hw-lib-preview");
+    if (summary) {
+      summary.hidden = true;
+      summary.innerHTML = "";
+    }
+    setLibStatus("生徒画面を開いています…", "");
+    let questions = [];
+    try {
+      questions = await loadPreviewQuestions(item);
+    } catch (error) {
+      setLibStatus(friendlyLoadError(error) || "生徒画面を開けませんでした。");
+      return;
+    }
+    if (!questions.length) {
+      setLibStatus("この宿題の問題を読み込めませんでした。");
+      return;
+    }
+    let mountHomeworkPlayer;
+    try {
+      ({ mountHomeworkPlayer } = await import(`./homework-play.js?v=${CACHE}`));
+    } catch (error) {
+      console.error("[homework-library] player import failed", error);
+      setLibStatus("生徒画面を開けませんでした。");
+      return;
+    }
+    const byId = new Map(questions.map((question) => [question.id, question]));
+    let stage = root.querySelector("#hw-lib-play");
+    if (!stage) {
+      stage = document.createElement("div");
+      stage.id = "hw-lib-play";
+      stage.className = "hw-play-stage";
+      root.appendChild(stage);
+    }
+    hub.hidden = true;
+    stage.hidden = false;
+    setLibStatus("");
+    await mountHomeworkPlayer(stage, {
+      title: item.title || "宿題",
+      questions: questions.map((question) => toPublic(question)),
+      db: options.db,
+      generateVoice: false,
+      grade: async (questionId, payload) => {
+        const question = byId.get(questionId);
+        if (payload?.kind === "matching-done") return { correct: true, solution: "" };
+        if (payload?.kind === "pair") return gradeAnswer(question, payload);
+        return gradeAnswer(question, payload?.answer);
+      },
+      onClose: () => {
+        stage.hidden = true;
+        stage.replaceChildren();
+        hub.hidden = false;
+      },
+    });
   }
 
   async function openPreview(id) {

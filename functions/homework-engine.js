@@ -587,12 +587,12 @@ function preparePack(rawQuestions, options = {}) {
       return { ok: false, error: "問題の文が空です。" };
     }
     if (question.type === "multipleChoice") {
-      const choices = (question.choices || []).map((choice) => clip(choice, 40)).filter(Boolean).slice(0, 4);
+      const choices = (question.choices || []).map((choice) => clip(choice, 120)).filter(Boolean).slice(0, 4);
       if (choices.length < 2 || !choices.some((choice) => norm(choice) === norm(question.answer))) {
         return { ok: false, error: "4択の正解が選択肢にありません。" };
       }
       question.choices = choices;
-      question.answer = clip(question.answer, 40);
+      question.answer = clip(question.answer, 120);
     } else if (question.type === "matching") {
       const left = question.left || [];
       const right = question.right || [];
@@ -627,6 +627,205 @@ function preparePack(rawQuestions, options = {}) {
   };
 }
 
+const LESSON_EN_FALLBACK = ["Come here.", "Look at this.", "I like it.", "Help me.", "Stop.", "Go.", "Yes.", "No."];
+const LESSON_JA_FALLBACK = ["こっちにきて", "これをみて", "すきです", "たすけて", "とまって", "いって", "はい", "いいえ"];
+
+function lessonDistractors(answer, pools, random, need, accept) {
+  const seen = new Set([norm(answer)]);
+  const picked = [];
+  let usedFallback = false;
+  pools.forEach((pool, poolIndex) => {
+    if (picked.length >= need) return;
+    const fallback = poolIndex === pools.length - 1;
+    shuffle(pool, random).forEach((item) => {
+      if (picked.length >= need) return;
+      const text = clip(item, 120);
+      if (!text || (accept && !accept(text))) return;
+      const key = norm(text);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      picked.push(text);
+      if (fallback) usedFallback = true;
+    });
+  });
+  return { picked, usedFallback, short: picked.length < need };
+}
+
+function makeLessonChoice({ id, promptJa, promptEn, speak, lang, answer, distractors, vocabKey, review, random, lessonKind, lessonEn }) {
+  return {
+    id,
+    type: "multipleChoice",
+    promptJa,
+    promptEn: promptEn || "",
+    speak: { prompt: { text: speak, lang } },
+    choices: shuffle([answer, ...distractors], random),
+    answer,
+    display: answer,
+    vocabKey,
+    review: Boolean(review),
+    approved: false,
+    source: "lesson",
+    lessonKind,
+    lessonEn,
+  };
+}
+
+/**
+ * Build pack-v1 questions from lesson lines that already have Japanese meanings.
+ * English text is kept as given. Distractors that match the answer are dropped.
+ */
+function alignLessonRows(teacherLines, modelLines) {
+  const rows = (Array.isArray(modelLines) ? modelLines : []).filter((row) => row && typeof row === "object");
+  const used = new Set();
+  return teacherLines.map((en, index) => {
+    let found = rows.findIndex((row, rowIndex) => !used.has(rowIndex) && norm(row.en) === norm(en));
+    if (found < 0 && rows[index] && !used.has(index)) found = index;
+    if (found >= 0) used.add(found);
+    const row = found >= 0 ? rows[found] : {};
+    return {
+      en,
+      ja: row.ja,
+      distractorsEn: row.distractorsEn || row.distractors_en,
+      distractorsJa: row.distractorsJa || row.distractors_ja,
+    };
+  });
+}
+
+function lessonTranslationRows(teacherLines, modelLines) {
+  return alignLessonRows(teacherLines, modelLines).map((row) => ({
+    en: row.en,
+    ja: clip(row.ja, 40),
+  }));
+}
+
+function lessonRowsFromConfirmed(confirmed, modelLines) {
+  const lines = (Array.isArray(confirmed) ? confirmed : []).map((line) => ({
+    en: clip(line?.en, 120),
+    ja: clip(line?.ja, 40),
+  }));
+  const aligned = alignLessonRows(lines.map((line) => line.en), modelLines);
+  return lines.map((line, index) => ({
+    en: line.en,
+    ja: line.ja,
+    distractorsEn: aligned[index]?.distractorsEn,
+    distractorsJa: aligned[index]?.distractorsJa,
+  }));
+}
+
+function buildLessonQuestions(rawLines, options = {}) {
+  const random = makeRandom(options.seed || 1);
+  const warnings = [];
+  const seen = new Set();
+  const lines = [];
+  let droppedForCap = false;
+  (Array.isArray(rawLines) ? rawLines : []).forEach((raw) => {
+    const en = clip(raw?.en, 120);
+    const ja = clip(raw?.ja, 40);
+    if (!en || !hasLatin(en)) return;
+    if (lines.length >= 12) {
+      droppedForCap = true;
+      return;
+    }
+    if (!ja || !hasKana(ja)) {
+      warnings.push(`「${en}」の日本語を読めなかったので除きました。`);
+      return;
+    }
+    const key = norm(en);
+    if (seen.has(key)) {
+      warnings.push("同じ英語は除きました。");
+      return;
+    }
+    seen.add(key);
+    lines.push({
+      en,
+      ja,
+      distractorsEn: Array.isArray(raw?.distractorsEn) ? raw.distractorsEn : [],
+      distractorsJa: Array.isArray(raw?.distractorsJa) ? raw.distractorsJa : [],
+    });
+  });
+  if (droppedForCap) warnings.push("英語は12件まで使います。");
+  if (!lines.length) return { questions: [], vocab: [], warnings: [...new Set(warnings)], error: "英語の文を読み取れませんでした。" };
+
+  const pairs = lines.map((line) => ({ ja: line.ja, en: line.en }));
+  const questions = [];
+  lines.forEach((line, index) => {
+    const number = index + 1;
+    const othersEn = lines.filter((item) => norm(item.en) !== norm(line.en)).map((item) => item.en);
+    const othersJa = lines.filter((item) => norm(item.ja) !== norm(line.ja)).map((item) => item.ja);
+    const enPick = lessonDistractors(line.en, [othersEn, line.distractorsEn, LESSON_EN_FALLBACK], random, 3, hasLatin);
+    const jaPick = lessonDistractors(line.ja, [othersJa, line.distractorsJa, LESSON_JA_FALLBACK], random, 3, hasKana);
+    if (!enPick.short) {
+      const promptJa = clip(`${line.ja}は英語で？`, 80);
+      questions.push(makeLessonChoice({
+        id: `ls-ja-${number}`,
+        promptJa,
+        promptEn: "",
+        speak: promptJa,
+        lang: "ja",
+        answer: line.en,
+        distractors: enPick.picked,
+        vocabKey: norm(line.en),
+        review: enPick.usedFallback,
+        random,
+        lessonKind: "ja-to-en",
+        lessonEn: line.en,
+      }));
+    } else {
+      warnings.push(`「${line.en}」の英語の選択肢が足りません。`);
+    }
+    if (!jaPick.short) {
+      questions.push(makeLessonChoice({
+        id: `ls-en-${number}`,
+        promptJa: "えいごの いみは？",
+        promptEn: line.en,
+        speak: line.en,
+        lang: "en",
+        answer: line.ja,
+        distractors: jaPick.picked,
+        vocabKey: norm(line.en),
+        review: jaPick.usedFallback,
+        random,
+        lessonKind: "en-to-ja",
+        lessonEn: line.en,
+      }));
+    } else {
+      warnings.push(`「${line.en}」の日本語の選択肢が足りません。`);
+    }
+    const tokens = tokenize(line.en);
+    if (tokens.length >= 2 && tokens.length <= 10) {
+      const sentence = makeSentence(
+        { ja: line.ja, en: line.en, sentenceJa: line.ja, sentenceEn: line.en },
+        pairs,
+        "beginner",
+        "ja-to-en",
+        random,
+        `ls-sent-${number}`,
+        0,
+      );
+      if (sentence) {
+        sentence.source = "lesson";
+        sentence.lessonKind = "order";
+        sentence.lessonEn = line.en;
+        sentence.approved = false;
+        sentence.review = false;
+        questions.push(sentence);
+      }
+    }
+  });
+  if (!questions.length) return { questions: [], vocab: [], warnings: [...new Set(warnings)], error: "この英語では問題を作れません。" };
+  const vocab = lines.map((line) => {
+    const tokens = tokenize(line.en);
+    const phrase = tokens.length >= 2;
+    return {
+      ja: line.ja,
+      en: line.en,
+      sentenceJa: phrase ? line.ja : "",
+      sentenceEn: phrase ? line.en : "",
+    };
+  });
+  return { questions, vocab, warnings: [...new Set(warnings)], error: "" };
+}
+
 function questionsForEditor(questions) {
   return (Array.isArray(questions) ? questions : []).map((question) => {
     if (!question || question.type !== "sentence") return question;
@@ -649,4 +848,7 @@ module.exports = {
   preparePack,
   decodeAcceptSequences,
   questionsForEditor,
+  buildLessonQuestions,
+  lessonTranslationRows,
+  lessonRowsFromConfirmed,
 };

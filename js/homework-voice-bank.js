@@ -632,8 +632,8 @@ function samplesFromTtsClip(clip) {
   const samples = normalizePlayable(raw) || raw;
   if (!samples?.length) return null;
   if (!longEnough(samples, PLAYABLE_MIN_SAMPLES)) return null;
-  // Soft gate: reject only clearly bad long clips (TTS is already scripted).
-  if (samples.length / SAMPLE_RATE >= 0.8 && !speechLooksOk(samples)) return null;
+  // Scripted Chirp / Gemini clips are the teacher's pronunciation, including
+  // short words with padding. Dropping them here left the old clip playing.
   return samples;
 }
 
@@ -649,13 +649,11 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
   const items = uniqueLines(texts);
   const readingMap = compactReadings(items.map((item) => item.text), readings);
   throwIfAborted(signal);
-  if (force) {
-    await forgetHomeworkVoice(items.map((item) => item.text), { db });
-  } else {
-    await hydrateHomeworkVoice(items.map((item) => item.text), db);
-  }
+  if (!force) await hydrateHomeworkVoice(items.map((item) => item.text), db);
   throwIfAborted(signal);
-  const missing = items.filter((item) => !memory.has(item.key));
+  // A remake must not delete the current clip until a replacement is stored.
+  // Forgetting first left words on "Generate" whenever TTS failed.
+  const missing = force ? items : items.filter((item) => !memory.has(item.key));
   const cachedItems = items.filter((item) => memory.has(item.key));
   const cached = cachedItems.length;
   console.info("[homework voice] prepare", {
@@ -721,9 +719,15 @@ export async function prepareHomeworkVoice(texts, { onProgress, db, force = fals
     });
     const byText = new Map(clips.map((clip) => [speakableText(clip.text), clip]));
     for (const item of batch) {
-      const clip = byText.get(speakableText(item.text));
+      const clip = byText.get(speakableText(item.text))
+        || (batch.length === 1 && clips.length === 1 ? clips[0] : null);
       const samples = clip ? samplesFromTtsClip(clip) : null;
       if (!samples) {
+        console.warn("[homework voice] clip dropped", {
+          text: item.text,
+          returned: clips.map((row) => row?.text),
+          bytes: clip?.pcm ? clip.pcm.length : 0,
+        });
         failed.push(item.text);
       } else {
         const kept = remember(item.key, samples, { playable: true });

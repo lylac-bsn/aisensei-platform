@@ -51,9 +51,9 @@ function voiceLang(text) {
   return /[\u3040-\u30ff\u4e00-\u9fff]/.test(text) ? "ja-JP" : "en-US";
 }
 
-async function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && now < cachedTokenExp - 60_000) return cachedToken;
+let refreshInFlight = null;
+
+async function loadAccessToken() {
   if (!authClient) {
     const auth = new GoogleAuth({
       scopes: ["https://www.googleapis.com/auth/cloud-platform"],
@@ -63,11 +63,36 @@ async function getAccessToken() {
   const token = await authClient.getAccessToken();
   const value = typeof token === "string" ? token : token?.token;
   if (!value) throw new Error("tts auth failed");
+  const now = Date.now();
+  const expiry = Number(authClient.credentials?.expiry_date) || 0;
   cachedToken = value;
-  // Access tokens are typically ~1h; refresh a bit early.
-  cachedTokenExp = now + 50 * 60 * 1000;
+  // Follow the credential expiry. A fixed 50-minute cache was replaying a token
+  // Google had already rejected (401) for the rest of the warm instance.
+  cachedTokenExp = expiry > now + 30_000 ? expiry : now + 4 * 60 * 1000;
   return value;
 }
+
+async function getAccessToken({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && cachedToken && now < cachedTokenExp - 60_000) return cachedToken;
+  if (force) {
+    cachedToken = null;
+    cachedTokenExp = 0;
+    if (authClient?.credentials) {
+      authClient.credentials.access_token = null;
+      authClient.credentials.expiry_date = 0;
+    }
+    if (!refreshInFlight) {
+      refreshInFlight = loadAccessToken().finally(() => {
+        refreshInFlight = null;
+      });
+    }
+    return refreshInFlight;
+  }
+  return loadAccessToken();
+}
+
+exports.getAccessToken = getAccessToken;
 
 /** Strip RIFF/WAV container if present; return raw PCM16 LE bytes. */
 function pcmBytesFromAudio(base64) {
@@ -183,12 +208,21 @@ async function synthesizeGemini(spoken, token) {
   return { pcm: pcm.toString("base64"), engine: GEMINI_TTS_MODEL, ms };
 }
 
-async function synthesizeOne(displayText, spokenText, token) {
+async function synthesizeOne(displayText, spokenText) {
   const spoken = spokenText || displayText;
   const lang = spokenLang(displayText, spoken);
+  let token = await getAccessToken();
   try {
     return await synthesizeChirp(spoken, token, { lang });
   } catch (chirpError) {
+    if (chirpError?.status === 401) {
+      token = await getAccessToken({ force: true });
+      try {
+        return await synthesizeChirp(spoken, token, { lang });
+      } catch (retryError) {
+        chirpError = retryError;
+      }
+    }
     console.warn("[homework-tts] chirp failed → gemini", {
       text: displayText,
       speakAs: spoken !== displayText ? spoken : undefined,
@@ -196,7 +230,12 @@ async function synthesizeOne(displayText, spokenText, token) {
       status: chirpError?.status,
       message: chirpError?.message,
     });
-    return synthesizeGemini(spoken, token);
+    try {
+      return await synthesizeGemini(spoken, token);
+    } catch (geminiError) {
+      if (geminiError?.status !== 401) throw geminiError;
+      return synthesizeGemini(spoken, await getAccessToken({ force: true }));
+    }
   }
 }
 
@@ -248,7 +287,7 @@ exports.synthesizeHomeworkVoice = onCall(
       : {};
 
     const tokenStarted = Date.now();
-    const token = await getAccessToken();
+    await getAccessToken();
     const tokenMs = Date.now() - tokenStarted;
 
     const clips = [];
@@ -257,7 +296,7 @@ exports.synthesizeHomeworkVoice = onCall(
     await mapPool(texts, CONCURRENCY, async (text) => {
       const spoken = resolveSpoken(text, readings);
       try {
-        const result = await synthesizeOne(text, spoken, token);
+        const result = await synthesizeOne(text, spoken);
         const clip = { text, pcm: result.pcm, engine: result.engine };
         if (spoken !== text) clip.speakAs = spoken;
         clips.push(clip);

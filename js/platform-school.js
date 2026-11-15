@@ -4,6 +4,7 @@ import { renderCollab } from "./platform-collab.js";
 import { checkIcon, shapeIcon } from "./collab-icons.js";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
 import { openWorkspace, peekClass, peekReturn, teachLabActive } from "./teacher-context.js?v=20261106-teacher";
+import { unlockHomeworkAudio } from "./homework-audio.js?v=20261116-qplay";
 
 async function callFunction(name, data) {
   const user = getAuth().currentUser;
@@ -1942,6 +1943,7 @@ async function renderStudentLearning(root, db, uid) {
   };
 
   const startHomework = async (assignmentId, format, extras = {}) => {
+    unlockHomeworkAudio();
     if (!playHost || !home) return;
     showPlay();
     playHost.innerHTML = `<p class="gc-learn-loading">よみこみ中…</p>`;
@@ -1956,13 +1958,12 @@ async function renderStudentLearning(root, db, uid) {
           replay: Boolean(extras.replay),
         });
       } else {
-        await playHomework(playHost, assignmentId);
-        const back = document.createElement("button");
-        back.type = "button";
-        back.className = "gc-learn-back";
-        back.textContent = "もどる";
-        back.onclick = backToList;
-        playHost.prepend(back);
+        playHost.innerHTML = `
+          <div class="gc-learn-error" role="alert">
+            <p>この宿題は、いまのラーニーでは開けません。</p>
+            <button type="button" class="gc-learn-retry" id="learn-play-back">もどる</button>
+          </div>`;
+        playHost.querySelector("#learn-play-back")?.addEventListener("click", backToList);
       }
     } catch (error) {
       playHost.innerHTML = `
@@ -2431,7 +2432,7 @@ export async function renderSchoolPanel(root, action) {
     return;
   }
   if (action === "assign-homework") {
-    const { mountHomeworkHub } = await import("./homework-library.js?v=20261102-speak-as");
+    const { mountHomeworkHub } = await import("./homework-library.js?v=20261116-qplay");
     const me = await getDoc(doc(db, "users", uid));
     const role = me.data()?.role || "";
     const openHub = ({ landing = false } = {}) => {
@@ -3249,8 +3250,8 @@ function renderQuiz(root, { host, uid }) {
 
 async function playPackHomework(root, assignmentId, uid, extras = {}) {
   const [{ mountHomeworkPlayer }, { gradeAnswer }] = await Promise.all([
-    import("./homework-play.js?v=20261101-grade-fast"),
-    import("./homework-engine.js?v=20261031-hw-voicefix"),
+    import("./homework-play.js?v=20261116-qplay"),
+    import("./homework-engine.js?v=20261113-lesson"),
   ]);
   const db = getFirestore();
   root.innerHTML = `<p class="gc-muted">読み込んでいます…</p>`;
@@ -3317,47 +3318,3 @@ async function playPackHomework(root, assignmentId, uid, extras = {}) {
   });
 }
 
-async function playHomework(root, assignmentId) {
-  const db = getFirestore();
-  const snap = await getDoc(doc(db, "homeworkAssignments", assignmentId));
-  const activities = snap.data()?.activities || [];
-  const progress = await getDoc(doc(db, "homeworkProgress", `${assignmentId}_${getAuth().currentUser.uid}`));
-  const done = new Set(progress.data()?.doneIds || []);
-  const activity = activities.find((row) => !done.has(row.id));
-  root.innerHTML = "";
-  if (!activity) {
-    root.textContent = "おわったよ";
-    return;
-  }
-  const title = document.createElement("h3");
-  title.textContent = activity.promptJa || "";
-  root.appendChild(title);
-  if (activity.speak && window.speechSynthesis) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "hub-quiet";
-    button.textContent = "きく";
-    button.onclick = () => {
-      const utterance = new SpeechSynthesisUtterance(String(activity.speak || ""));
-      utterance.lang = "en-US";
-      speechSynthesis.speak(utterance);
-    };
-    root.appendChild(button);
-  }
-  const choices = activity.choices || (activity.pairs || []).map((pair) => `${pair.en} = ${pair.ja}`);
-  choices.forEach((choice) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "hub-choice";
-    button.textContent = typeof choice === "string" ? choice : String(choice ?? "");
-    button.onclick = async () => {
-      const answer = activity.pairs ? activity.pairs : (activity.tokens ? activity.tokens : choice);
-      const result = await callFunction("submitHomework", { assignmentId, activityId: activity.id, answer });
-      const note = document.createElement("p");
-      note.textContent = result.correct ? "せいかい" : "もういちど";
-      root.appendChild(note);
-      if (result.correct) playHomework(root, assignmentId);
-    };
-    root.appendChild(button);
-  });
-}

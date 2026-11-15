@@ -249,7 +249,6 @@ exports.deleteCostEntry = onCall(
   exports.linkChild = school.linkChild;
   exports.setAttendance = school.setAttendance;
   exports.publishReport = school.publishReport;
-  exports.publishHomework = school.publishHomework;
   exports.saveHomeworkPack = school.saveHomeworkPack;
   exports.listHomeworkLibrary = school.listHomeworkLibrary;
   exports.listSentHomework = school.listSentHomework;
@@ -278,6 +277,11 @@ exports.deleteCostEntry = onCall(
 {
   const homeworkTts = require("./homework-tts");
   exports.synthesizeHomeworkVoice = homeworkTts.synthesizeHomeworkVoice;
+}
+
+{
+  const homeworkDraft = require("./homework-draft");
+  exports.draftLessonHomework = homeworkDraft.draftLessonHomework;
 }
 
 {

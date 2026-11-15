@@ -5,7 +5,9 @@ import {
   prepareHomeworkVoice,
   stopHomeworkVoice,
   unlockHomeworkAudio,
-} from "./homework-voice-bank.js?v=20261102-speak-as";
+} from "./homework-voice-bank.js?v=20261115-onebank";
+
+export { unlockHomeworkAudio };
 
 let active = null;
 let playToken = 0;

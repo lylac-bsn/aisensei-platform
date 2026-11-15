@@ -5,7 +5,7 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { renderPlatformPanel } from "./platform-booking.js?v=20261106-cal";
-import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261106-teacher";
+import { renderSchoolPanel, renderReport, stopNotificationWatch, watchNotifications } from "./platform-school.js?v=20261116-qplay";
 import { renderHome } from "./platform-home.js?v=20261106-teacher";
 import { classIdFromHash, consumeOpenReport, rememberClass, teachLabActive } from "./teacher-context.js?v=20261106-teacher";
 import { preloadHomeworkSfx, setSfxEnabled, sfxEnabled } from "./homework-sfx.js?v=20261031-hw-voicefix";
@@ -269,7 +269,7 @@ document.addEventListener("click", (event) => {
                 /* ignore */
             }
         };
-        const { mountHomeworkHub } = await import('./homework-library.js?v=20261102-speak-as');
+        const { mountHomeworkHub } = await import('./homework-library.js?v=20261116-qplay');
         const labCall = async (name, data) => {
             if (name === 'saveHomeworkPack') {
                 const id = data.id || `lab${packs.size + 1}`;
