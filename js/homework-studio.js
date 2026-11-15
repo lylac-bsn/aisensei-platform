@@ -1,27 +1,17 @@
 import { doc, getDoc, getDocs, query, collection, where } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 import {
-  parseVocabulary,
-  generateHomework,
   regenerateAt,
   updateSentence,
   updateQuestion,
   gradeAnswer,
   toPublic,
-} from "./homework-engine.js?v=20261031-hw-voicefix";
-import { mountHomeworkPlayer } from "./homework-play.js?v=20261101-grade-fast";
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-voice-quality";
-import { disconnectHomeworkVoiceSessions, forgetHomeworkVoice, hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261102-speak-as";
+} from "./homework-engine.js?v=20261113-lesson-english";
+import { mountHomeworkPlayer } from "./homework-play.js?v=20261116-qplay";
+import { playPrompt, stopPrompt, unlockHomeworkAudio } from "./homework-audio.js?v=20261116-qplay";
+import { disconnectHomeworkVoiceSessions, hasHomeworkVoice, hydrateHomeworkVoice, linesForQuestions, prepareHomeworkVoice, syncHomeworkVoiceRemote } from "./homework-voice-bank.js?v=20261115-onebank";
 import { cacheKey, RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 import { confirmAction } from "./ui-confirm.js?v=20261031-hw-voicefix";
-
-const SAMPLE = [
-  ["さかな", "Fish"],
-  ["ねこ", "Cat"],
-  ["いぬ", "Dog"],
-  ["りんご", "Apple"],
-  ["みず", "Water"],
-  ["ほん", "Book"],
-];
+import { clockLabel, jstKey, jstParts } from "./teacher-context.js?v=20261106-teacher";
 
 const TYPE_LABEL = {
   multipleChoice: "4択",
@@ -35,6 +25,149 @@ const RETRY_TAB_LABEL = "間違えた時の音声";
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+function hasLessonKana(value) {
+  return /[\u3040-\u30ff\u4e00-\u9fff]/.test(String(value || ""));
+}
+
+function confirmTranslations(rows) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "gc-modal gc-confirm hw-translate-dialog";
+  dialog.setAttribute("aria-labelledby", "hw-translate-title");
+  dialog.innerHTML = `
+    <form method="dialog" class="gc-confirm-card hw-translate-card">
+      <div class="gc-confirm-copy">
+        <h3 id="hw-translate-title">日本語を確認</h3>
+        <p class="hw-translate-lead">この意味で問題を作ります。ちがうところは直してください。</p>
+      </div>
+      <div class="hw-translate-list">
+        ${rows.map((row, index) => `
+          <label class="hw-translate-row">
+            <span class="hw-translate-en">${escapeHtml(row.en)}</span>
+            <input type="text" data-ja="${index}" value="${escapeHtml(row.ja || "")}" maxlength="40" autocomplete="off" spellcheck="false" aria-label="${escapeHtml(row.en)} の日本語" />
+          </label>`).join("")}
+      </div>
+      <p class="hw-translate-note" data-translate-note hidden>すべての行に日本語を入れてください。</p>
+      <div class="gc-confirm-actions">
+        <button type="submit" class="gc-confirm-cancel" value="cancel">やめる</button>
+        <button type="submit" class="gc-confirm-ok" value="ok">この意味で問題をつくる</button>
+      </div>
+    </form>`;
+  const ok = dialog.querySelector(".gc-confirm-ok");
+  const note = dialog.querySelector("[data-translate-note]");
+  const refresh = () => {
+    const ready = [...dialog.querySelectorAll("[data-ja]")].every((input) => hasLessonKana(input.value));
+    ok.disabled = !ready;
+    if (note) note.hidden = ready;
+  };
+  dialog.addEventListener("input", refresh);
+  let picked = null;
+  dialog.querySelector("form").addEventListener("submit", (event) => {
+    if (event.submitter?.value !== "ok") return;
+    picked = rows.map((row, index) => ({
+      en: row.en,
+      ja: dialog.querySelector(`[data-ja="${index}"]`)?.value.trim() || "",
+    }));
+  });
+  document.body.appendChild(dialog);
+  refresh();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (lines) => {
+      if (settled) return;
+      settled = true;
+      resolve(lines);
+      requestAnimationFrame(() => {
+        try { dialog.remove(); } catch { /* ignore */ }
+      });
+    };
+    dialog.addEventListener("close", () => {
+      finish(dialog.returnValue === "ok" ? picked : null);
+    }, { once: true });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      dialog.close("cancel");
+    });
+    try {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    } catch {
+      finish(null);
+    }
+    dialog.querySelector("[data-ja]")?.focus();
+  });
+}
+
+const WEEKDAY_JA = { Sun: "日", Mon: "月", Tue: "火", Wed: "水", Thu: "木", Fri: "金", Sat: "土" };
+
+function asClassDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value.toDate === "function") {
+    const date = value.toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+  }
+  if (typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value.seconds === "number") {
+    const date = new Date(value.seconds * 1000);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+function shiftJstKey(key, days) {
+  const ms = new Date(`${key}T12:00:00+09:00`).getTime() + days * 86400000;
+  return jstKey(new Date(ms));
+}
+
+function mondayKey(key) {
+  const parts = jstParts(new Date(`${key}T12:00:00+09:00`));
+  const index = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[parts.weekday] ?? 0;
+  const offset = index === 0 ? 6 : index - 1;
+  return shiftJstKey(key, -offset);
+}
+
+function mapAssignableClass(id, data = {}) {
+  return {
+    id,
+    title: data.title || "クラス",
+    teacherId: data.teacherId || "",
+    teacherName: data.teacherName || "",
+    startsAt: asClassDate(data.startsAt),
+    endsAt: asClassDate(data.endsAt),
+    status: data.status || "open",
+    bookedCount: Number(data.bookedCount || 0),
+  };
+}
+
+function labClassAt(uid, id, title, dayOffset, hour, teacherId = uid) {
+  const key = shiftJstKey(jstKey(new Date()), dayOffset);
+  const start = `${String(hour).padStart(2, "0")}:00`;
+  const endHour = String(hour + 1).padStart(2, "0");
+  return mapAssignableClass(id, {
+    title,
+    teacherId,
+    teacherName: teacherId === uid ? "プレビュー" : "ほかの先生",
+    startsAt: new Date(`${key}T${start}:00+09:00`),
+    endsAt: new Date(`${key}T${endHour}:00:00+09:00`),
+    status: "open",
+    bookedCount: dayOffset === 0 ? 3 : 0,
+  });
+}
+
+function labAssignableClasses(uid) {
+  return [
+    labClassAt(uid, "lab-past", "きのうのクラス", -1, 16),
+    labClassAt(uid, "lab-today", "きょうのマイクラ初級", 0, 16),
+    labClassAt(uid, "lab-soon", "金①マイクラ初級 (2/2)", 2, 16),
+    labClassAt(uid, "lab-animals", "Let's Learn About Animals! (1/4)", 5, 10),
+    labClassAt(uid, "lab-other", "水①ロブ英語初級 (4/4)", 5, 14, "other-teacher"),
+    labClassAt(uid, "lab-later", "マイクラ初級金1 (5/6)", 9, 18),
+  ];
 }
 
 export async function mountTeacherHomework(root, options) {
@@ -60,7 +193,11 @@ export async function mountTeacherHomework(root, options) {
     flowStep: "build", // build | assign | confirm
     buildPhase: "create", // create | phrases | audio (within build)
     classStudents: {},
+    classScope: "mine",
+    viewerRole: "",
   };
+  const pickedClassIds = new Set();
+  const countRequested = new Set();
   const voiceBusy = new Map();
   const audioReviewed = new Map();
   const heardLines = new Set();
@@ -84,12 +221,10 @@ export async function mountTeacherHomework(root, options) {
   const setSpeakAs = (line, value) => {
     const key = lineKey(line);
     const spoken = normalizeSpeakAs(value);
-    const display = String(line || "").trim();
-    if (!spoken || spoken === display || lineKey(spoken) === key) {
-      voiceReadings.delete(key);
-    } else {
-      voiceReadings.set(key, spoken);
-    }
+    // Keep what the teacher typed, including a reading that matches the word.
+    // Clearing it here made the 読み方 field go blank on every regenerate.
+    if (!spoken) voiceReadings.delete(key);
+    else voiceReadings.set(key, spoken);
   };
   /** Build { [displayText]: speakAs } for the given lines (omit empty). */
   const readingsPayload = (lines = []) => {
@@ -147,7 +282,7 @@ export async function mountTeacherHomework(root, options) {
       <div class="hw-page-head-row">
         ${options.openLibrary ? `<button type="button" class="hw-lib-back" data-hw="library" aria-label="ライブラリにもどる" title="ライブラリにもどる"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : ""}
         <div class="hw-page-head-copy">
-          <h2><span class="hw-page-head-ico" aria-hidden="true">${ICON.book}</span>単語から宿題をつくる</h2>
+          <h2><span class="hw-page-head-ico" aria-hidden="true">${ICON.book}</span>授業の英語からつくる</h2>
         </div>
         <div class="hw-page-head-actions">
           <button type="button" class="hw-quiet hw-ico-btn hw-head-draft" id="hw-draft" disabled title="マイライブラリに保存。生徒には送られず、他の先生にも公開されません">
@@ -199,80 +334,27 @@ export async function mountTeacherHomework(root, options) {
                 <option value="advanced">Advanced</option>
               </select>
             </label>
-              <label class="hw-field">問題数 <input id="hw-count" type="number" min="1" max="100" placeholder="おまかせ"></label>
             </div>
           </div>
         </section>
 
-        <section class="hw-section" aria-labelledby="hw-sec-words">
-          <div class="hw-section-head hw-section-head-row">
-            <div>
-              <h3 id="hw-sec-words"><span class="hw-sec-ico" aria-hidden="true">${ICON.tags}</span>単語リスト</h3>
-            </div>
-            <div class="hw-actions hw-actions-inline">
-              <button type="button" class="hw-quiet hw-ico-btn hw-ico-only" id="hw-paste" aria-label="貼り付け" title="貼り付け"><span class="hw-btn-ico" aria-hidden="true">${ICON.paste}</span><span class="hw-btn-label">貼り付け</span></button>
-              <button type="button" class="hw-quiet hw-ico-btn hw-ico-only" id="hw-sample" aria-label="例を入れる" title="例を入れる"><span class="hw-btn-ico" aria-hidden="true">${ICON.sparkle}</span><span class="hw-btn-label">例を入れる</span></button>
-            </div>
-          </div>
-          <div class="hw-words">
-            <div class="hw-word-head" aria-hidden="true"><span></span><span>日本語</span><span>英語</span><span></span></div>
-            <div id="hw-words"></div>
-            <button type="button" class="hw-quiet hw-add-word" id="hw-add-word">＋ 単語を追加</button>
-            <label class="hw-word-shuffle" for="hw-shuffle-words">
-              <input id="hw-shuffle-words" type="checkbox" checked>
-              <span>単語をランダムに使う</span>
-              <small>オフにすると、リストの上から順に問題をつくります。ドラッグで並べ替えできます。</small>
-            </label>
-          </div>
-        </section>
-
-        <section class="hw-section" aria-labelledby="hw-sec-types">
+        <section class="hw-section" aria-labelledby="hw-sec-lesson">
           <div class="hw-section-head">
-            <h3 id="hw-sec-types"><span class="hw-sec-ico" aria-hidden="true">${ICON.grid}</span>問題タイプ</h3>
+            <h3 id="hw-sec-lesson"><span class="hw-sec-ico" aria-hidden="true">${ICON.paste}</span>授業の英語</h3>
+            <p>英語の単語や文を1行ずつ入れてください。日本語と問題は下書きになります。</p>
           </div>
-          <div class="hw-type-grid" role="group" aria-label="問題タイプ">
-            <label class="hw-type-card is-mcq">
-              <input type="checkbox" data-type="multipleChoice" checked>
-              <span class="hw-type-icon" aria-hidden="true">${ICON.mcq}</span>
-              <span class="hw-type-copy"><strong>4択</strong></span>
-            </label>
-            <label class="hw-type-card is-match">
-              <input type="checkbox" data-type="matching" checked>
-              <span class="hw-type-icon" aria-hidden="true">${ICON.match}</span>
-              <span class="hw-type-copy"><strong>線つなぎ</strong></span>
-            </label>
-            <label class="hw-type-card is-spell">
-              <input type="checkbox" data-type="spelling" checked>
-              <span class="hw-type-icon" aria-hidden="true">${ICON.spell}</span>
-              <span class="hw-type-copy"><strong>スペリング</strong></span>
-            </label>
-            <label class="hw-type-card is-sentence">
-              <input type="checkbox" data-type="sentence" checked>
-              <span class="hw-type-icon" aria-hidden="true">${ICON.sentence}</span>
-              <span class="hw-type-copy"><strong>文づくり</strong></span>
-            </label>
+          <textarea id="hw-lesson-text" rows="8" placeholder="I need wood.&#10;Wait for me.&#10;Where are you?&#10;I found iron." aria-label="授業の英語"></textarea>
+          <p id="hw-lesson-status" class="hw-help" hidden role="status"></p>
+          <div class="hw-actions hw-actions-foot">
+            <button type="button" class="hw-primary hw-ico-btn" id="hw-lesson-apply"><span class="hw-btn-ico" aria-hidden="true">${ICON.sparkle}</span>問題をつくる</button>
           </div>
         </section>
 
         <section class="hw-section hw-options-section" aria-labelledby="hw-sec-options">
           <div class="hw-section-head">
-            <h3 id="hw-sec-options"><span class="hw-sec-ico" aria-hidden="true">${ICON.sliders}</span>オプション</h3>
+            <h3 id="hw-sec-options"><span class="hw-sec-ico" aria-hidden="true">${ICON.sliders}</span>公開</h3>
           </div>
           <div class="hw-option-grid">
-            <label class="hw-option-card" for="hw-hints">
-              <span class="hw-option-kicker">ヒント</span>
-              <span class="hw-option-row">
-                <input id="hw-hints" type="checkbox" checked>
-                <span class="hw-option-text">最初の1文字を見せる</span>
-            </span>
-            </label>
-            <label class="hw-option-card" for="hw-direction">
-              <span class="hw-option-kicker">文づくり</span>
-              <select id="hw-direction" class="hw-option-select">
-                <option value="ja-to-en">日 → 英</option>
-                <option value="en-to-ja">英 → 日</option>
-              </select>
-            </label>
             <label class="hw-option-card" for="hw-published">
               <span class="hw-option-kicker">公開</span>
               <span class="hw-option-row">
@@ -282,12 +364,6 @@ export async function mountTeacherHomework(root, options) {
             </label>
           </div>
         </section>
-
-        <div class="hw-composer-foot">
-          <div class="hw-actions hw-actions-foot">
-            <button type="button" class="hw-primary hw-ico-btn" id="hw-generate"><span class="hw-btn-ico" aria-hidden="true">${ICON.sparkle}</span>宿題をつくる</button>
-          </div>
-        </div>
       </form>
 
       <aside class="hw-sidepane" aria-label="つくった問題">
@@ -312,18 +388,18 @@ export async function mountTeacherHomework(root, options) {
                 <span class="hw-make-voice-label">文の確認完了</span>
                 <span class="hw-make-voice-help" hidden title="">${ICON.help}</span>
               </button>
-              <button type="button" class="hw-primary hw-ico-btn" id="hw-goto-assign" hidden><span class="hw-btn-ico" aria-hidden="true">${ICON.next}</span>次へ：クラスと期日</button>
+              <button type="button" class="hw-primary" id="hw-goto-assign" hidden>次へ</button>
             </div>
           </div>
         </div>
         <div id="hw-empty" class="hw-empty">
           <strong>まだ問題がありません</strong>
-          <p>左で単語を入れて「宿題をつくる」を押すと、ここにプレビューが出ます。</p>
+          <p>左の英語を入れて「問題をつくる」を押すと、ここに出ます。</p>
         </div>
         <div id="hw-review" class="hw-review" hidden>
           <div class="hw-word-bar" id="hw-word-bar" hidden>
-            <p class="hw-word-bar-label">単語</p>
-            <div id="hw-word-tabs" class="hw-word-tabs" role="tablist" aria-label="単語"></div>
+            <p class="hw-word-bar-label">種類</p>
+            <div id="hw-word-tabs" class="hw-word-tabs" role="tablist" aria-label="問題の種類"></div>
             <div class="hw-word-subfilters">
               <p class="hw-word-bar-label" id="hw-word-filter-label">フィルタ</p>
               <div class="hw-word-filter-row">
@@ -345,12 +421,23 @@ export async function mountTeacherHomework(root, options) {
       <div class="hw-flow-card hw-assign-card">
         <div class="hw-section-head">
           <h3><span class="hw-sec-ico" aria-hidden="true">${ICON.users}</span>③ クラスと期日</h3>
-          <p class="hw-section-hint">出すクラスと提出期日を選んでください</p>
+          <p class="hw-section-hint">今日以降のクラスと提出期日を選んでください</p>
         </div>
         <div class="hw-assign-grid">
           <div class="hw-assign-pane">
             <div class="hw-assign-pane-head">
               <h4>クラス</h4>
+              <p id="hw-class-scope-note">あなたの担当クラス · 今日以降</p>
+            </div>
+            <div class="hw-class-tools">
+              <label class="hw-class-search">
+                <span class="visually-hidden">クラスを検索</span>
+                <input id="hw-class-search" type="search" placeholder="クラス名や日付で検索" autocomplete="off" enterkeyhint="search">
+              </label>
+              <div class="hw-class-scope" id="hw-class-scope" hidden>
+                <button type="button" data-class-scope="mine" aria-pressed="true">自分のクラス</button>
+                <button type="button" data-class-scope="all" aria-pressed="false">すべてのクラス</button>
+              </div>
             </div>
             <div id="hw-classes" class="hw-classes"></div>
           </div>
@@ -374,7 +461,7 @@ export async function mountTeacherHomework(root, options) {
         <p id="hw-assign-status" class="hw-flow-status" hidden role="status" aria-live="polite"></p>
         <div class="hw-actions hw-actions-foot">
           <button type="button" class="hw-quiet hw-ico-btn" data-flow="back-build"><span class="hw-btn-ico" aria-hidden="true">${ICON.left}</span>戻る</button>
-          <button type="button" class="hw-primary hw-ico-btn" id="hw-goto-confirm"><span class="hw-btn-ico" aria-hidden="true">${ICON.next}</span>次へ：内容を確認して送信</button>
+          <button type="button" class="hw-primary" id="hw-goto-confirm">次へ</button>
         </div>
       </div>
     </section>
@@ -409,7 +496,7 @@ export async function mountTeacherHomework(root, options) {
           <p class="hw-drawer-block" id="hw-drawer-block" hidden></p>
           <div class="hw-drawer-foot-row">
             <div class="hw-drawer-foot-sec">
-              <button type="button" class="hw-drawer-skip" data-drawer="prev" id="hw-drawer-prev" aria-label="前の確認へ" title="前の確認へ">${ICON.left}</button>
+              <button type="button" class="hw-drawer-skip" data-drawer="prev" id="hw-drawer-prev" aria-label="前の問題へ" title="前の問題へ">${ICON.left}</button>
               <button type="button" class="hw-drawer-skip" data-drawer="next" id="hw-drawer-skip" aria-label="次の確認へ" title="次の確認へ">${ICON.right}</button>
             </div>
             <div class="hw-drawer-foot-main">
@@ -420,20 +507,9 @@ export async function mountTeacherHomework(root, options) {
         </footer>
       </div>
     </div>
-    <dialog class="hw-dialog" id="hw-paste-dialog">
-      <form method="dialog" class="hw-dialog-card" id="hw-paste-form">
-        <h3>単語リストを貼る</h3>
-        <p class="hw-help">1行に「日本語 - English」の形で貼ると、自動で分けて入ります。</p>
-        <textarea id="hw-paste-text" rows="10" placeholder="さかな - Fish&#10;ねこ - Cat&#10;いぬ - Dog"></textarea>
-        <div class="hw-actions hw-actions-foot">
-          <button type="submit" class="hw-quiet" value="cancel">キャンセル</button>
-          <button type="submit" class="hw-primary" value="apply" id="hw-paste-apply">入れる</button>
-        </div>
-      </form>
-    </dialog>`;
+    `;
 
   studio.querySelector("#hw-form").addEventListener("submit", (event) => event.preventDefault());
-  const wordsEl = studio.querySelector("#hw-words");
   const sideStatus = studio.querySelector("#hw-side-status");
   const reviewEl = studio.querySelector("#hw-review");
   const listEl = studio.querySelector("#hw-list");
@@ -590,7 +666,7 @@ export async function mountTeacherHomework(root, options) {
     };
     if (draft && question?.type === "sentence") {
       push(draft.promptJa);
-      push(draft.sentence);
+      pushSentencePieces(lines, question, draft.sentence);
       return [...new Set(lines)];
     }
     if (draft && question?.type === "multipleChoice") {
@@ -619,10 +695,40 @@ export async function mountTeacherHomework(root, options) {
     (question?.left || []).forEach((item) => push(item?.text));
     (question?.right || []).forEach((item) => push(item?.text));
     (question?.tiles || []).forEach(push);
-    push(question?.display);
-    if (Array.isArray(question?.answer)) push(question.answer.join(" "));
+    if (question?.type === "sentence") pushSentencePieces(lines, question, question?.display || "");
+    else if (Array.isArray(question?.answer)) push(question.answer.join(" "));
     else push(question?.answer);
+    push(question?.display);
     return [...new Set(lines)];
+  };
+  const sentenceTokens = (text) => String(text || "")
+    .trim()
+    .replace(/[.!?。！？]+$/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const pushSentencePieces = (bucket, question, sentenceText) => {
+    const sentence = String(sentenceText || "").trim();
+    const saved = String(
+      Array.isArray(question?.answer) ? question.answer.join(" ") : (question?.display || "")
+    ).trim();
+    const tokens = sentenceTokens(sentence || saved);
+    tokens.forEach((token) => bucket.push(token));
+    const sameSentence = !sentence || !saved || sentenceTokens(sentence).join(" ") === sentenceTokens(saved).join(" ");
+    if (sameSentence) {
+      (question?.tiles || []).forEach((tile) => {
+        const text = String(tile || "").trim();
+        if (text) bucket.push(text);
+      });
+    }
+    if (tokens.length > 1) bucket.push(tokens.join(" "));
+  };
+  const audioLineRole = (line, question, draft) => {
+    if (question?.type !== "sentence") return "";
+    const ja = String(draft?.promptJa ?? question?.promptJa ?? "").trim();
+    const sentence = sentenceTokens(draft?.sentence ?? question?.display ?? "").join(" ");
+    if (ja && line === ja) return "問題文";
+    if (sentence && line === sentence) return "文";
+    return "単語";
   };
   const voiceKeyFor = (question, draft) => speakLinesFor(question, draft).join("\n");
   const syncReviewedFromHeard = (question, draft) => {
@@ -660,166 +766,127 @@ export async function mountTeacherHomework(root, options) {
     }
     return -1;
   };
-  const prevPendingIndex = (from = 0) => {
-    for (let index = from - 1; index >= 0; index -= 1) {
-      if (needsConfirm(state.questions[index])) return index;
-    }
-    for (let index = state.questions.length - 1; index > from; index -= 1) {
-      if (needsConfirm(state.questions[index])) return index;
+  // Questions the teacher actually left, newest last. Previous returns here
+  // even after that question is confirmed. Next still jumps to the next unconfirmed.
+  const drawerBack = [];
+  const pushDrawerBack = (fromIndex) => {
+    const id = state.questions[fromIndex]?.id;
+    if (!id || drawerBack[drawerBack.length - 1] === id) return;
+    drawerBack.push(id);
+  };
+  const drawerBackIndex = () => {
+    const currentId = state.questions[state.editor?.index]?.id;
+    for (let i = drawerBack.length - 1; i >= 0; i -= 1) {
+      const id = drawerBack[i];
+      if (id === currentId) continue;
+      const index = state.questions.findIndex((question) => question.id === id);
+      if (index >= 0) return index;
     }
     return -1;
   };
-  let dragWord = null;
-  const addWord = (pair = {}) => {
-    const row = document.createElement("div");
-    row.className = "hw-word";
-    row.innerHTML = `
-      <button type="button" class="hw-word-drag" draggable="true" aria-label="並べ替え" title="ドラッグで並べ替え">${ICON.grip}</button>
-      <input type="text" data-ja maxlength="40" placeholder="日本語" aria-label="日本語" value="${escapeHtml(pair.ja || "")}" autocomplete="off" enterkeyhint="next">
-      <input type="text" data-en maxlength="40" placeholder="English" aria-label="英語" value="${escapeHtml(pair.en || "")}" autocomplete="off" enterkeyhint="next">
-      <button type="button" class="hw-word-x" aria-label="この単語を消す">${ICON.remove}</button>`;
-    if (pair.sentenceJa) row.dataset.sentenceJa = pair.sentenceJa;
-    if (pair.sentenceEn) row.dataset.sentenceEn = pair.sentenceEn;
-    const jaInput = row.querySelector("[data-ja]");
-    const enInput = row.querySelector("[data-en]");
-    const dragHandle = row.querySelector(".hw-word-drag");
-    dragHandle.addEventListener("dragstart", (event) => {
-      dragWord = row;
-      row.classList.add("is-dragging");
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", "word");
-    });
-    dragHandle.addEventListener("dragend", () => {
-      row.classList.remove("is-dragging");
-      wordsEl.querySelectorAll(".hw-word.is-drop").forEach((item) => item.classList.remove("is-drop"));
-      dragWord = null;
-      state.dirty = true;
-      scheduleStudioResume();
-    });
-    row.addEventListener("dragover", (event) => {
-      if (!dragWord || dragWord === row) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      const rect = row.getBoundingClientRect();
-      const before = event.clientY < rect.top + rect.height / 2;
-      wordsEl.querySelectorAll(".hw-word.is-drop").forEach((item) => item.classList.remove("is-drop"));
-      row.classList.add("is-drop");
-      row.dataset.dropBefore = before ? "1" : "0";
-    });
-    row.addEventListener("dragleave", () => {
-      row.classList.remove("is-drop");
-      delete row.dataset.dropBefore;
-    });
-    row.addEventListener("drop", (event) => {
-      event.preventDefault();
-      if (!dragWord || dragWord === row) return;
-      const before = row.dataset.dropBefore !== "0";
-      row.classList.remove("is-drop");
-      delete row.dataset.dropBefore;
-      if (before) wordsEl.insertBefore(dragWord, row);
-      else wordsEl.insertBefore(dragWord, row.nextSibling);
-    });
-    row.querySelector(".hw-word-x").onclick = () => {
-      row.remove();
-      if (!wordsEl.querySelector(".hw-word")) addWord();
-    };
-    const focusNext = (current) => {
-      const rows = [...wordsEl.querySelectorAll(".hw-word")];
-      const index = rows.indexOf(row);
-      if (current === jaInput) {
-        enInput.focus();
-        return;
-      }
-      const next = rows[index + 1] || addWord();
-      next.querySelector("[data-ja]").focus();
-    };
-    [jaInput, enInput].forEach((input) => {
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" || event.isComposing) return;
-        event.preventDefault();
-        focusNext(input);
-      });
-      input.addEventListener("paste", (event) => {
-        const text = event.clipboardData?.getData("text") || "";
-        if (!/[\n\t]/.test(text) && !/ [-–—－] /.test(text)) return;
-        const parsed = parseVocabulary(text);
-        if (!parsed.pairs.length) return;
-        event.preventDefault();
-        const rows = [...wordsEl.querySelectorAll(".hw-word")];
-        const start = Math.max(0, rows.indexOf(row));
-        parsed.pairs.forEach((item, offset) => {
-          const target = rows[start + offset] || addWord();
-          target.querySelector("[data-ja]").value = item.ja;
-          target.querySelector("[data-en]").value = item.en;
-          target.dataset.sentenceJa = item.sentenceJa || "";
-          target.dataset.sentenceEn = item.sentenceEn || "";
-        });
-      });
-    });
-    wordsEl.appendChild(row);
-    return row;
+  const popDrawerBack = () => {
+    const currentId = state.questions[state.editor?.index]?.id;
+    while (drawerBack.length) {
+      const id = drawerBack.pop();
+      if (id === currentId) continue;
+      const index = state.questions.findIndex((question) => question.id === id);
+      if (index >= 0) return index;
+    }
+    return -1;
   };
-  const setWords = (pairs) => {
-    wordsEl.replaceChildren();
-    const list = pairs.length ? pairs : [{}, {}, {}, {}];
-    list.forEach((pair) => addWord(pair));
+  const lessonText = studio.querySelector("#hw-lesson-text");
+  const lessonStatus = studio.querySelector("#hw-lesson-status");
+  const lessonApply = studio.querySelector("#hw-lesson-apply");
+  let lessonBusy = false;
+  const setLessonStatus = (message) => {
+    if (!lessonStatus) return;
+    lessonStatus.hidden = !message;
+    lessonStatus.textContent = message || "";
   };
-  const readWords = () => {
-    const errors = [];
-    const lines = [];
-    const rowNumbers = [];
-    [...wordsEl.querySelectorAll(".hw-word")].forEach((row, index) => {
-      const ja = row.querySelector("[data-ja]").value.trim();
-      const en = row.querySelector("[data-en]").value.trim();
-      if (!ja && !en) return;
-      if (!ja || !en) {
-        errors.push(`${index + 1}行目は、日本語と英語の両方を入れてください。`);
-        return;
-      }
-      const sentenceJa = row.dataset.sentenceJa || "";
-      const sentenceEn = row.dataset.sentenceEn || "";
-      lines.push(sentenceEn ? `${ja} - ${en} | ${sentenceJa} | ${sentenceEn}` : `${ja} - ${en}`);
-      rowNumbers.push(index + 1);
-    });
-    const parsed = parseVocabulary(lines.join("\n"));
-    const remapped = parsed.errors.map((message) => {
-      const match = message.match(/^(\d+)行目/);
-      if (!match) return message;
-      const visual = rowNumbers[Number(match[1]) - 1];
-      return visual ? message.replace(/^\d+行目/, `${visual}行目`) : message;
-    });
-    return { pairs: parsed.pairs, errors: [...errors, ...remapped], warnings: parsed.warnings };
+  const adoptBuiltQuestions = (questions, pairs, warnings) => {
+    state.pairs = pairs;
+    state.questions = questions.map((question) => ({
+      ...question,
+      approved: false,
+      source: question.source || "lesson",
+      review: question.review !== false,
+    }));
+    state.warnings = warnings;
+    state.status = "draft";
+    state.dirty = true;
+    state.offerNext = false;
+    state.audioReady = false;
+    state.audioBuilding = false;
+    state.phrasesConfirmed = false;
+    state.voiceGenFailed = false;
+    state.buildPhase = "phrases";
+    state.flowStep = "build";
+    state.filter = "all";
+    state.wordKey = "";
+    state.wordFilters = {};
+    audioReviewed.clear();
+    heardLines.clear();
+    retryNeedsRecheck.clear();
+    lineBusy.clear();
+    regenQueue.clear();
+    voiceBusy.clear();
+    voiceReadings.clear();
+    setVoiceWait("", "");
+    if (state.editor) closeEditor(true);
+    paintQuestions();
   };
-  setWords([]);
-  studio.querySelector("#hw-add-word").onclick = () => {
-    addWord().querySelector("[data-ja]").focus();
-  };
-  studio.querySelector("#hw-sample").onclick = () => {
-    setWords(SAMPLE.map(([ja, en]) => ({ ja, en })));
-  };
-  const pasteDialog = studio.querySelector("#hw-paste-dialog");
-  const pasteText = studio.querySelector("#hw-paste-text");
-  studio.querySelector("#hw-paste").onclick = () => {
-    pasteText.value = "";
-    if (typeof pasteDialog.showModal === "function") pasteDialog.showModal();
-    else pasteDialog.setAttribute("open", "");
-    pasteText.focus();
-  };
-  studio.querySelector("#hw-paste-form").addEventListener("submit", (event) => {
-    const action = event.submitter?.value || "cancel";
-    if (action !== "apply") return;
-    event.preventDefault();
-    const parsed = parseVocabulary(pasteText.value);
-    if (!parsed.pairs.length) {
-      setStatus("bad", parsed.errors[0] || "貼れる単語がありません。");
+  lessonApply.addEventListener("click", async () => {
+    if (lessonBusy) return;
+    const text = lessonText.value;
+    if (!/[A-Za-z]/.test(text)) {
+      setLessonStatus("英語を入力してください。");
       return;
     }
-    setWords(parsed.pairs);
-    state.dirty = true;
-    if (parsed.warnings.length) setStatus("", parsed.warnings.join(" "));
-    else setStatus("ok", `${parsed.pairs.length}語を入れました。`);
-    pasteDialog.close?.();
-    pasteDialog.removeAttribute("open");
+    if (options.lab || !options.callFunction) {
+      setLessonStatus("プレビューでは授業の英語から作れません。");
+      return;
+    }
+    if (state.questions.length) {
+      const ok = await confirmAction({
+        title: "問題を作り直しますか？",
+        message: "いまの問題は、入力した英語から作り直した問題に置き換わります。",
+        confirmLabel: "作り直す",
+        cancelLabel: "やめる",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    lessonBusy = true;
+    lessonApply.disabled = true;
+    setLessonStatus("日本語をつくっています…");
+    try {
+      const preview = await options.callFunction("draftLessonHomework", { text, stage: "translate" });
+      const translations = Array.isArray(preview.translations) ? preview.translations : [];
+      if (!translations.length) throw new Error("日本語を作れませんでした。");
+      lessonApply.disabled = false;
+      const confirmed = await confirmTranslations(translations);
+      if (!confirmed) {
+        setLessonStatus("日本語の確認をやめました。");
+        return;
+      }
+      lessonApply.disabled = true;
+      setLessonStatus("問題をつくっています…");
+      const result = await options.callFunction("draftLessonHomework", { stage: "questions", lines: confirmed });
+      const questions = result.questions || [];
+      if (!questions.length) throw new Error("問題がつくれませんでした。");
+      adoptBuiltQuestions(questions, result.vocab || [], result.warnings || []);
+      const note = (result.warnings || []).filter(Boolean).join(" ");
+      setLessonStatus("");
+      setStatus("ok", note
+        ? `${questions.length}問作成しました。${note}`
+        : `${questions.length}問作成しました。問題文と答えを確認し、「文の確認完了」を押してください。`);
+    } catch (error) {
+      console.error("[homework-studio] lesson draft failed", error);
+      setLessonStatus(error?.message || "問題を作れませんでした。もう一度お試しください。");
+    } finally {
+      lessonBusy = false;
+      lessonApply.disabled = false;
+    }
   });
   studio.querySelector('[data-hw="library"]')?.addEventListener("click", async () => {
     if (state.editor) commitDrawerEdits({ quiet: true });
@@ -898,7 +965,9 @@ export async function mountTeacherHomework(root, options) {
   const pruneRegenQueueIfReady = () => {
     let pruned = 0;
     for (const [key, item] of [...regenQueue.entries()]) {
-      if (!hasHomeworkVoice(item.text)) continue;
+      // A missing line filled by the bulk job can leave the queue.
+      // A teacher remake of an existing word must stay queued until it is rebuilt.
+      if (!item.creating || !hasHomeworkVoice(item.text)) continue;
       regenQueue.delete(key);
       lineBusy.delete(key);
       pruned += 1;
@@ -924,6 +993,10 @@ export async function mountTeacherHomework(root, options) {
     ).values()];
     if (!targets.length) {
       setStatus("bad", "作り直す音声がありません。");
+      return false;
+    }
+    if (!state.phrasesConfirmed || (!state.audioReady && !state.audioBuilding)) {
+      setStatus("bad", "先に「音声をつくる」を押してください。");
       return false;
     }
     if (remakeLooksStuck()) clearRemakeLocks("stuck before enqueue", { abortVoice: true });
@@ -971,8 +1044,6 @@ export async function mountTeacherHomework(root, options) {
     accepted.forEach(({ text }) => {
       if (RETRY_LINES.includes(text)) retryNeedsRecheck.add(lineKey(text));
     });
-    // Local forget only (remote delete is background) so the remake can start immediately.
-    await forgetHomeworkVoice(accepted.map(({ text }) => text), { db: options.db });
     const queuedBehindBuild = state.audioBuilding;
     const phrases = accepted.map((item) => item.text);
     const label = phrases.length === 1 ? `「${phrases[0]}」` : `「${phrases.slice(0, 3).join("」「")}」`;
@@ -1012,7 +1083,7 @@ export async function mountTeacherHomework(root, options) {
           const batch = [...regenQueue.entries()];
           regenQueue.clear();
           // Skip lines bulk generate already refilled after forget.
-          const pending = batch.filter(([, item]) => !hasHomeworkVoice(item.text));
+          const pending = batch.filter(([, item]) => !item.creating || !hasHomeworkVoice(item.text));
           pending.forEach(([key]) => lineBusy.add(key));
           const targets = pending.map(([, item]) => item.text);
           const targetKeys = pending.map(([key]) => key);
@@ -1050,7 +1121,8 @@ export async function mountTeacherHomework(root, options) {
               failed: voice.failed || [],
               ms: Date.now() - regenDrainStartedAt,
             });
-            targetKeys.forEach((key) => {
+            targetKeys.forEach((key, index) => {
+              if ((voice.failed || []).includes(targets[index])) return;
               heardLines.delete(key);
               regenQueue.delete(key);
             });
@@ -1063,8 +1135,14 @@ export async function mountTeacherHomework(root, options) {
                 "bad",
                 targets,
               );
-            } else if (!missingVoiceLines().length) {
-              state.voiceGenFailed = false;
+            } else {
+              if (!missingVoiceLines().length) state.voiceGenFailed = false;
+              setVoiceWait(
+                targets.length === 1
+                  ? `「${targets[0]}」の音声を作り直しました。`
+                  : `${targets.length}件の音声を作り直しました。`,
+                "ok",
+              );
             }
           } catch (error) {
             console.warn("[homework studio] remake error", targets, error);
@@ -1100,9 +1178,27 @@ export async function mountTeacherHomework(root, options) {
     return regenDrainPromise;
   };
 
+  const confirmTexts = () => {
+    if (!state.questions.length) {
+      setStatus("bad", "先に英語を入れて「問題をつくる」を押してください。");
+      return;
+    }
+    state.phrasesConfirmed = true;
+    state.audioReady = false;
+    state.audioBuilding = false;
+    state.buildPhase = "audio";
+    state.flowStep = "build";
+    paintQuestions();
+    setStatus("ok", "文を確認しました。「音声をつくる」を押すまで音声は作りません。");
+  };
+
   const makeAllVoice = async ({ force = false } = {}) => {
     if (!state.questions.length) {
-      setStatus("bad", "先に「宿題をつくる」で問題をつくってください。");
+      setStatus("bad", "先に英語を入れて「問題をつくる」を押してください。");
+      return;
+    }
+    if (!state.phrasesConfirmed) {
+      setStatus("bad", "先に問題文と答えを確認してください。");
       return;
     }
     if (state.audioBuilding) return;
@@ -1137,7 +1233,6 @@ export async function mountTeacherHomework(root, options) {
       if (state.editor && !voicePlaying) paintDrawer();
     };
     button.disabled = true;
-    studio.querySelector("#hw-generate").disabled = true;
     if (actionButtons) actionButtons.hidden = true;
     tools.hidden = false;
     // Enter audio phase immediately so failures never bounce back to phrase-check.
@@ -1242,7 +1337,6 @@ export async function mountTeacherHomework(root, options) {
       }
       if (actionButtons) actionButtons.hidden = false;
       button.disabled = false;
-      studio.querySelector("#hw-generate").disabled = false;
       refreshVoiceUi();
       // Run any remakes teachers queued while listening during the bulk generate.
       if (!stopped) await drainRegenQueue();
@@ -1250,72 +1344,13 @@ export async function mountTeacherHomework(root, options) {
     }
   };
 
-  studio.querySelector("#hw-generate").onclick = () => {
-    const parsed = readWords();
-    const countValue = studio.querySelector("#hw-count").value;
-    const types = {};
-    studio.querySelectorAll("[data-type]").forEach((input) => {
-      types[input.dataset.type] = input.checked;
-    });
-    const result = generateHomework(parsed.pairs, {
-      seed: Date.now(),
-      level: studio.querySelector("#hw-level").value,
-      count: countValue === "" ? "" : Number(countValue),
-      hints: studio.querySelector("#hw-hints").checked,
-      sentenceDirection: studio.querySelector("#hw-direction").value,
-      shuffleWords: studio.querySelector("#hw-shuffle-words")?.checked !== false,
-      types,
-      warnings: parsed.warnings,
-    });
-    state.pairs = parsed.pairs;
-    // Fresh packs always start unconfirmed, even if audio clips already exist from earlier homework.
-    state.questions = result.questions.map((question) => ({
-      ...question,
-      approved: false,
-      review: true,
-    }));
-    state.warnings = [...parsed.errors, ...result.warnings]
-      .filter((warning) => !String(warning).includes("文をつくる問題は提案"))
-      .filter((warning) => !/^最大\d+問です/.test(String(warning)));
-    state.status = "draft";
-    state.dirty = true;
-    state.offerNext = false;
-    state.audioReady = false;
-    state.audioBuilding = false;
-    state.phrasesConfirmed = false;
-    state.voiceGenFailed = false;
-    state.buildPhase = "phrases";
-    state.filter = "all";
-    state.wordKey = "";
-    state.wordFilters = {};
-    audioReviewed.clear();
-    heardLines.clear();
-    retryNeedsRecheck.clear();
-    lineBusy.clear();
-    regenQueue.clear();
-    voiceBusy.clear();
-    voiceReadings.clear();
-    setVoiceWait("", "");
-    if (state.editor) closeEditor(true);
-    if (result.error) state.warnings.unshift(result.error);
-    const countInput = studio.querySelector("#hw-count");
-    const requestedCount = countValue === "" ? null : Number(countValue);
-    if (
-      countInput
-      && result.questions.length
-      && Number.isFinite(requestedCount)
-      && requestedCount > result.questions.length
-    ) {
-      countInput.value = String(result.questions.length);
-    }
-    paintQuestions();
-    if (result.error || !result.questions.length) {
-      setStatus("bad", result.error || "問題がつくれませんでした。");
+  studio.querySelector("#hw-make-voice").onclick = () => {
+    if (!state.phrasesConfirmed && !state.audioReady) {
+      confirmTexts();
       return;
     }
-    setStatus("ok", `${result.questions.length}問作成しました。問題文を確認し、「文の確認完了」で音声へ進んでください。`);
+    makeAllVoice();
   };
-  studio.querySelector("#hw-make-voice").onclick = () => makeAllVoice();
   studio.querySelector("#hw-preview").onclick = () => openPreview();
   studio.querySelector("#hw-draft").onclick = () => save("draft");
   studio.querySelector("#hw-assign").onclick = () => save("assigned");
@@ -1350,7 +1385,7 @@ export async function mountTeacherHomework(root, options) {
     const need = stepBtn.dataset.flowNeed || "";
     const buildPhase = stepBtn.dataset.buildPhase || "";
     if (need === "questions" && !state.questions.length) {
-      setStatus("bad", "先に宿題をつくってください。");
+      setStatus("bad", "先に英語を入れて「問題をつくる」を押してください。");
       return;
     }
     if (need === "phrases" && !(state.phrasesConfirmed || state.audioReady)) {
@@ -1369,20 +1404,6 @@ export async function mountTeacherHomework(root, options) {
     if (target === "build") setFlowStep("build", { buildPhase: buildPhase || undefined });
     else setFlowStep(target);
   });
-  const clampCountInput = () => {
-    const input = studio.querySelector("#hw-count");
-    if (!input || input.value === "") return;
-    const value = Number(input.value);
-    if (!Number.isFinite(value)) {
-      input.value = "";
-      return;
-    }
-    const capped = Math.min(100, Math.max(1, Math.round(value)));
-    if (String(capped) !== input.value) input.value = String(capped);
-  };
-  studio.querySelector("#hw-count")?.addEventListener("change", clampCountInput);
-  studio.querySelector("#hw-count")?.addEventListener("blur", clampCountInput);
-
   studio.addEventListener("change", (event) => {
     if (!event.target.closest("[data-class], #hw-due")) return;
     paintFlow();
@@ -1391,10 +1412,22 @@ export async function mountTeacherHomework(root, options) {
       assignBtn.disabled = !readyForAssign() || !selectedClasses().length || state.status === "assigned";
     }
     if (event.target.matches("[data-class]")) {
+      const id = String(event.target.value || "");
+      if (event.target.checked) pickedClassIds.add(id);
+      else pickedClassIds.delete(id);
       event.target.closest(".hw-class-card")?.classList.toggle("is-on", event.target.checked);
       paintClassStudents();
     }
     if (state.flowStep === "confirm") paintConfirmSummary();
+  });
+  studio.querySelector("#hw-class-search")?.addEventListener("input", () => {
+    paintClassPicker();
+  });
+  studio.querySelector("#hw-class-scope")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-class-scope]");
+    if (!button || state.viewerRole !== "owner") return;
+    state.classScope = button.dataset.classScope === "all" ? "all" : "mine";
+    paintClassPicker();
   });
   studio.querySelectorAll("[data-filter]").forEach((button) => {
     button.onclick = () => {
@@ -1472,6 +1505,35 @@ export async function mountTeacherHomework(root, options) {
     studio.querySelectorAll(".hw-menu[open]").forEach((menu) => menu.removeAttribute("open"));
   };
 
+  async function rebuildQuestion(index) {
+    const question = state.questions[index];
+    if (!question) return { error: "問題が見つかりません。" };
+    if (question.source === "lesson") {
+      const text = String(question.lessonEn || "").trim();
+      if (!text || options.lab || !options.callFunction) return { error: "この問題は作り直せません。" };
+      const result = await options.callFunction("draftLessonHomework", { text });
+      const match = (result.questions || []).find((item) => item.lessonKind === question.lessonKind);
+      if (!match) return { error: "この問題は作り直せません。" };
+      return {
+        question: {
+          ...match,
+          id: question.id,
+          approved: false,
+          review: true,
+          source: "lesson",
+        },
+      };
+    }
+    const next = regenerateAt(state.questions, index, state.pairs, {
+      seed: Date.now(),
+      level: studio.querySelector("#hw-level").value,
+      hints: true,
+      sentenceDirection: "ja-to-en",
+    });
+    if (next.error) return { error: next.error };
+    return { questions: next.questions };
+  }
+
   reviewEl.addEventListener("click", async (event) => {
     const filterBtn = event.target.closest("[data-filter]");
     if (filterBtn) return;
@@ -1485,6 +1547,7 @@ export async function mountTeacherHomework(root, options) {
     const act = button?.dataset.act;
     if (act === "edit" || (!act && card && !event.target.closest(".hw-menu"))) {
       closeMenus();
+      if (state.editor && state.editor.index !== index) pushDrawerBack(state.editor.index);
       openEditor(index);
       return;
     }
@@ -1508,21 +1571,25 @@ export async function mountTeacherHomework(root, options) {
       else if (state.editor?.index === index + 1) state.editor.index = index;
     }
     if (act === "regen") {
-      const next = regenerateAt(state.questions, index, state.pairs, {
-        seed: Date.now(),
-        level: studio.querySelector("#hw-level").value,
-        hints: studio.querySelector("#hw-hints").checked,
-        sentenceDirection: studio.querySelector("#hw-direction").value,
-      });
+      setStatus("", "問題を作り直しています…");
+      let next;
+      try {
+        next = await rebuildQuestion(index);
+      } catch (error) {
+        setStatus("bad", error?.message || "問題を作り直せませんでした。");
+        return;
+      }
       if (next.error) {
         setStatus("bad", next.error);
         return;
       }
       const oldId = question.id;
-      state.questions = next.questions;
+      if (next.question) state.questions[index] = next.question;
+      else state.questions = next.questions;
       audioReviewed.delete(oldId);
       voiceBusy.delete(oldId);
       if (state.editor?.index === index) openEditor(index);
+      setStatus("ok", "問題を作り直しました。");
     }
     state.dirty = true;
     closeMenus();
@@ -1537,6 +1604,7 @@ export async function mountTeacherHomework(root, options) {
     const index = Number(card.dataset.index);
     if (!Number.isInteger(index) || !state.questions[index]) return;
     closeMenus();
+    if (state.editor && state.editor.index !== index) pushDrawerBack(state.editor.index);
     openEditor(index);
   });
 
@@ -1577,8 +1645,9 @@ export async function mountTeacherHomework(root, options) {
       try {
         for (const line of selected) {
           if (myToken !== voicePlayToken) break;
-          await playPrompt(line, /[\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? "ja" : "en", { db: options.db });
-          if (myToken === voicePlayToken) heardLines.add(lineKey(line));
+          const played = await playPrompt(line, /[\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? "ja" : "en", { db: options.db, generate: false });
+          if (myToken !== voicePlayToken) break;
+          if (played === "learny") markLinesHeard([line]);
         }
         if (myToken === voicePlayToken) syncReviewedFromHeard(question, draft);
       } finally {
@@ -1622,6 +1691,20 @@ export async function mountTeacherHomework(root, options) {
       await enqueueVoiceRegen(targets, { question });
       return;
     }
+    if (action === "confirm-line") {
+      const clicked = lineFromButton(event.target);
+      if (!clicked || !hasHomeworkVoice(clicked)) {
+        setStatus("bad", "先に音声を生成してください。");
+        return;
+      }
+      const key = lineKey(clicked);
+      if (lineBusy.has(key) || regenQueue.has(key)) return;
+      heardLines.add(key);
+      syncReviewedFromHeard(question, readDraft());
+      paintDrawer();
+      paintQuestions();
+      return;
+    }
     if (action === "move-up" || action === "move-down") {
       const target = action === "move-up" ? index - 1 : index + 1;
       if (target < 0 || target >= state.questions.length) return;
@@ -1661,27 +1744,33 @@ export async function mountTeacherHomework(root, options) {
       return;
     }
     if (action === "regen") {
-      const next = regenerateAt(state.questions, index, state.pairs, {
-        seed: Date.now(),
-        level: studio.querySelector("#hw-level").value,
-        hints: studio.querySelector("#hw-hints").checked,
-        sentenceDirection: studio.querySelector("#hw-direction").value,
-      });
+      setStatus("", "問題を作り直しています…");
+      let next;
+      try {
+        next = await rebuildQuestion(index);
+      } catch (error) {
+        setStatus("bad", error?.message || "問題を作り直せませんでした。");
+        return;
+      }
       if (next.error) {
         setStatus("bad", next.error);
         return;
       }
       const oldId = question.id;
-      state.questions = next.questions.map((item, itemIndex) => (
-        itemIndex === index
-          ? { ...item, approved: false, review: true }
-          : item
-      ));
+      if (next.question) {
+        state.questions[index] = next.question;
+      } else {
+        state.questions = next.questions.map((item, itemIndex) => (
+          itemIndex === index
+            ? { ...item, approved: false, review: true }
+            : item
+        ));
+      }
       audioReviewed.delete(oldId);
       voiceBusy.delete(oldId);
-    state.dirty = true;
+      state.dirty = true;
       openEditor(index);
-    paintQuestions();
+      paintQuestions();
       setStatus("ok", "問題を作り直しました。");
       return;
     }
@@ -1724,21 +1813,21 @@ export async function mountTeacherHomework(root, options) {
       paintDrawer();
       await new Promise((resolve) => setTimeout(resolve, 280));
       drawerPanel?.classList.remove("is-confirmed-flash");
-      if (nextPending >= 0) {
+      if (nextPending >= 0 && nextPending !== index) {
+        pushDrawerBack(index);
         openEditor(nextPending);
-        setStatus("ok", "次の音声をチェックしましょう。");
       } else if (retryLinesPending()) {
         closeEditor(true);
         state.wordKey = RETRY_WORD_KEY;
         paintQuestions();
         setStatus("ok", readyForAssign()
-          ? "すべての音声を確認しました。「つぎへ：クラスと期日」へ進めます。"
+          ? "すべての音声を確認しました。「次へ」を押してください。"
           : `問題の確認は終わりました。「${RETRY_TAB_LABEL}」で作り直した声があればきいてください。`);
       } else {
         closeEditor(true);
         paintQuestions();
         setStatus("ok", readyForAssign()
-          ? "すべての音声を確認しました。「つぎへ：クラスと期日」へ進めます。"
+          ? "すべての音声を確認しました。「次へ」を押してください。"
           : "すべての音声を確認しました。");
       }
       return;
@@ -1748,13 +1837,14 @@ export async function mountTeacherHomework(root, options) {
       if (state.editor.dirty || editorDirty()) commitDrawerEdits({ quiet: true });
       const target = action === "next"
         ? firstPendingIndex(index + 1)
-        : prevPendingIndex(index);
+        : popDrawerBack();
       if (target < 0 || target === index) {
-        setStatus("ok", action === "next" ? "次の確認待ちはありません。" : "前の確認待ちはありません。");
+        setStatus("ok", action === "next" ? "次の確認待ちはありません。" : "前の問題はありません。");
         state.offerNext = false;
         return;
       }
       state.offerNext = false;
+      if (action === "next") pushDrawerBack(index);
       openEditor(target);
       setStatus("ok", action === "next" ? "次の問題をチェックしましょう。" : "前の問題をチェックしましょう。");
     }
@@ -1961,14 +2051,15 @@ export async function mountTeacherHomework(root, options) {
   studio.addEventListener("click", async (event) => {
     const playRetry = event.target.closest("[data-act='play-retry']");
     const regenRetry = event.target.closest("[data-act='regen-retry']");
-    if (!playRetry && !regenRetry) return;
+    const confirmRetry = event.target.closest("[data-act='confirm-retry']");
+    if (!playRetry && !regenRetry && !confirmRetry) return;
     event.preventDefault();
     if (!state.audioReady) {
       setStatus("bad", "先に「すべての文と問題を確認した。」を押してください。");
       return;
     }
-    const line = lineFromButton(playRetry || regenRetry)
-      || RETRY_LINES[Number((playRetry || regenRetry).dataset.retryIndex)]
+    const line = lineFromButton(playRetry || regenRetry || confirmRetry)
+      || RETRY_LINES[Number((playRetry || regenRetry || confirmRetry).dataset.retryIndex)]
       || "";
     if (!line) return;
     const key = lineKey(line);
@@ -1985,6 +2076,21 @@ export async function mountTeacherHomework(root, options) {
       return;
     }
 
+    if (confirmRetry) {
+      if (!hasHomeworkVoice(line) || lineBusy.has(key) || regenQueue.has(key)) {
+        setStatus("bad", "先に音声を生成してください。");
+        return;
+      }
+      heardLines.add(key);
+      retryNeedsRecheck.delete(key);
+      const wasBlocked = !readyForAssign();
+      paintQuestions();
+      if (wasBlocked && readyForAssign()) {
+        setStatus("ok", "音声の確認が終わりました。「次へ」を押してください。");
+      }
+      return;
+    }
+
     if (!hasHomeworkVoice(line)) {
       setStatus("bad", "先に音声を生成してください。");
       return;
@@ -1994,18 +2100,19 @@ export async function mountTeacherHomework(root, options) {
     const myToken = ++voicePlayToken;
     voicePlaying = true;
     const wasBlocked = !readyForAssign();
+    let played = "none";
     try {
-      await playPrompt(line, /[\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? "ja" : "en", { db: options.db });
-      if (myToken === voicePlayToken) {
-        heardLines.add(key);
-        retryNeedsRecheck.delete(key);
-      }
+      played = await playPrompt(line, /[\u3040-\u30ff\u4e00-\u9fff]/.test(line) ? "ja" : "en", { db: options.db, generate: false });
     } finally {
       if (myToken === voicePlayToken) {
         voicePlaying = false;
+        if (played === "learny") {
+          heardLines.add(key);
+          retryNeedsRecheck.delete(key);
+        }
         paintQuestions();
         if (wasBlocked && readyForAssign()) {
-          setStatus("ok", "音声の確認が終わりました。「つぎへ：クラスと期日」へ進めます。");
+          setStatus("ok", "音声の確認が終わりました。「次へ」を押してください。");
         }
       }
     }
@@ -2045,20 +2152,13 @@ export async function mountTeacherHomework(root, options) {
   }
 
   function selectedClasses() {
-    return [...studio.querySelectorAll("[data-class]:checked")].map((input) => input.value);
+    const allowed = new Set(selectableClasses().map((item) => item.id));
+    return [...pickedClassIds].filter((id) => allowed.has(id));
   }
 
   function settings() {
-    const types = {};
-    studio.querySelectorAll("[data-type]").forEach((input) => {
-      types[input.dataset.type] = input.checked;
-    });
     return {
       level: studio.querySelector("#hw-level").value,
-      hints: studio.querySelector("#hw-hints").checked,
-      sentenceDirection: studio.querySelector("#hw-direction").value,
-      shuffleWords: studio.querySelector("#hw-shuffle-words")?.checked !== false,
-      types,
       voiceReadings: Object.fromEntries(voiceReadings),
     };
   }
@@ -2121,7 +2221,7 @@ export async function mountTeacherHomework(root, options) {
           return { error: "先に音声を生成し、1つずつきいて確認してください。" };
         }
         if (voice === "error") return { error: "音声エラーがあります。作り直してから確認してください。" };
-        if (voice === "stale") return { error: "すべての音声をきいてから「音声を確認」を押してください。" };
+        if (voice === "stale") return { error: "すべての音声を再生して確認してから「音声を確認」を押してください。" };
       }
       const updated = updateQuestion(question, draft);
       if (updated.error) return updated;
@@ -2160,7 +2260,7 @@ export async function mountTeacherHomework(root, options) {
         return { error: "先にフレーズ音声を生成し、きいて確認してください。" };
       }
       if (voice === "error") return { error: "音声エラーがあります。作り直してから確認してください。" };
-      if (voice === "stale") return { error: "音声をきいて確認してから「音声を確認」を押してください。" };
+      if (voice === "stale") return { error: "単語も含め、すべての音声を再生して確認してから「音声を確認」を押してください。" };
     }
     const textChanged = draft.promptJa !== (question.promptJa || "") || draft.sentence !== (question.display || "");
     let nextApproved = Boolean(question.approved);
@@ -2229,6 +2329,7 @@ export async function mountTeacherHomework(root, options) {
     voicePlaying = false;
     state.editor = null;
     state.offerNext = false;
+    drawerBack.length = 0;
     drawer.classList.remove("is-open");
     drawer.hidden = true;
     document.body.classList.remove("hw-drawer-open");
@@ -2250,7 +2351,7 @@ export async function mountTeacherHomework(root, options) {
     if (voice === "busy") return "この問題の音声の生成が終わるまでお待ちください。";
     if (voice === "error") return "音声エラーがあります。作り直してから確認してください。";
     if (voice === "stale") {
-      return "この問題の音声をすべてきいてから「音声を確認」を押してください。";
+      return "再生すると、その文・単語は確認済みになります。すべて再生してから「音声を確認」を押してください。";
     }
     if (question.approved && voice === "ready") return "";
     return "";
@@ -2275,9 +2376,8 @@ export async function mountTeacherHomework(root, options) {
       ? ""
       : (canConfirm ? "" : confirmBlockReason(question, draft, voice));
     const nextPending = firstPendingIndex(state.editor.index + 1);
-    const prevPending = prevPendingIndex(state.editor.index);
     const hasNext = nextPending >= 0 && nextPending !== state.editor.index;
-    const hasPrev = prevPending >= 0 && prevPending !== state.editor.index;
+    const hasPrev = drawerBackIndex() >= 0;
     if (saveBtn) {
       const canSave = state.status !== "assigned"
         && (question.type !== "sentence" || Boolean(draft.promptJa || draft.sentence) || draft.include === false);
@@ -2307,18 +2407,21 @@ export async function mountTeacherHomework(root, options) {
     drawerBody.querySelector('[data-act="move-up"]')?.toggleAttribute("disabled", atStart);
     drawerBody.querySelector('[data-act="move-down"]')?.toggleAttribute("disabled", atEnd);
     studio.querySelector("#hw-drawer-kicker").textContent = `Q${state.editor.index + 1} · ${TYPE_LABEL[question.type] || "問題"}`;
-    studio.querySelector("#hw-drawer-title").textContent = question.type === "sentence"
-      ? "文と音声をチェック"
-      : "問題と音声をチェック";
-    studio.querySelector("#hw-drawer-sub").textContent = alreadyDone
-      ? "この問題は確認済みです。次の確認へ進めます。"
-      : (voice === "ready"
-        ? "この問題の音声はそろっています。確認できます。"
-        : (state.audioBuilding
-          ? "生成済みの音声はいま確認できます。まだのものは準備中です。"
-          : (state.audioReady
-            ? "内容を見直して、使っている音声をすべてきいてから確認しましょう。"
-            : "内容を編集できます。確認できたら閉じて「文の確認完了」で音声へ進んでください。")));
+    const correctingText = state.buildPhase === "phrases";
+    studio.querySelector("#hw-drawer-title").textContent = correctingText
+      ? "問題文を直す"
+      : (question.type === "sentence" ? "文と音声をチェック" : "問題と音声をチェック");
+    studio.querySelector("#hw-drawer-sub").textContent = correctingText
+      ? "文を直せます。保存したあとは「音声の確認」にもどれます。"
+      : (alreadyDone
+        ? "この問題は確認済みです。次の確認へ進めます。"
+        : (voice === "ready"
+          ? "この問題の音声はそろっています。確認できます。"
+          : (state.audioBuilding
+            ? "生成済みの音声はいま確認できます。まだのものは準備中です。"
+            : (state.audioReady
+              ? "内容を見直して、音声を再生するとその文・単語が確認済みになります。"
+              : "内容を編集できます。確認できたら閉じて「文の確認完了」で音声へ進んでください。"))));
   }
 
   function audioLinesHtml(question, draft, voice) {
@@ -2348,7 +2451,7 @@ export async function mountTeacherHomework(root, options) {
         </div>
         <p class="hw-help">${state.audioBuilding && readyCount < lines.length
           ? `生成済みの音声（${readyCount}/${lines.length}）はいま確認・作り直しできます。読み方がおかしいときは「読み方」を書いてから作り直してください。`
-          : `この問題で使う音声です。1つずつきいて確認してください。発音がおかしいときは「読み方」にひらがなやスペルを書いてから作り直します。（${heardCount} / ${lines.length}）`}</p>
+          : `この問題で使う音声です。再生すると、その文・単語は確認済みになります。（${heardCount} / ${lines.length}）`}</p>
         <div class="hw-audio-lines" role="list">
           ${lines.map((line) => {
             const key = lineKey(line);
@@ -2368,17 +2471,19 @@ export async function mountTeacherHomework(root, options) {
                   : needsGenerate ? "Generate"
                     : heard ? "確認済み"
                       : "未確認";
+            const role = audioLineRole(line, question, draft);
+            const confirmDisabled = !ready || busy || heard;
             return `<div class="hw-audio-line${heard ? " is-heard" : ""}${unconfirmed ? " is-unconfirmed" : ""}${needsGenerate ? " is-generate" : ""}${queued ? " is-queued" : ""}${!ready && !queued ? " is-missing" : ""}${busy ? " is-busy" : ""}${getSpeakAs(line) ? " has-reading" : ""}" role="listitem" data-line="${encoded}">
               <button type="button" class="hw-audio-line-play" data-act="play-line" data-line="${encoded}" aria-label="${escapeHtml(line)} をきく" ${!ready || lineBusy.has(key) || queued ? "disabled" : ""}>
                 ${ICON.play}
               </button>
               <div class="hw-audio-line-copy">
-                <p class="hw-audio-line-text">${escapeHtml(line)}</p>
+                <p class="hw-audio-line-text">${role ? `<span class="hw-audio-line-role">${escapeHtml(role)}</span>` : ""}${escapeHtml(line)}</p>
                 <p class="hw-audio-line-cap">${cap}</p>
               </div>
+              <button type="button" class="hw-audio-line-ok" data-act="confirm-line" data-line="${encoded}" ${confirmDisabled ? "disabled" : ""}>${heard ? "確認済" : "確認"}</button>
               <button type="button" class="hw-audio-line-regen${needsGenerate ? " is-generate" : ""}" data-act="regen-line" data-line="${encoded}" aria-label="${needsGenerate ? `${escapeHtml(line)} の音声を Generate` : `${escapeHtml(line)} の音声を作り直す`}" title="${needsGenerate ? "Generate" : (queued ? "作り直しキューに追加済み" : "読み方を指定して作り直す")}" ${regenDisabled ? "disabled" : ""}>${needsGenerate ? "Generate" : ICON.regen}</button>
-              <span class="hw-audio-line-mark" aria-hidden="true">${heard && ready && !lineBusy.has(key) && !queued ? "✓" : unconfirmed ? "!" : ""}</span>
-              ${speakAsFieldHtml(line, { disabled: Boolean(lineBusy.has(key) || queued) })}
+              ${speakAsFieldHtml(line)}
             </div>`;
           }).join("")}
         </div>
@@ -2406,11 +2511,12 @@ export async function mountTeacherHomework(root, options) {
           <label class="hw-soft-field">問題文（日本語）
             <textarea data-field="promptJa" rows="2" spellcheck="false">${escapeHtml(question.promptJa || "")}</textarea>
           </label>
+          ${question.lessonKind === "en-to-ja" && question.promptEn ? `<p class="hw-help">英語: ${escapeHtml(question.promptEn)}</p>` : ""}
           <div class="hw-choice-edit">
             ${(choices.length ? choices : ["", "", "", ""]).map((choice, choiceIndex) => `
               <label class="hw-choice-edit-row">
                 <input type="radio" name="hw-answer" data-field="answer" value="${choiceIndex}" ${normChoice(choice) === normChoice(question.answer) || (!question.answer && choiceIndex === 0) ? "checked" : ""} aria-label="正解${choiceIndex + 1}">
-                <input type="text" data-field="choice" maxlength="40" value="${escapeHtml(choice)}" placeholder="選択肢 ${choiceIndex + 1}" aria-label="選択肢 ${choiceIndex + 1}">
+                <input type="text" data-field="choice" maxlength="120" value="${escapeHtml(choice)}" placeholder="選択肢 ${choiceIndex + 1}" aria-label="選択肢 ${choiceIndex + 1}">
               </label>`).join("")}
           </div>
           <p class="hw-help">正解の左○を選んでください。編集したら下の「保存」を押してください。</p>
@@ -2481,8 +2587,14 @@ export async function mountTeacherHomework(root, options) {
 
   function paintDrawer() {
     if (!state.editor) return;
+    const scrollTop = drawerBody.scrollTop;
+    const active = document.activeElement;
+    const focusLine = active?.dataset?.line ? lineFromButton(active) : "";
+    const focusAct = active?.dataset?.act || "";
+    const focusStart = typeof active?.selectionStart === "number" ? active.selectionStart : null;
+    const focusEnd = typeof active?.selectionEnd === "number" ? active.selectionEnd : null;
     const question = state.questions[state.editor.index];
-    const audioFirst = Boolean(state.audioReady);
+    const audioFirst = state.buildPhase === "audio" && Boolean(state.audioReady);
     if (question.type === "sentence") {
       const draft = state.editor;
       const voice = voiceStateFor(question, draft);
@@ -2529,55 +2641,38 @@ export async function mountTeacherHomework(root, options) {
       if (audioFirst) drawerBody.insertAdjacentHTML("afterbegin", audioHtml);
       else drawerBody.insertAdjacentHTML("beforeend", audioHtml);
     }
+    drawerBody.scrollTop = scrollTop;
+    if (focusLine && focusAct) {
+      const next = [...drawerBody.querySelectorAll("[data-act]")].find((el) => (
+        el.dataset.act === focusAct && lineFromButton(el) === focusLine
+      ));
+      if (next) {
+        next.focus({ preventScroll: true });
+        if (focusStart != null && typeof next.setSelectionRange === "function") {
+          try { next.setSelectionRange(focusStart, focusEnd ?? focusStart); } catch { /* not a text field */ }
+        }
+      }
+    }
+    drawerBody.scrollTop = scrollTop;
     paintDrawerChrome();
   }
 
-  function wordTabs({ usedOnly = false } = {}) {
-    const tabs = [];
-    const seen = new Set();
-    const addTab = (pair = {}) => {
-      const key = vocabNorm(pair.en || pair.key);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      tabs.push({
-        key,
-        ja: String(pair.ja || pair.en || pair.key || key).trim() || key,
-        en: String(pair.en || pair.key || key).trim() || key,
-      });
-    };
-    (state.pairs || []).forEach(addTab);
-    try {
-      readWords().pairs.forEach(addTab);
-    } catch (_) {
-      /* form may be empty while painting */
-    }
-    for (const question of state.questions) {
-      for (const key of questionVocabKeys(question)) {
-        if (seen.has(key)) continue;
-        let ja = key;
-        if (question.type === "matching") {
-          const right = (question.right || []).find((item) => vocabNorm(item.text) === key);
-          const pair = (question.pairs || []).find((item) => item.rightId === right?.id);
-          ja = (question.left || []).find((item) => item.id === pair?.leftId)?.text || key;
-        } else {
-          ja = String(question.promptJa || "")
-            .replace(/は英語で[？?]?$/, "")
-            .replace(/[。．\s]+$/g, "")
-            .trim() || key;
-        }
-        addTab({ key, en: key, ja });
-      }
-    }
-    if (usedOnly && state.questions.length) {
-      return tabs.filter((tab) => state.questions.some((question) => questionBelongsToWord(question, tab.key)));
-    }
-    return tabs;
+  function wordTabs() {
+    const order = ["multipleChoice", "matching", "spelling", "sentence"];
+    const present = new Set(state.questions.map((question) => question.type));
+    const types = order.filter((type) => present.has(type)).map((type) => ({
+      key: type,
+      ja: TYPE_LABEL[type] || "問題",
+      en: TYPE_LABEL[type] || "問題",
+    }));
+    if (!types.length) return types;
+    return [{ key: "all", ja: "問題集", en: "問題集" }, ...types];
   }
 
   function questionsForWord(wordKey = state.wordKey) {
     return state.questions
       .map((question, index) => ({ question, index }))
-      .filter(({ question }) => questionBelongsToWord(question, wordKey));
+      .filter(({ question }) => !wordKey || wordKey === "all" || question.type === wordKey);
   }
 
   function readyForAssign() {
@@ -2590,7 +2685,7 @@ export async function mountTeacherHomework(root, options) {
   }
 
   function assignBlockReason() {
-    if (!state.questions.length) return "先に宿題をつくってください。";
+    if (!state.questions.length) return "先に英語を入れて「問題をつくる」を押してください。";
     if (state.status === "assigned") return "出した宿題は変更できません。";
     if (!state.phrasesConfirmed) {
       return "まず問題文と答えを確認し、「文の確認完了」を押してください。";
@@ -2599,7 +2694,7 @@ export async function mountTeacherHomework(root, options) {
       return "「文の確認完了」を押して音声の表示・作成へ進んでください。";
     }
     if (state.voiceGenFailed || hasVisibleMissingVoice()) {
-      return "足りない／失敗した音声があります。「失敗した音声をもう一度つくる」か、問題の「作り直し」を使ってください。";
+      return "足りない／失敗した音声があります。「再試行」か、問題の「作り直し」を使ってください。";
     }
     if (state.questions.some((question) => !question.approved)) {
       return "すべての問題の音声をきいて確認してから、クラスと期日の設定へ進んでください。";
@@ -2612,9 +2707,17 @@ export async function mountTeacherHomework(root, options) {
 
   function syncBuildPhase() {
     if (state.flowStep !== "build") return;
-    if (!state.questions.length) state.buildPhase = "create";
-    else if (state.audioReady || state.phrasesConfirmed) state.buildPhase = "audio";
-    else state.buildPhase = "phrases";
+    if (!state.questions.length) {
+      state.buildPhase = "create";
+      return;
+    }
+    if (state.buildPhase === "create") state.buildPhase = "phrases";
+    if (state.buildPhase === "audio" && !(state.phrasesConfirmed || state.audioReady)) {
+      state.buildPhase = "phrases";
+    }
+    if (state.buildPhase !== "phrases" && state.buildPhase !== "audio") {
+      state.buildPhase = (state.phrasesConfirmed || state.audioReady) ? "audio" : "phrases";
+    }
   }
 
   function setFlowStep(step, { buildPhase } = {}) {
@@ -2639,7 +2742,14 @@ export async function mountTeacherHomework(root, options) {
           : (state.audioReady || state.phrasesConfirmed ? "audio" : "phrases")
       );
     }
+    if (step === "build" && state.buildPhase === "phrases" && state.wordKey === RETRY_WORD_KEY) {
+      state.wordKey = "";
+    }
     if (step !== "build" && state.editor) closeEditor(true);
+    else if (step === "build" && state.editor) {
+      const saved = commitDrawerEdits({ quiet: true });
+      if (!saved.error) paintDrawer();
+    }
     paintFlow();
     paintQuestions();
     if (step === "assign") paintClassStudents();
@@ -2671,9 +2781,7 @@ export async function mountTeacherHomework(root, options) {
       (ready || step === "assign" || step === "confirm" || sent) && hasQuestions && phrasesDone
     );
     const pastAssign = step === "confirm" || sent;
-    const activeBuild = step === "build"
-      ? (!hasQuestions ? "create" : (phrasesDone ? "audio" : "phrases"))
-      : "";
+    const activeBuild = step === "build" ? state.buildPhase : "";
 
     studio.querySelectorAll(".hw-flow-step").forEach((btn) => {
       const goto = btn.dataset.flowGoto;
@@ -2719,7 +2827,7 @@ export async function mountTeacherHomework(root, options) {
       return input?.closest("label")?.textContent?.trim() || id;
     });
     const { total, confirmed } = sentenceTotals();
-    const words = state.pairs.length || readWords().pairs.length;
+    const words = state.pairs.length;
     const sharePublic = studio.querySelector("#hw-published")?.checked !== false;
     host.innerHTML = `
       <dl class="hw-summary-list">
@@ -2755,11 +2863,18 @@ export async function mountTeacherHomework(root, options) {
     }
     const toolbarLead = studio.querySelector("#hw-toolbar-lead");
     const missingVoice = missingVoiceLines().length;
-    const inAudioPhase = Boolean(state.phrasesConfirmed || state.audioReady);
+    const textsConfirmed = Boolean(state.phrasesConfirmed || state.audioReady);
+    const reviewingText = state.buildPhase === "phrases";
     if (toolbarLead) {
-      if (!inAudioPhase) {
-        toolbarLead.hidden = false;
-        toolbarLead.textContent = "問題文・単語・答えを確認したら「文の確認完了」へ。";
+      if (reviewingText && textsConfirmed) {
+        toolbarLead.hidden = true;
+        toolbarLead.textContent = "";
+      } else if (!textsConfirmed) {
+        toolbarLead.hidden = true;
+        toolbarLead.textContent = "";
+      } else if (!state.audioReady && !state.audioBuilding) {
+        toolbarLead.hidden = true;
+        toolbarLead.textContent = "";
       } else {
         // Voice status lives only in the voice panel (regenerating / success / failed).
         toolbarLead.hidden = true;
@@ -2770,23 +2885,27 @@ export async function mountTeacherHomework(root, options) {
     if (makeVoiceBtn) {
       const showPhraseDone = state.questions.length > 0
         && state.status !== "assigned"
-        && !inAudioPhase
+        && !textsConfirmed
+        && !readyForAssign();
+      const showStartVoice = state.questions.length > 0
+        && state.status !== "assigned"
+        && textsConfirmed
+        && !state.audioReady
+        && !state.audioBuilding
         && !readyForAssign();
       // Remake uses regenDrainPromise/lineBusy — not audioBuilding. Hide the
-      // "失敗した音声をもう一度つくる" CTA while any remake is visibly in progress.
+      // "再試行" stays hidden while a remake is already in progress.
       const remakingVoice = Boolean(regenDrainPromise || regenQueue.size || lineBusy.size);
       const showRetryVoice = state.questions.length > 0
         && state.status !== "assigned"
-        && inAudioPhase
+        && state.audioReady
         && !state.audioBuilding
         && !remakingVoice
         && !readyForAssign()
         && (state.voiceGenFailed || missingVoice > 0);
-      const showMakeVoice = showPhraseDone || showRetryVoice;
+      const showMakeVoice = showPhraseDone || showStartVoice || showRetryVoice;
       makeVoiceBtn.hidden = !showMakeVoice;
       makeVoiceBtn.disabled = makeVoiceBtn.hidden || state.audioBuilding;
-      const toolbarActions = studio.querySelector("#hw-toolbar-actions");
-      toolbarActions?.classList.toggle("is-audio-check", Boolean(inAudioPhase && !showMakeVoice));
       const label = makeVoiceBtn.querySelector(".hw-make-voice-label");
       const ico = makeVoiceBtn.querySelector("[data-make-voice-ico]");
       const help = makeVoiceBtn.querySelector(".hw-make-voice-help");
@@ -2796,21 +2915,29 @@ export async function mountTeacherHomework(root, options) {
         help.setAttribute("aria-hidden", "true");
       }
       if (showRetryVoice) {
-        if (label) label.textContent = "失敗した音声をもう一度つくる";
+        if (label) label.textContent = "再試行";
         if (ico) {
-          ico.hidden = true;
-          ico.innerHTML = "";
+          ico.hidden = false;
+          ico.innerHTML = ICON.regen;
         }
         makeVoiceBtn.title = "失敗・不足している音声だけを再生成します";
-        makeVoiceBtn.classList.add("is-needed", "is-retry-voice");
-        makeVoiceBtn.classList.remove("hw-ico-btn");
+        makeVoiceBtn.classList.add("hw-ico-btn", "is-needed", "is-retry-voice");
+      } else if (showStartVoice) {
+        if (label) label.textContent = "音声をつくる";
+        if (ico) {
+          ico.hidden = false;
+          ico.innerHTML = ICON.speaker;
+        }
+        makeVoiceBtn.title = "確認した問題文と答えの音声を作ります";
+        makeVoiceBtn.classList.add("hw-ico-btn", "is-needed");
+        makeVoiceBtn.classList.remove("is-retry-voice");
       } else {
         if (label) label.textContent = "文の確認完了";
         if (ico) {
           ico.hidden = false;
           ico.innerHTML = ICON.checkCircle;
         }
-        makeVoiceBtn.title = "文の確認を終え、音声の表示・作成へ進みます";
+        makeVoiceBtn.title = "問題文と答えの確認を終えます。音声はまだ作りません";
         makeVoiceBtn.classList.add("hw-ico-btn");
         makeVoiceBtn.classList.toggle("is-needed", showPhraseDone);
         makeVoiceBtn.classList.remove("is-retry-voice");
@@ -2821,7 +2948,7 @@ export async function mountTeacherHomework(root, options) {
     const tabs = wordTabs({ usedOnly: true });
     const onRetryTab = state.wordKey === RETRY_WORD_KEY;
     const retryTabAvailable = state.audioReady && state.questions.length > 0 && state.status !== "assigned";
-    if (onRetryTab && !retryTabAvailable) {
+    if (onRetryTab && (!retryTabAvailable || state.buildPhase === "phrases")) {
       state.wordKey = tabs[0]?.key || "";
     } else if (!onRetryTab && !tabs.some((tab) => tab.key === state.wordKey)) {
       state.wordKey = tabs[0]?.key || "";
@@ -2843,11 +2970,10 @@ export async function mountTeacherHomework(root, options) {
       const wordButtons = showWords
         ? tabs.map((tab) => {
           // Show pending dots in both text-confirm and audio-confirm phases.
-          const pendingHere = state.questions.some((question) => (
-            questionBelongsToWord(question, tab.key) && needsConfirm(question)
-          ));
+          const inTab = (question) => tab.key === "all" || question.type === tab.key;
+          const pendingHere = state.questions.some((question) => inTab(question) && needsConfirm(question));
           const confirmedHere = !pendingHere
-            && state.questions.some((question) => questionBelongsToWord(question, tab.key));
+            && state.questions.some((question) => inTab(question));
           const on = state.wordKey === tab.key;
           const statusIco = confirmedHere
             ? `<span class="hw-word-status" aria-hidden="true">${ICON.check}</span>`
@@ -2864,7 +2990,7 @@ export async function mountTeacherHomework(root, options) {
       wordTabsEl.innerHTML = `${wordButtons}${retryButton}`;
     }
 
-    if (wordSubfilters) wordSubfilters.hidden = state.wordKey === RETRY_WORD_KEY;
+    if (wordSubfilters) wordSubfilters.hidden = state.wordKey === RETRY_WORD_KEY || state.buildPhase === "phrases";
 
     if (state.wordKey === RETRY_WORD_KEY) {
       if (wordFilterLabel) wordFilterLabel.textContent = RETRY_TAB_LABEL;
@@ -2883,10 +3009,11 @@ export async function mountTeacherHomework(root, options) {
       wordFilterLabel.textContent = `「${wordLabel}」のフィルタ`;
     }
 
-    const needsCount = state.audioReady
+    const reviewingVoice = state.audioReady && state.buildPhase !== "phrases";
+    const needsCount = reviewingVoice
       ? scoped.filter(({ question }) => needsConfirm(question)).length
       : 0;
-    const doneCount = state.audioReady
+    const doneCount = reviewingVoice
       ? scoped.filter(({ question }) => Boolean(question.approved)).length
       : 0;
     studio.querySelectorAll("[data-filter]").forEach((button) => {
@@ -2907,13 +3034,13 @@ export async function mountTeacherHomework(root, options) {
     });
     const confirmAllBtn = studio.querySelector("#hw-confirm-all-word");
     if (confirmAllBtn) {
-      const canBulk = state.audioReady && state.status !== "assigned" && needsCount > 0;
-      confirmAllBtn.hidden = !state.audioReady || state.status === "assigned";
+      const canBulk = reviewingVoice && state.status !== "assigned" && needsCount > 0;
+      confirmAllBtn.hidden = !reviewingVoice || state.status === "assigned";
       confirmAllBtn.disabled = !canBulk;
     }
 
     const visible = scoped.filter(({ question }) => {
-      if (!state.audioReady) return state.filter === "all" ? true : false;
+      if (!reviewingVoice) return true;
       if (state.filter === "needs") return needsConfirm(question);
       if (state.filter === "done") return Boolean(question.approved);
       return true;
@@ -2922,10 +3049,10 @@ export async function mountTeacherHomework(root, options) {
       ? visible.map(({ question, index }) => collapsedCardHtml(question, index, {
         voice: voiceStateFor(question),
         active: state.editor?.index === index,
-        wordKey: state.wordKey,
-        audioReady: state.audioReady,
+        wordKey: "all",
+        audioReady: reviewingVoice,
       })).join("")
-      : `<p class="hw-note">${!state.audioReady && state.filter !== "all"
+      : `<p class="hw-note">${!reviewingVoice && state.filter !== "all"
         ? "文と問題を確認したら「すべての文と問題を確認した。」を押してください。"
         : state.filter === "needs"
           ? `「${escapeHtml(wordLabel)}」の音声は全て確認済みです。`
@@ -2946,7 +3073,7 @@ export async function mountTeacherHomework(root, options) {
           <h3>${RETRY_TAB_LABEL}</h3>
           <span class="hw-soft-badge ${heard >= RETRY_LINES.length ? "is-ok" : "is-wait"}">${heard} / ${RETRY_LINES.length}</span>
         </div>
-        <p class="hw-help">どの宿題でも使う共有の声です。発音がおかしいときは「読み方」を書いてから作り直し、もう一度きいて確認してください。</p>
+        <p class="hw-help">どの宿題でも使う共有の声です。発音がおかしいときは「読み方」を書いてから作り直してください。再生すると確認済みになります。</p>
         <div class="hw-audio-lines" role="list">
           ${RETRY_LINES.map((line, index) => {
             const key = lineKey(line);
@@ -2965,8 +3092,8 @@ export async function mountTeacherHomework(root, options) {
                 <p class="hw-audio-line-text">${escapeHtml(line)}</p>
                 <p class="hw-audio-line-cap">${lineBusy.has(key) ? "作り直し中…" : queued ? "作り直し待ち…" : !ready ? "未生成" : ok ? "確認済み" : "未確認"}</p>
               </div>
+              <button type="button" class="hw-audio-line-ok" data-act="confirm-retry" data-line="${encoded}" ${!ready || busy || ok ? "disabled" : ""}>${ok ? "確認済" : "確認"}</button>
               <button type="button" class="hw-audio-line-regen" data-act="regen-retry" data-retry-index="${index}" data-line="${encoded}" aria-label="${escapeHtml(line)} の音声を作り直す" title="${queued ? "作り直しキューに追加済み" : "読み方を指定して作り直す"}" ${regenDisabled ? "disabled" : ""}>${ICON.regen}</button>
-              <span class="hw-audio-line-mark" aria-hidden="true">${ok && ready && !busy ? "✓" : unconfirmed ? "!" : ""}</span>
               ${speakAsFieldHtml(line, { disabled: busy })}
             </div>`;
           }).join("")}
@@ -2977,7 +3104,7 @@ export async function mountTeacherHomework(root, options) {
   async function save(mode) {
     const pending = state.questions.some((question) => !question.approved);
     if (!state.questions.length) {
-      setStatus("bad", "先に宿題をつくってください。");
+      setStatus("bad", "先に英語を入れて「問題をつくる」を押してください。");
       return;
     }
     if (mode === "assigned" && pending) {
@@ -3047,7 +3174,7 @@ export async function mountTeacherHomework(root, options) {
         if (sync.missing.length || sync.failed.length) {
           setStatus(
             "bad",
-            `音声の共有に失敗しました（未共有 ${(sync.missing.length || 0) + (sync.failed.length || 0)}件）。音声の確認画面で「失敗した音声をもう一度つくる」を押してから送ってください。`,
+            `音声の共有に失敗しました（未共有 ${(sync.missing.length || 0) + (sync.failed.length || 0)}件）。音声の確認画面で「再試行」を押してから送ってください。`,
           );
           return;
         }
@@ -3119,6 +3246,7 @@ export async function mountTeacherHomework(root, options) {
 
   function openPreview() {
     if (!state.questions.length) return;
+    unlockHomeworkAudio();
     studio.hidden = true;
     stage.hidden = false;
     const byId = new Map(state.questions.map((question) => [question.id, question]));
@@ -3126,6 +3254,7 @@ export async function mountTeacherHomework(root, options) {
       title: studio.querySelector("#hw-title").value,
       questions: state.questions.map(toPublic),
       db: options.db,
+      generateVoice: false,
       grade: async (id, payload) => {
         const question = byId.get(id);
         if (payload.kind === "matching-done") return { correct: true, solution: "" };
@@ -3152,13 +3281,15 @@ export async function mountTeacherHomework(root, options) {
     state.pairs = pack.vocab || [];
     state.warnings = pack.status === "assigned" ? ["出した宿題は変更できません。"] : [];
     studio.querySelector("#hw-title").value = pack.title || "きょうのしゅくだい";
+    if (lessonText) {
+      const fromLesson = (pack.questions || []).some((question) => question.source === "lesson");
+      const lines = fromLesson
+        ? [...new Set((pack.vocab || []).map((pair) => String(pair.en || "").trim()).filter(Boolean))]
+        : [];
+      lessonText.value = lines.join("\n");
+    }
     if (pack.level) studio.querySelector("#hw-level").value = pack.level;
     studio.querySelector("#hw-due").value = pack.dueOn || "";
-    const shuffleInput = studio.querySelector("#hw-shuffle-words");
-    if (shuffleInput) {
-      shuffleInput.checked = pack.settings?.shuffleWords !== false;
-    }
-    setWords(pack.vocab || []);
     state.audioReady = false;
     state.audioBuilding = false;
     state.phrasesConfirmed = false;
@@ -3192,10 +3323,9 @@ export async function mountTeacherHomework(root, options) {
       if (published) published.checked = false;
     }
     if (Array.isArray(options.initialPack.classIds) && options.initialPack.classIds.length) {
-      const want = new Set(options.initialPack.classIds.map(String));
-      studio.querySelectorAll("[data-class]").forEach((input) => {
-        input.checked = want.has(String(input.value));
-      });
+      options.initialPack.classIds.map(String).forEach((id) => pickedClassIds.add(id));
+      paintClassPicker();
+      paintClassStudents();
     }
     if (options.initialPack.audioReady || options.initialPack.phrasesConfirmed) {
       state.phrasesConfirmed = true;
@@ -3318,45 +3448,165 @@ export async function mountTeacherHomework(root, options) {
       </section>`).join("");
   }
 
+  function selectableClasses() {
+    const todayKey = jstKey(new Date());
+    const mineOnly = state.viewerRole !== "owner" || state.classScope !== "all";
+    return state.classes
+      .filter((item) => {
+        if (item.status === "cancelled" || item.status === "draft") return false;
+        if (!item.startsAt) return false;
+        if (jstKey(item.startsAt) < todayKey) return false;
+        if (mineOnly && item.teacherId !== options.uid) return false;
+        return true;
+      })
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  }
+
+  function classHaystack(item) {
+    const parts = jstParts(item.startsAt);
+    const weekday = WEEKDAY_JA[parts.weekday] || "";
+    const dateLabel = `${Number(parts.year)}年${Number(parts.month)}月${Number(parts.day)}日`;
+    return [
+      item.title,
+      item.teacherName,
+      dateLabel,
+      `${Number(parts.month)}/${Number(parts.day)}`,
+      weekday,
+      clockLabel(item.startsAt),
+      item.endsAt ? clockLabel(item.endsAt) : "",
+      jstKey(item.startsAt),
+    ].join(" ").toLocaleLowerCase("ja");
+  }
+
+  function classTimeLabel(item) {
+    const start = clockLabel(item.startsAt);
+    const end = item.endsAt ? clockLabel(item.endsAt) : "";
+    if (start && end && end !== start) return `${start}–${end}`;
+    return start || "時間未定";
+  }
+
+  function classCountLabel(item) {
+    const students = state.classStudents[item.id];
+    if (Array.isArray(students)) return `${students.length}人`;
+    if (Number.isFinite(item.bookedCount)) return `${item.bookedCount}人`;
+    return "…";
+  }
+
+  function prefetchClassCounts(items) {
+    items.forEach((item) => {
+      if (countRequested.has(item.id)) return;
+      countRequested.add(item.id);
+      studentsForClass(item.id).then((students) => {
+        const countEl = studio.querySelector(`[data-class-count="${CSS.escape(item.id)}"]`);
+        if (countEl) countEl.textContent = `${students.length}人`;
+      }).catch(() => {});
+    });
+  }
+
+  function paintClassPicker() {
+    const host = studio.querySelector("#hw-classes");
+    if (!host) return;
+    const isOwner = state.viewerRole === "owner";
+    const scopeBar = studio.querySelector("#hw-class-scope");
+    if (scopeBar) scopeBar.hidden = !isOwner;
+    scopeBar?.querySelectorAll("[data-class-scope]").forEach((button) => {
+      const on = (button.dataset.classScope || "mine") === (isOwner ? state.classScope : "mine");
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    const pool = selectableClasses();
+    const queryText = studio.querySelector("#hw-class-search")?.value.trim().toLocaleLowerCase("ja") || "";
+    const shown = queryText ? pool.filter((item) => classHaystack(item).includes(queryText)) : pool;
+    const note = studio.querySelector("#hw-class-scope-note");
+    if (note) {
+      const who = isOwner && state.classScope === "all" ? "学校のクラス" : "あなたの担当クラス";
+      note.textContent = pool.length
+        ? `${who} · 今日以降 ${pool.length}件`
+        : `${who} · 今日以降`;
+    }
+    const pastCount = state.classes.filter((item) => {
+      if (!item.startsAt || item.status === "cancelled" || item.status === "draft") return false;
+      if (jstKey(item.startsAt) >= jstKey(new Date())) return false;
+      if (!(isOwner && state.classScope === "all") && item.teacherId !== options.uid) return false;
+      return true;
+    }).length;
+    if (!shown.length) {
+      host.innerHTML = `<p class="hw-class-empty">${queryText
+        ? `「${escapeHtml(queryText)}」に一致するクラスはありません。`
+        : "今日以降のクラスはありません。"}</p>${pastCount && !queryText
+        ? `<p class="hw-class-past-note">終了した${pastCount}件は表示していません。</p>`
+        : ""}`;
+      return;
+    }
+    const todayKey = jstKey(new Date());
+    const tomorrowKey = shiftJstKey(todayKey, 1);
+    const thisWeek = mondayKey(todayKey);
+    const nextWeek = shiftJstKey(thisWeek, 7);
+    const groups = new Map();
+    shown.forEach((item) => {
+      const key = jstKey(item.startsAt);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    const selected = new Set(selectedClasses());
+    host.innerHTML = [...groups.entries()].map(([key, items]) => {
+      const parts = jstParts(new Date(`${key}T12:00:00+09:00`));
+      const weekday = WEEKDAY_JA[parts.weekday] || "";
+      let relation = "それ以降";
+      if (key === todayKey) relation = "今日";
+      else if (key === tomorrowKey) relation = "明日";
+      else if (mondayKey(key) === thisWeek) relation = "今週";
+      else if (mondayKey(key) === nextWeek) relation = "来週";
+      return `<section class="hw-class-day${key === todayKey ? " is-today" : ""}">
+        <div class="hw-class-day-mark" aria-hidden="true">
+          <span>${Number(parts.month)}月</span>
+          <strong>${Number(parts.day)}</strong>
+          <span>${escapeHtml(weekday)}</span>
+        </div>
+        <div class="hw-class-day-list">
+          <p class="hw-class-day-kicker">${relation}</p>
+          ${items.map((item) => {
+            const on = selected.has(item.id);
+            const teacher = isOwner && state.classScope === "all" && item.teacherName
+              ? `<span class="hw-class-teacher">${escapeHtml(item.teacherName)}</span>`
+              : "";
+            return `<label class="hw-class-card${on ? " is-on" : ""}">
+              <input data-class type="checkbox" value="${escapeHtml(item.id)}"${on ? " checked" : ""}>
+              <span class="hw-class-card-body">
+                <span class="hw-class-when">${escapeHtml(classTimeLabel(item))}</span>
+                <strong>${escapeHtml(item.title)}</strong>
+                ${teacher}
+                <small data-class-count="${escapeHtml(item.id)}">${escapeHtml(classCountLabel(item))}</small>
+              </span>
+            </label>`;
+          }).join("")}
+        </div>
+      </section>`;
+    }).join("") + (pastCount && !queryText
+      ? `<p class="hw-class-past-note">終了した${pastCount}件は表示していません。</p>`
+      : "");
+    prefetchClassCounts(pool);
+  }
+
   async function loadClasses() {
     const host = studio.querySelector("#hw-classes");
     if (!host) return;
     if (options.lab || !options.db) {
-      state.classes = [{ id: "lab-class", title: "プレビューのクラス" }];
-      host.innerHTML = `<label class="hw-class-card is-on">
-        <input data-class type="checkbox" value="lab-class" checked>
-        <span class="hw-class-card-body">
-          <strong>プレビューのクラス</strong>
-          <small data-class-count="lab-class">3人</small>
-        </span>
-      </label>`;
+      state.viewerRole = options.role || "owner";
+      state.classes = labAssignableClasses(options.uid || "lab");
+      pickedClassIds.add("lab-today");
+      paintClassPicker();
       paintClassStudents();
       return;
     }
     const me = await getDoc(doc(options.db, "users", options.uid));
-    const role = me.data()?.role;
-    const classQuery = role === "owner"
+    state.viewerRole = me.data()?.role || options.role || "";
+    const classQuery = state.viewerRole === "owner"
       ? query(collection(options.db, "classes"), where("status", "==", "open"))
       : query(collection(options.db, "classes"), where("teacherId", "==", options.uid));
     const snap = await getDocs(classQuery);
-    state.classes = snap.docs.map((item) => ({ id: item.id, title: item.data().title || "クラス" }));
+    state.classes = snap.docs.map((item) => mapAssignableClass(item.id, item.data()));
     state.classStudents = {};
-    host.innerHTML = state.classes.length
-      ? state.classes.map((item) => `<label class="hw-class-card">
-          <input data-class type="checkbox" value="${escapeHtml(item.id)}">
-          <span class="hw-class-card-body">
-            <strong>${escapeHtml(item.title)}</strong>
-            <small data-class-count="${escapeHtml(item.id)}">…</small>
-          </span>
-        </label>`).join("")
-      : `<p class="hw-note">担当クラスがまだありません。下書きは保存できます。</p>`;
-    // Prefetch counts in the background for the class cards.
-    state.classes.forEach((item) => {
-      studentsForClass(item.id).then((students) => {
-        const countEl = [...studio.querySelectorAll("[data-class-count]")].find((el) => el.getAttribute("data-class-count") === item.id);
-        if (countEl) countEl.textContent = `${students.length}人`;
-      }).catch(() => {});
-    });
+    paintClassPicker();
     paintClassStudents();
   }
 }
@@ -3481,7 +3731,7 @@ function voiceHint(state) {
   if (state === "busy") return "新しい音声を作っています。終わるまでお待ちください。";
   if (state === "error") return "音声の生成に失敗しました。もう一度作り直してください。";
   if (state === "ready") return "このフレーズの音声は確認済みです。";
-  if (state === "stale") return "音声はあるので、きいて確認してください。生成が終わっただけでは確認済みになりません。";
+  if (state === "stale") return "再生すると、その文・単語は確認済みになります。";
   return "まだ音声がありません。「音声を作り直す」で生成できます。";
 }
 
@@ -3512,6 +3762,9 @@ function previewLines(question, wordKey = "all") {
     };
   }
   if (question.type === "multipleChoice") {
+    if (question.lessonKind === "en-to-ja") {
+      return { ja: question.answer || "", en: question.promptEn || question.display || "" };
+    }
     return { ja: question.promptJa || "", en: question.answer || "" };
   }
   if (question.type === "spelling") {

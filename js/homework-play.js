@@ -1,5 +1,5 @@
-import { playPrompt, stopPrompt } from "./homework-audio.js?v=20261031-voice-quality";
-import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261102-speak-as";
+import { playPrompt, stopPrompt, unlockHomeworkAudio } from "./homework-audio.js?v=20261116-qplay";
+import { hydrateHomeworkVoice, linesForQuestions } from "./homework-voice-bank.js?v=20261115-onebank";
 import { RETRY_LINES } from "./homework-voice-lines.js?v=20261101-tts";
 import { playHomeworkSfx, preloadHomeworkSfx, resultSound, stopHomeworkSfx } from "./homework-sfx.js?v=20261031-hw-voicefix";
 
@@ -32,11 +32,6 @@ function nextRetryLine() {
   return line;
 }
 
-function spokenAnswer(answer) {
-  if (Array.isArray(answer)) return answer.join(" ");
-  return String(answer || "");
-}
-
 function voiceLang(text) {
   return /[\u3040-\u30ff\u4e00-\u9fff]/.test(text) ? "ja" : "en";
 }
@@ -52,8 +47,9 @@ function matchedIdsFromAttempt(attempt) {
 }
 
 export async function mountHomeworkPlayer(root, options) {
+  unlockHomeworkAudio();
   voiceDb = options.db || null;
-  playGenerateVoice = options.generateVoice !== false;
+  playGenerateVoice = options.generateVoice === true;
   const source = Array.isArray(options.questions) ? options.questions : [];
   const outcomes = new Map();
   const replay = Boolean(options.replay);
@@ -122,12 +118,12 @@ export async function mountHomeworkPlayer(root, options) {
           </div>
         </div>
         <div class="hw-body"></div>
-        <div class="hw-feedback" hidden>
-          <p class="hw-live" role="status"></p>
-        </div>
         <div class="hw-submit">
           <button type="button" class="hw-check" disabled>こたえをチェック</button>
           <button type="button" class="hw-next" hidden>つぎへ</button>
+          <div class="hw-feedback" hidden>
+            <p class="hw-live" role="status"></p>
+          </div>
         </div>
       </div>`;
     play.querySelector("[data-close]")?.addEventListener("click", () => {
@@ -138,11 +134,19 @@ export async function mountHomeworkPlayer(root, options) {
     });
     const prompt = play.querySelector(".hw-prompt");
     const sub = play.querySelector(".hw-sub");
-    prompt.textContent = question.promptJa || "えいごを ならぼう";
+    // Assigned questions drop lessonKind. An English promptEn is the sentence being asked.
+    const englishLeads = /[A-Za-z]/.test(question.promptEn || "");
     if (question.type === "matching") {
+      prompt.textContent = question.promptJa || "えいごを ならぼう";
       sub.textContent = "日本語をタップして、合う英語をタップしよう！";
       sub.hidden = false;
+    } else if (englishLeads) {
+      prompt.textContent = question.promptEn;
+      prompt.classList.add("is-english");
+      sub.textContent = question.promptJa || "";
+      sub.hidden = !question.promptJa;
     } else {
+      prompt.textContent = question.promptJa || "えいごを ならぼう";
       sub.textContent = question.promptEn || "";
       sub.hidden = !question.promptEn;
     }
@@ -159,6 +163,8 @@ export async function mountHomeworkPlayer(root, options) {
       });
     };
     speaker.addEventListener("click", replay);
+    // Play the question once on arrival. The speaker button repeats it.
+    if (spoken?.text) replay();
     const next = play.querySelector(".hw-next");
     if (question.type === "matching") {
       next.hidden = false;
@@ -174,7 +180,6 @@ export async function mountHomeworkPlayer(root, options) {
       advance();
     });
     root.appendChild(play);
-    replay();
     return play;
   }
 
@@ -241,10 +246,9 @@ export async function mountHomeworkPlayer(root, options) {
       setFeedback(play, PRAISE[praise % PRAISE.length], "good");
       praise += 1;
     }
-    const soundDone = sound ? playResult(true) : Promise.resolve();
+    if (sound) playResult(true);
     const streakEl = play.querySelector(".hw-streak b");
     if (streakEl) streakEl.textContent = String(streak);
-    if (spoken) speakAfter(soundDone, spoken);
   }
 
   function render() {
@@ -275,7 +279,7 @@ export async function mountHomeworkPlayer(root, options) {
           if (button.disabled || answer === choice) return;
           answer = choice;
           play.classList.remove("is-miss");
-          playLine(choice, "en");
+          playLine(choice, voiceLang(choice));
           choices.querySelectorAll(".hw-choice").forEach((item) => {
             item.classList.toggle("is-picked", item === button);
             item.classList.remove("is-wrong");
@@ -334,7 +338,7 @@ export async function mountHomeworkPlayer(root, options) {
             if (!result.correct && button.textContent === answer) button.classList.add("is-wrong");
           });
         }
-        if (result.correct) showCorrect(play, spokenAnswer(answer));
+        if (result.correct) showCorrect(play);
         else showRetry(play);
       } catch (error) {
         check.disabled = false;
@@ -653,14 +657,7 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     flashIds = new Set();
     if (pairing) busy = true;
     paint();
-
-    // Always speak the tapped word. Await so grading feedback does not cut it off.
-    let spoken = Promise.resolve();
-    if (chosen) {
-      spoken = playLine(text, voiceLang(text)).catch((error) => {
-        console.warn("[hw-match] word audio failed", text, error);
-      });
-    }
+    if (chosen && text) playLine(text, voiceLang(text));
 
     if (!pairing) {
       busy = false;
@@ -723,8 +720,6 @@ function buildMatching(question, body, live, playResult, gradePair, onDone, onMi
     } finally {
       busy = false;
       if (board.isConnected && !finished) paint();
-      // Keep word audio going; ignore late failures.
-      void spoken;
     }
   }
 

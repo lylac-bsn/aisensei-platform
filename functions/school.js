@@ -56,79 +56,6 @@ function phrasesFrom(raw) {
   return phrases;
 }
 
-function decoys(phrases, key, keep) {
-  const others = shuffle(phrases.map((row) => row[key]).filter((value) => norm(value) !== norm(keep)));
-  return [keep, ...others].slice(0, Math.min(4, phrases.length));
-}
-
-function buildActivities(phrases) {
-  const activities = [];
-  phrases.forEach((phrase, index) => {
-    activities.push({
-      id: `mc-${index}`,
-      type: "multipleChoice",
-      promptJa: `${phrase.ja} は えいごで？`,
-      speak: phrase.en,
-      choices: shuffle(decoys(phrases, "en", phrase.en)),
-      answer: phrase.en,
-    });
-    activities.push({
-      id: `listen-${index}`,
-      type: "listening",
-      promptJa: "きいて、日本語をえらぼう",
-      speak: phrase.en,
-      choices: shuffle(decoys(phrases, "ja", phrase.ja)),
-      answer: phrase.ja,
-    });
-    const words = phrase.en.split(/\s+/).filter(Boolean);
-    if (words.length >= 2) {
-      const blankAt = Math.min(words.length - 1, 1);
-      activities.push({
-        id: `blank-${index}`,
-        type: "fillBlank",
-        promptJa: "ぬけている ことばは？",
-        promptEn: words.map((word, i) => (i === blankAt ? "____" : word)).join(" "),
-        choices: shuffle(decoys(phrases, "en", words[blankAt]).map((value) => value.split(/\s+/)[0])),
-        answer: words[blankAt],
-      });
-      activities.push({
-        id: `order-${index}`,
-        type: "sentenceBuild",
-        promptJa: phrase.ja,
-        tokens: shuffle(words),
-        answer: phrase.en,
-      });
-    }
-  });
-  activities.push({
-    id: "match-words",
-    type: "wordMatch",
-    promptJa: "えいごと にほんごを つなげよう",
-    pairs: phrases.map((phrase) => ({ en: phrase.en, ja: phrase.ja })),
-  });
-  activities.push({
-    id: "match-phrases",
-    type: "phraseMatch",
-    promptJa: "ふんを いみと つなげよう",
-    pairs: phrases.map((phrase) => ({ en: phrase.en, ja: phrase.ja })),
-  });
-  return activities;
-}
-
-function answerMatches(activity, answer) {
-  if (activity.type === "wordMatch" || activity.type === "phraseMatch") {
-    const got = Array.isArray(answer) ? answer : [];
-    return (activity.pairs || []).every((pair) =>
-      got.some((row) => norm(row.en) === norm(pair.en) && norm(row.ja) === norm(pair.ja))
-    );
-  }
-  if (activity.type === "sentenceBuild") {
-    const text = Array.isArray(answer) ? answer.join(" ") : answer;
-    return norm(text) === norm(activity.answer);
-  }
-  return norm(answer) === norm(activity.answer);
-}
-
 async function inbox(userId, item) {
   const ref = db().collection("inbox").doc(userId).collection("items").doc();
   await ref.set({ ...item, read: false, createdAt: FieldValue.serverTimestamp() });
@@ -233,61 +160,6 @@ exports.publishReport = onCall({ region: REGION }, async (request) => {
     }
   }
   return { id: reportRef.id };
-});
-
-exports.publishHomework = onCall({ region: REGION }, async (request) => {
-  const user = await callerUser(request);
-  const classId = clean(request.data?.classId, 128);
-  const title = clean(request.data?.title, 80) || "きょうのしゅくだい";
-  const phrases = phrasesFrom(request.data?.phrases);
-  const { presentIds } = await presentStudents(classId, user);
-  const activities = buildActivities(phrases);
-  const ref = db().collection("homeworkAssignments").doc();
-  await ref.set({
-    teacherId: user.uid,
-    classId,
-    title,
-    phrases,
-    activities,
-    assigneeIds: presentIds,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-  {
-    const teacherName = clean(user.displayName, 40) || "先生";
-    const classNames = await classTitlesFor([classId]);
-    const className = classNames.join("・");
-    for (const studentId of presentIds) {
-      await db().collection("studentHomework").doc(studentId).collection("items").doc(ref.id).set({
-        assignmentId: ref.id,
-        title,
-        teacherId: user.uid,
-        teacherName,
-        classIds: [classId],
-        className,
-        activityCount: activities.length,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-      await inbox(studentId, {
-        type: "homework",
-        title: "あたらしい しゅくだい",
-        body: title,
-        assignmentId: ref.id,
-      });
-      const student = await db().collection("users").doc(studentId).get();
-      const parents = student.data()?.linkedParentIds || [];
-      for (const parentId of parents) {
-        if (!parentId || parentId === studentId) continue;
-        await inbox(parentId, {
-          type: "homework",
-          title: "あたらしい しゅくだい",
-          body: `${student.data()?.displayName || "生徒"} · ${title}`,
-          assignmentId: ref.id,
-          studentId,
-        });
-      }
-    }
-  }
-  return { id: ref.id, activities: activities.length };
 });
 
 function dueOn(value) {
@@ -1317,37 +1189,14 @@ exports.submitHomework = onCall({ region: REGION }, async (request) => {
   const user = await callerUser(request);
   if (!isStudent(user)) throw new HttpsError("permission-denied", "生徒が回答します。");
   const assignmentId = clean(request.data?.assignmentId, 128);
-  const activityId = clean(request.data?.activityId, 40);
   const assignment = await db().collection("homeworkAssignments").doc(assignmentId).get();
   if (!assignment.exists || !(assignment.data().assigneeIds || []).includes(user.uid)) {
     throw new HttpsError("permission-denied", "この宿題は割り当てられていません。");
   }
-  if (assignment.data().format === "pack-v1") return submitPackAnswer(user, assignment, request.data);
-  const activity = (assignment.data().activities || []).find((row) => row.id === activityId);
-  if (!activity) throw new HttpsError("not-found", "問題が見つかりません。");
-  const correct = answerMatches(activity, request.data?.answer);
-  const progressRef = db().collection("homeworkProgress").doc(`${assignmentId}_${user.uid}`);
-  const progressSnap = await progressRef.get();
-  const doneIds = new Set(progressSnap.exists ? progressSnap.data().doneIds || [] : []);
-  const already = doneIds.has(activityId);
-  if (correct && !already) doneIds.add(activityId);
-  const total = (assignment.data().activities || []).length;
-  const completed = doneIds.size >= total;
-  const gained = correct && !already ? 5 : 0;
-  const bonus = completed && !(progressSnap.exists && progressSnap.data().completed) ? 20 : 0;
-  await progressRef.set({
-    assignmentId,
-    studentId: user.uid,
-    doneIds: [...doneIds],
-    completed,
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  if (gained + bonus > 0) {
-    await db().collection("users").doc(user.uid).set({
-      xp: FieldValue.increment(gained + bonus),
-    }, { merge: true });
+  if (assignment.data().format !== "pack-v1") {
+    throw new HttpsError("failed-precondition", "この宿題は、いまのラーニーでは開けません。");
   }
-  return { correct, completed, xp: gained + bonus, done: doneIds.size, total };
+  return submitPackAnswer(user, assignment, request.data);
 });
 
 function quizCode() {

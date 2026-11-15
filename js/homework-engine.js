@@ -478,11 +478,11 @@ function updateQuestion(question, edit = {}) {
 
   if (question.type === "multipleChoice") {
     const choices = (edit.choices || question.choices || [])
-      .map((choice) => clip(choice, 40))
+      .map((choice) => clip(choice, 120))
       .filter(Boolean)
       .slice(0, 4);
     if (choices.length < 2) return { error: "選択肢を2つ以上入れてください。" };
-    const answer = clip(edit.answer ?? question.answer, 40);
+    const answer = clip(edit.answer ?? question.answer, 120);
     if (!choices.some((choice) => norm(choice) === norm(answer))) {
       return { error: "正解は選択肢の中から選んでください。" };
     }
@@ -491,7 +491,9 @@ function updateQuestion(question, edit = {}) {
       question: {
         ...question,
         promptJa,
-        speak: { prompt: { text: promptJa, lang: "ja" } },
+        speak: question.lessonKind === "en-to-ja" && question.promptEn
+          ? { prompt: { text: clip(question.promptEn, 120), lang: "en" } }
+          : { prompt: { text: promptJa, lang: "ja" } },
         choices,
         answer,
         display: answer,
@@ -677,12 +679,12 @@ function preparePack(rawQuestions, options = {}) {
       return { ok: false, error: "問題の文が空です。" };
     }
     if (question.type === "multipleChoice") {
-      const choices = (question.choices || []).map((choice) => clip(choice, 40)).filter(Boolean).slice(0, 4);
+      const choices = (question.choices || []).map((choice) => clip(choice, 120)).filter(Boolean).slice(0, 4);
       if (choices.length < 2 || !choices.some((choice) => norm(choice) === norm(question.answer))) {
         return { ok: false, error: "4択の正解が選択肢にありません。" };
       }
       question.choices = choices;
-      question.answer = clip(question.answer, 40);
+      question.answer = clip(question.answer, 120);
     } else if (question.type === "matching") {
       const left = question.left || [];
       const right = question.right || [];
